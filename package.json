@@ -1,0 +1,61 @@
+{
+  "name": "@calimero-network/mero-react",
+  "version": "1.0.0",
+  "description": "React bindings for MeroJs - Calimero Network SDK",
+  "type": "module",
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "lint": "eslint src --ext .ts,.tsx",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@calimero-network/mero-js": "file:../mero-js"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0 || ^19.0.0",
+    "react-dom": "^18.0.0 || ^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.3.0",
+    "vitest": "^1.0.0",
+    "@testing-library/react": "^14.0.0"
+  },
+  "keywords": [
+    "calimero",
+    "mero",
+    "react",
+    "web3",
+    "blockchain"
+  ],
+  "license": "MIT",
+  "author": "Calimero Ltd",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/calimero-network/mero-react"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
+}
