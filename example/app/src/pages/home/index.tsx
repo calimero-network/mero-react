@@ -52,13 +52,19 @@ export default function HomePage() {
   // Create API client when mero is available and authenticated
   useEffect(() => {
     if (!mero || !isAuthenticated) return;
+    if (!contextId) {
+      console.error('No contextId available - user must select a context during auth');
+      return;
+    }
     if (initializingRef.current) return; // Prevent double-init in Strict Mode
     initializingRef.current = true;
 
     const initializeApi = async () => {
       try {
+        console.log('[HomePage] Creating KV client with contextId:', contextId);
         // Pass the contextId from auth flow to use the correct context
         const { client, context } = await createKvClient(mero, contextId);
+        console.log('[HomePage] KV client created, context:', context.contextId);
         setApi(client);
         setCurrentContext(context);
       } catch (error) {

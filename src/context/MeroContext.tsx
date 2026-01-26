@@ -202,8 +202,18 @@ export function MeroProvider({
     // Try multiple parameter names for context ID  
     const ctxId = params.get('context_id') || params.get('contextId') || params.get('context');
     const expiresIn = params.get('expires_in');
+    // Try multiple parameter names for node URL (for SSO from Tauri app)
+    const nodeUrlParam = params.get('node_url') || params.get('nodeUrl') || params.get('node');
 
     if (!accessToken || !refreshToken) return false;
+
+    // If node_url is provided, save it (SSO flow from Tauri)
+    if (nodeUrlParam) {
+      const decodedNodeUrl = decodeURIComponent(nodeUrlParam);
+      setNodeUrl(decodedNodeUrl);
+      setNodeUrlState(decodedNodeUrl);
+      console.log('[mero-react] SSO: Node URL from hash params:', decodedNodeUrl);
+    }
 
     try {
       // Decode tokens
@@ -260,6 +270,9 @@ export function MeroProvider({
       params.delete('contextId');
       params.delete('context');
       params.delete('expires_in');
+      params.delete('node_url');
+      params.delete('nodeUrl');
+      params.delete('node');
       const newHash = params.toString();
       url.hash = newHash ? `#${newHash}` : '';
       window.history.replaceState({}, document.title, url.toString());

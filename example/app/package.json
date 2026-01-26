@@ -4,7 +4,6 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@calimero-network/mero-js": "file:../../..",
     "@calimero-network/mero-react": "file:../..",
     "@calimero-network/mero-icons": "^0.0.4",
     "@calimero-network/mero-ui": "^0.3.6",

@@ -1,5 +1,5 @@
 import { AbiClient, AppContext, AbiEvent } from '../../../api/AbiClient';
-import type { MeroJs } from '@calimero-network/mero-js';
+import type { MeroJs } from '@calimero-network/mero-react';
 
 export { AbiClient };
 export type { AbiEvent, AppContext };
@@ -18,13 +18,17 @@ export function isOk<T>(
  * Create a KV client from MeroJs instance
  * 
  * @param mero - MeroJs instance
- * @param targetContextId - Optional: specific context ID to use (from auth callback)
+ * @param targetContextId - Required: specific context ID to use (from auth callback)
  */
 export async function createKvClient(
   mero: MeroJs,
-  targetContextId?: string | null,
+  targetContextId: string,
 ): Promise<{ client: AbiClient; context: AppContext }> {
   console.log('Creating KV client, target context:', targetContextId);
+  
+  if (!targetContextId) {
+    throw new Error('targetContextId is required. Please select a context during authentication.');
+  }
   
   // Fetch contexts using mero-js admin API
   const contextsResponse = await mero.admin.contexts.listContexts();
@@ -36,18 +40,12 @@ export async function createKvClient(
     throw new Error('No contexts available. You may need to create a context first.');
   }
   
-  // Find the target context or use the first one
-  let targetContext = contexts[0];
+  // Find the target context - NO FALLBACK
+  const targetContext = contexts.find(c => c.id === targetContextId);
   
-  if (targetContextId) {
-    // Find context matching the one selected during auth
-    const found = contexts.find(c => c.id === targetContextId);
-    if (found) {
-      targetContext = found;
-      console.log('Found target context:', targetContext);
-    } else {
-      console.warn('Target context not found in list, using first available:', targetContextId);
-    }
+  if (!targetContext) {
+    console.error('Available contexts:', contexts.map(c => c.id));
+    throw new Error(`Context ${targetContextId} not found. Available contexts: ${contexts.map(c => c.id).join(', ')}`);
   }
   
   console.log('Using context:', targetContext);

@@ -1,6 +1,6 @@
 {
   "name": "@calimero-network/mero-react",
-  "version": "1.0.0",
+  "version": "1.0.0-beta.1",
   "description": "React bindings for MeroJs - Calimero Network SDK",
   "type": "module",
   "main": "dist/index.cjs",
@@ -25,7 +25,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@calimero-network/mero-js": "file:../mero-js"
+    "@calimero-network/mero-js": "^2.0.0-beta.1"
   },
   "peerDependencies": {
     "react": "^18.0.0 || ^19.0.0",
@@ -52,7 +52,7 @@
   "author": "Calimero Ltd",
   "repository": {
     "type": "git",
-    "url": "https://github.com/calimero-network/mero-react"
+    "url": "git+https://github.com/calimero-network/mero-react.git"
   },
   "publishConfig": {
     "access": "public",
