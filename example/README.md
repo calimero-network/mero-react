@@ -92,7 +92,7 @@ Client types and a thin client are generated into `app/src/api` from `logic/res/
 You can bootstrap a local network with Merobox:
 
 ```bash
-pnpm run network:bootstrap
+merobox bootstrap run workflows/workflow-example.yml
 ```
 
 This runs the workflow defined in `workflows/workflow-example.yml` and starts local Calimero nodes whose data dirs live under `data/`.

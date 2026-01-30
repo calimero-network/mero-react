@@ -11,7 +11,6 @@
     "app:dev": "concurrently -n web,res -c green,magenta \"pnpm --dir app dev\" \"pnpm run logic:watch\"",
     "app:build": "pnpm --dir app build",
     "app:preview": "pnpm --dir app preview",
-    "network:bootstrap": "npx @calimero-network/merobox-js@latest bootstrap run workflows/workflow-example.yml",
     "dev": "pnpm run app:dev",
     "dev:full": "concurrently -n registry,web,res -c blue,green,magenta \"pnpm run registry:start\" \"pnpm --dir app dev\" \"pnpm run logic:watch\"",
     "registry:start": "calimero-registry local start --port 8082",
@@ -19,7 +18,6 @@
     "registry:status": "curl -sf http://localhost:8082/healthz > /dev/null && echo '✅ Registry is running' || echo '❌ Registry is not running'"
   },
   "devDependencies": {
-    "@calimero-network/merobox-js": "^0.0.3",
     "chokidar-cli": "^3.0.0",
     "concurrently": "^9.2.1",
     "husky": "^9.0.11"

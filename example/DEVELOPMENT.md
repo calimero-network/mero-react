@@ -41,13 +41,10 @@ pnpm dev
 ```
 Use this for **frontend-only development** without registry integration.
 
-### Mode 3: Merobox Network (App + Watcher + Merobox)
+### Mode 3: Merobox Network
 ```bash
-# Terminal 1: Start merobox network
-pnpm network:bootstrap
-
-# Terminal 2: Dev with merobox sync
-pnpm dev:merobox
+# Start merobox network
+merobox bootstrap run workflows/workflow-example.yml
 ```
 Use this for **network testing** with multiple nodes.
 
