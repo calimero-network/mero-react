@@ -45,8 +45,8 @@
     "calimero",
     "mero",
     "react",
-    "web3",
-    "blockchain"
+    "p2p",
+    "sdk"
   ],
   "license": "MIT",
   "author": "Calimero Ltd",

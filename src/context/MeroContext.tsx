@@ -1,10 +1,3 @@
-/**
- * MeroContext - React Context for MeroJs
- * 
- * Provides MeroJs instance management, authentication state,
- * and connection handling through React Context.
- */
-
 import React, {
   createContext,
   useContext,
@@ -14,396 +7,252 @@ import React, {
   useRef,
   useMemo,
 } from 'react';
-import { MeroJs } from '@calimero-network/mero-js';
 import {
-  localStorageTokenStorage,
+  MeroJs,
+  LocalStorageTokenStore,
+  parseAuthCallback,
+  buildAuthLoginUrl,
+} from '@calimero-network/mero-js';
+import { AppMode } from '../types';
+import type { AuthCallbackResult } from '@calimero-network/mero-js';
+import {
   getNodeUrl,
   setNodeUrl,
   getApplicationId,
   setApplicationId,
   getContextId,
   setContextId,
+  getContextIdentity,
+  setContextIdentity,
   clearAllStorage,
 } from '../storage';
-import type {
-  MeroContextValue,
-  MeroProviderConfig,
-  AppMode,
-} from '../types';
-import { AppMode as AppModeEnum } from '../types';
+import type { MeroContextValue, MeroProviderConfig } from '../types';
 
-// Default context value
-const defaultContextValue: MeroContextValue = {
-  mero: null,
-  isAuthenticated: false,
-  isOnline: true,
-  nodeUrl: null,
-  applicationId: null,
-  contextId: null,
-  connectToNode: () => {},
-  logout: () => {},
-  isLoading: true,
-};
+const MeroContext = createContext<MeroContextValue | null>(null);
 
-// Create context
-const MeroContext = createContext<MeroContextValue>(defaultContextValue);
+const isBrowser = typeof window !== 'undefined';
 
-/**
- * Get permissions based on app mode
- */
+let _tokenStore: LocalStorageTokenStore | null = null;
+function getTokenStore(): LocalStorageTokenStore {
+  if (!_tokenStore) {
+    _tokenStore = new LocalStorageTokenStore();
+  }
+  return _tokenStore;
+}
+
 function getPermissionsForMode(mode: AppMode): string[] {
   switch (mode) {
-    case AppModeEnum.SingleContext:
+    case AppMode.SingleContext:
       return ['context:execute'];
-    case AppModeEnum.MultiContext:
+    case AppMode.MultiContext:
       return ['context:create', 'context:list', 'context:execute'];
-    case AppModeEnum.Admin:
+    case AppMode.Admin:
       return ['admin'];
     default:
       throw new Error(`Unsupported application mode: ${mode}`);
   }
 }
 
-/**
- * Redirect to auth login
- */
-function redirectToAuthLogin(params: {
-  nodeUrl: string;
-  callbackUrl: string;
-  permissions: string[];
-  mode: AppMode;
-  packageName?: string;
-  packageVersion?: string;
-  registryUrl?: string;
-  applicationId?: string;
-  applicationPath?: string;
-}): void {
-  const authParams = new URLSearchParams();
-  authParams.append('callback-url', params.callbackUrl);
-  authParams.append('permissions', params.permissions.join(','));
-  authParams.append('mode', params.mode);
-
-  if (params.packageName) {
-    authParams.append('package-name', params.packageName);
-    if (params.packageVersion) {
-      authParams.append('package-version', params.packageVersion);
+function parseJwtExpiry(token: string): number {
+  try {
+    const parts = token.split('.');
+    if (parts.length === 3) {
+      const payload: { exp?: number } = JSON.parse(atob(parts[1]));
+      if (payload.exp && payload.exp > 0) {
+        return payload.exp * 1000;
+      }
     }
-    if (params.registryUrl) {
-      authParams.append('registry-url', params.registryUrl);
-    }
-  } else if (params.applicationId) {
-    authParams.append('application-id', params.applicationId);
+  } catch {
+    // fall through
   }
-
-  if (params.applicationPath) {
-    authParams.append('application-path', params.applicationPath);
-  }
-
-  // Store node URL for callback
-  authParams.append('app-url', params.nodeUrl);
-
-  window.location.href = `${params.nodeUrl}/auth/login?${authParams.toString()}`;
+  return Date.now() + 3_600_000;
 }
 
-/**
- * MeroProvider Props
- */
 export interface MeroProviderProps extends MeroProviderConfig {
   children: React.ReactNode;
 }
 
-/**
- * MeroProvider - Provides MeroJs instance and auth state to the app
- */
 export function MeroProvider({
   children,
   mode,
   packageName,
   packageVersion,
   registryUrl,
-  applicationId: propApplicationId,
-  applicationPath,
   timeoutMs = 30000,
 }: MeroProviderProps) {
-  // State
   const [mero, setMero] = useState<MeroJs | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [nodeUrl, setNodeUrlState] = useState<string | null>(() => getNodeUrl());
   const [applicationId, setApplicationIdState] = useState<string | null>(
-    () => getApplicationId() || propApplicationId || null
+    () => getApplicationId() || null,
   );
   const [contextId, setContextIdState] = useState<string | null>(() => getContextId());
+  const [contextIdentity, setContextIdentityState] = useState<string | null>(() => getContextIdentity());
 
-  // Refs
   const meroRef = useRef<MeroJs | null>(null);
 
-  /**
-   * Create or update MeroJs instance
-   */
+  // Parse auth callback ONCE in a ref (StrictMode-safe: refs persist across unmount/remount)
+  const callbackRef = useRef<AuthCallbackResult | null | undefined>(undefined);
+  if (callbackRef.current === undefined && isBrowser) {
+    callbackRef.current = parseAuthCallback(window.location.href);
+  }
+
   const createMeroInstance = useCallback(
     (url: string): MeroJs => {
+      if (meroRef.current) {
+        meroRef.current.close();
+      }
       const instance = new MeroJs({
         baseUrl: url,
-        tokenStorage: localStorageTokenStorage,
+        tokenStore: getTokenStore(),
         timeoutMs,
       });
       meroRef.current = instance;
       return instance;
     },
-    [timeoutMs]
+    [timeoutMs],
   );
 
-  /**
-   * Check if authenticated by making a test API call
-   */
   const checkAuth = useCallback(async (instance: MeroJs): Promise<boolean> => {
     try {
-      await instance.admin.contexts.listContexts();
+      await instance.admin.healthCheck();
       return true;
     } catch {
       return false;
     }
   }, []);
 
-  /**
-   * Process auth callback from URL hash
-   */
-  const processAuthCallback = useCallback(() => {
-    const url = new URL(window.location.href);
-    const rawHash = url.hash;
-    const hash = rawHash.slice(1); // Remove leading #
-    
-    console.log('========== AUTH CALLBACK DEBUG ==========');
-    console.log('Raw URL:', window.location.href);
-    console.log('Raw hash:', rawHash);
-    console.log('Hash (without #):', hash);
-    
-    if (!hash) {
-      console.log('No hash found, skipping auth callback');
-      console.log('==========================================');
-      return false;
-    }
-
-    const params = new URLSearchParams(hash);
-    
-    // Log ALL params received
-    console.log('All hash params:');
-    for (const [key, value] of params.entries()) {
-      console.log(`  ${key}: ${value.substring(0, 50)}${value.length > 50 ? '...' : ''}`);
-    }
-    console.log('==========================================');
-    
-    const accessToken = params.get('access_token');
-    const refreshToken = params.get('refresh_token');
-    // Try multiple parameter names for application ID
-    const appId = params.get('application_id') || params.get('applicationId') || params.get('app_id');
-    // Try multiple parameter names for context ID  
-    const ctxId = params.get('context_id') || params.get('contextId') || params.get('context');
-    const expiresIn = params.get('expires_in');
-
-    if (!accessToken || !refreshToken) return false;
-
-    try {
-      // Decode tokens
-      const decodedAccess = decodeURIComponent(accessToken);
-      const decodedRefresh = decodeURIComponent(refreshToken);
-
-      // Calculate expiry - try to extract from JWT or use provided expires_in
-      let expiresAt = Date.now() + 3600000; // 1 hour default
-      
-      if (expiresIn) {
-        // If expires_in is provided in callback, use it
-        expiresAt = Date.now() + parseInt(expiresIn, 10) * 1000;
-      } else {
-        // Try to extract exp from JWT payload
-        try {
-          const parts = decodedAccess.split('.');
-          if (parts.length === 3) {
-            const payload = JSON.parse(atob(parts[1]));
-            if (payload.exp) {
-              expiresAt = payload.exp * 1000; // JWT exp is in seconds
-            }
-          }
-        } catch {
-          // JWT parsing failed, use default
-        }
-      }
-
-      // Store tokens via TokenStorage
-      localStorageTokenStorage.set({
-        access_token: decodedAccess,
-        refresh_token: decodedRefresh,
-        expires_at: expiresAt,
-      });
-
-      // Store application ID if provided
-      if (appId) {
-        setApplicationId(appId);
-        setApplicationIdState(appId);
-      }
-
-      // Store context ID if provided
-      if (ctxId) {
-        setContextId(ctxId);
-        setContextIdState(ctxId);
-      }
-
-      // Clean URL - remove all auth params (handle various naming conventions)
-      params.delete('access_token');
-      params.delete('refresh_token');
-      params.delete('application_id');
-      params.delete('applicationId');
-      params.delete('app_id');
-      params.delete('context_id');
-      params.delete('contextId');
-      params.delete('context');
-      params.delete('expires_in');
-      const newHash = params.toString();
-      url.hash = newHash ? `#${newHash}` : '';
-      window.history.replaceState({}, document.title, url.toString());
-      
-      console.log('[mero-react] Stored contextId:', ctxId, 'applicationId:', appId);
-
-      return true;
-    } catch (e) {
-      console.error('[mero-react] Failed to process auth callback:', e);
-      return false;
-    }
-  }, []);
-
-  /**
-   * Connect to a node and start the auth flow
-   */
   const connectToNode = useCallback(
     (url: string) => {
-      // Save node URL
+      if (!isBrowser) return;
       setNodeUrl(url);
       setNodeUrlState(url);
 
-      // Build callback URL (strip existing auth params)
       const callbackUrl = new URL(window.location.href);
-      if (callbackUrl.hash) {
-        const hashParams = new URLSearchParams(callbackUrl.hash.substring(1));
-        hashParams.delete('access_token');
-        hashParams.delete('refresh_token');
-        hashParams.delete('application_id');
-        callbackUrl.hash = hashParams.toString() ? `#${hashParams.toString()}` : '';
-      }
+      callbackUrl.hash = '';
 
-      const permissions = getPermissionsForMode(mode);
-
-      redirectToAuthLogin({
-        nodeUrl: url,
+      const loginUrl = buildAuthLoginUrl(url, {
         callbackUrl: callbackUrl.toString(),
-        permissions,
+        permissions: getPermissionsForMode(mode),
         mode,
         packageName,
         packageVersion,
         registryUrl,
-        applicationId: propApplicationId,
-        applicationPath,
       });
+
+      window.location.href = loginUrl;
     },
-    [mode, packageName, packageVersion, registryUrl, propApplicationId, applicationPath]
+    [mode, packageName, packageVersion, registryUrl],
   );
 
-  /**
-   * Logout function
-   */
-  const logout = useCallback(async () => {
-    // Clear MeroJs tokens
+  const logout = useCallback(() => {
     if (meroRef.current) {
-      await meroRef.current.clearToken();
+      meroRef.current.clearToken();
+      meroRef.current.close();
     }
-
-    // Clear all storage
     clearAllStorage();
-
-    // Reset state
     setMero(null);
     setIsAuthenticated(false);
     setNodeUrlState(null);
     setApplicationIdState(null);
     setContextIdState(null);
+    setContextIdentityState(null);
     meroRef.current = null;
   }, []);
 
-  /**
-   * Initialize on mount
-   */
+  // Initialization effect
   useEffect(() => {
-    const init = async () => {
-      console.log('[mero-react] Init starting...');
-      console.log('[mero-react] Current URL:', window.location.href);
-      console.log('[mero-react] Stored nodeUrl:', getNodeUrl());
-      console.log('[mero-react] Stored contextId:', getContextId());
-      console.log('[mero-react] Stored applicationId:', getApplicationId());
-      
-      // Check for auth callback first
-      const hasCallback = processAuthCallback();
-      console.log('[mero-react] hasCallback:', hasCallback);
+    let active = true;
 
-      const savedUrl = getNodeUrl();
+    const init = async () => {
+      const callback = callbackRef.current;
+      if (callback) {
+        getTokenStore().setTokens({
+          access_token: callback.accessToken,
+          refresh_token: callback.refreshToken,
+          expires_at: parseJwtExpiry(callback.accessToken),
+        });
+
+        if (callback.applicationId) {
+          setApplicationId(callback.applicationId);
+          if (active) setApplicationIdState(callback.applicationId);
+        }
+        if (callback.contextId) {
+          setContextId(callback.contextId);
+          if (active) setContextIdState(callback.contextId);
+        }
+        if (callback.contextIdentity) {
+          setContextIdentity(callback.contextIdentity);
+          if (active) setContextIdentityState(callback.contextIdentity);
+        }
+        if (callback.nodeUrl) {
+          setNodeUrl(callback.nodeUrl);
+          if (active) setNodeUrlState(callback.nodeUrl);
+        }
+
+        if (isBrowser) {
+          window.history.replaceState({}, '', window.location.pathname + window.location.search);
+        }
+        callbackRef.current = null;
+      }
+
+      const savedUrl = callback?.nodeUrl || getNodeUrl();
       if (!savedUrl) {
-        setIsLoading(false);
+        if (active) setIsLoading(false);
         return;
       }
 
-      // Create MeroJs instance
       const instance = createMeroInstance(savedUrl);
-      await instance.init();
-
-      // Check if authenticated
       const authed = await checkAuth(instance);
+
+      if (!active) return;
+
       if (authed) {
         setMero(instance);
         setIsAuthenticated(true);
         setIsOnline(true);
-      } else if (hasCallback) {
-        // Had callback but auth failed - maybe token expired
+      } else if (callback) {
         setMero(instance);
-        setIsAuthenticated(false);
       }
 
       setIsLoading(false);
     };
 
-    init();
-  }, [createMeroInstance, checkAuth, processAuthCallback]);
+    init().catch((err) => {
+      console.error('[MeroProvider] Initialization failed:', err);
+      if (active) setIsLoading(false);
+    });
 
-  /**
-   * Periodic health check
-   */
+    return () => {
+      active = false;
+      meroRef.current?.close();
+    };
+  }, [createMeroInstance, checkAuth]);
+
+  // SSE connection for online/offline detection — no polling.
   useEffect(() => {
     if (!isAuthenticated || !meroRef.current) return;
 
-    const interval = setInterval(async () => {
-      const instance = meroRef.current;
-      if (!instance) return;
+    let active = true;
+    const sse = meroRef.current.events;
 
-      const healthy = await checkAuth(instance);
-      if (!healthy && isOnline) {
-        setIsOnline(false);
-      } else if (healthy && !isOnline) {
-        setIsOnline(true);
-      }
-    }, 5000);
+    const onConnect = () => { if (active) setIsOnline(true); };
+    const onError = () => { if (active) setIsOnline(false); };
 
-    return () => clearInterval(interval);
-  }, [isAuthenticated, isOnline, checkAuth]);
+    sse.on('connect', onConnect);
+    sse.on('error', onError);
+    sse.connect().catch(() => { if (active) setIsOnline(false); });
 
-  /**
-   * Sync applicationId from props
-   */
-  useEffect(() => {
-    if (propApplicationId && !applicationId) {
-      setApplicationIdState(propApplicationId);
-    }
-  }, [propApplicationId, applicationId]);
+    return () => {
+      active = false;
+      sse.off('connect', onConnect);
+      sse.off('error', onError);
+      sse.close();
+    };
+  }, [isAuthenticated, mero]);
 
-  // Context value
   const contextValue = useMemo<MeroContextValue>(
     () => ({
       mero,
@@ -412,11 +261,12 @@ export function MeroProvider({
       nodeUrl,
       applicationId,
       contextId,
+      contextIdentity,
       connectToNode,
       logout,
       isLoading,
     }),
-    [mero, isAuthenticated, isOnline, nodeUrl, applicationId, contextId, connectToNode, logout, isLoading]
+    [mero, isAuthenticated, isOnline, nodeUrl, applicationId, contextId, contextIdentity, connectToNode, logout, isLoading],
   );
 
   return (
@@ -426,12 +276,9 @@ export function MeroProvider({
   );
 }
 
-/**
- * useMero hook - Access MeroJs and auth state
- */
 export function useMero(): MeroContextValue {
   const context = useContext(MeroContext);
-  if (context === undefined) {
+  if (!context) {
     throw new Error('useMero must be used within a MeroProvider');
   }
   return context;

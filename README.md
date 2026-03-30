@@ -1,218 +1,298 @@
 # @calimero-network/mero-react
 
-React bindings for [MeroJs](https://github.com/calimero-network/mero-js) - the official Calimero Network SDK.
+React bindings for [@calimero-network/mero-js](../mero-js) — the Calimero Network SDK.
 
-## Features
-
-- **MeroProvider** - React Context provider that manages MeroJs instance
-- **useMero** - Hook to access MeroJs and authentication state
-- **ConnectButton** - Ready-to-use connection button component
-- **LoginModal** - Modal for node selection (local/remote)
-- **localStorage TokenStorage** - Built-in token persistence
+No UI components. No styled-components. No axios. Just a provider, hooks, and storage helpers.
 
 ## Installation
 
 ```bash
-npm install @calimero-network/mero-react @calimero-network/mero-js
-# or
 pnpm add @calimero-network/mero-react @calimero-network/mero-js
 ```
 
-## Quick Start
+Peer dependencies: `react` ^18 || ^19, `react-dom` ^18 || ^19.
+
+## Quick start
 
 ```tsx
-import { MeroProvider, ConnectButton, useMero, AppMode } from '@calimero-network/mero-react';
+import { MeroProvider, useMero, useExecute, useSubscription, AppMode } from '@calimero-network/mero-react';
 
 function App() {
   return (
-    <MeroProvider
-      mode={AppMode.SingleContext}
-      packageName="my-app"
-    >
+    <MeroProvider mode={AppMode.SingleContext} packageName="com.calimero.my-app">
       <MyApp />
     </MeroProvider>
   );
 }
 
 function MyApp() {
-  const { mero, isAuthenticated, isLoading } = useMero();
+  const { isAuthenticated, connectToNode, logout, contextId, contextIdentity } = useMero();
 
-  if (isLoading) {
-    return <div>Loading...</div>;
+  if (!isAuthenticated) {
+    return <button onClick={() => connectToNode('http://localhost:4001')}>Connect</button>;
   }
+
+  return <Dashboard />;
+}
+
+function Dashboard() {
+  const { contextId, contextIdentity } = useMero();
+  const { execute, loading } = useExecute(contextId, contextIdentity);
+  const [items, setItems] = useState([]);
+
+  // Real-time updates via SSE
+  useSubscription(
+    contextId ? [contextId] : [],
+    () => fetchItems(),
+  );
+
+  const fetchItems = async () => {
+    const data = await execute('list');
+    if (data) setItems(data);
+  };
+
+  const addItem = async (title: string) => {
+    await execute('add', { title });
+    await fetchItems();
+  };
 
   return (
     <div>
-      <ConnectButton />
-      
-      {isAuthenticated && mero && (
-        <Dashboard mero={mero} />
-      )}
+      {loading && <p>Loading...</p>}
+      {items.map(item => <div key={item.id}>{item.title}</div>)}
+      <button onClick={() => addItem('New item')}>Add</button>
     </div>
-  );
-}
-
-function Dashboard({ mero }) {
-  const [contexts, setContexts] = useState([]);
-
-  useEffect(() => {
-    // Access MeroJs APIs through the mero instance
-    mero.admin.contexts.listContexts()
-      .then(response => setContexts(response.contexts));
-  }, [mero]);
-
-  return (
-    <ul>
-      {contexts.map(ctx => (
-        <li key={ctx.contextId}>{ctx.contextId}</li>
-      ))}
-    </ul>
   );
 }
 ```
 
-## Provider Configuration
+## API reference
+
+### `<MeroProvider>`
+
+Wraps your app with a MeroJs instance, auth state, and SSE connectivity.
 
 ```tsx
 <MeroProvider
-  // Required: Application mode
-  mode={AppMode.SingleContext | AppMode.MultiContext | AppMode.Admin}
-  
-  // Package-based (recommended)
-  packageName="@my-org/my-app"
-  packageVersion="1.0.0"  // optional, defaults to latest
-  registryUrl="https://registry.calimero.network"  // optional
-  
-  // OR Legacy: Application ID
-  applicationId="app-hash-id"
-  applicationPath="/my-app"
-  
-  // Optional
-  eventStreamMode={EventStreamMode.WebSocket | EventStreamMode.SSE}
-  timeoutMs={30000}
+  mode={AppMode.SingleContext}    // required
+  packageName="com.calimero.my-app"  // for package-based apps
+  timeoutMs={30000}                  // optional, default 30s
 >
   {children}
 </MeroProvider>
 ```
 
-## Application Modes
+Props (`MeroProviderConfig & { children }`):
 
-| Mode | Permissions | Use Case |
+| Prop | Type | Required | Description |
+|------|------|----------|-------------|
+| `mode` | `AppMode` | Yes | `SingleContext`, `MultiContext`, or `Admin` |
+| `packageName` | `string` | No | Package name for registry/node lookup |
+| `packageVersion` | `string` | No | Specific version (defaults to latest) |
+| `registryUrl` | `string` | No | Registry URL override |
+| `timeoutMs` | `number` | No | HTTP request timeout (default 30000) |
+
+Modes and their permissions:
+
+| Mode | Permissions | Use case |
 |------|-------------|----------|
 | `SingleContext` | `context:execute` | Apps that work with one context |
 | `MultiContext` | `context:create`, `context:list`, `context:execute` | Apps managing multiple contexts |
 | `Admin` | `admin` | Admin dashboards, dev tools |
 
-## useMero Hook
+Auth flow: when `connectToNode(url)` is called, the provider redirects to the node's auth page. After login, the node redirects back with tokens in the URL hash. The provider processes these once (StrictMode-safe via ref) and sets `isAuthenticated = true`.
+
+Online detection: the provider opens an SSE connection to the node after auth. `isOnline` reflects the SSE connection state — no polling.
+
+### `useMero()`
+
+Access the MeroJs instance, auth state, and actions.
 
 ```tsx
 const {
-  mero,           // MeroJs instance (null if not connected)
-  isAuthenticated, // Whether user is logged in
-  isOnline,       // Whether connection is healthy
-  isLoading,      // Initial loading state
-  nodeUrl,        // Current node URL
-  applicationId,  // Resolved application ID
-  connectToNode,  // Connect to a node URL and start auth
-  logout,         // Clear session
+  mero,             // MeroJs | null — the SDK instance
+  isAuthenticated,  // boolean
+  isOnline,         // boolean — SSE connection state
+  isLoading,        // boolean — initial session restore
+  nodeUrl,          // string | null
+  applicationId,    // string | null — resolved from auth callback
+  contextId,        // string | null — from auth callback
+  contextIdentity,  // string | null — executor public key from auth callback
+  connectToNode,    // (url: string) => void — starts auth redirect
+  logout,           // () => void — clears tokens and state
 } = useMero();
 ```
 
-## Connect Button
+Through `mero` you access the full MeroJs API:
 
 ```tsx
-import { ConnectButton, ConnectionType } from '@calimero-network/mero-react';
+// Admin API (flat methods, NOT nested)
+await mero.admin.healthCheck();
+await mero.admin.getContexts();
+await mero.admin.getContext(contextId);
+await mero.admin.getContextIdentitiesOwned(contextId);
+await mero.admin.listApplications();
+await mero.admin.getApplication(appId);
+await mero.admin.installApplication(request);
+await mero.admin.createContext(request);
+await mero.admin.uploadBlob(request);
+await mero.admin.getPeersCount();
 
-// Default: shows local/remote options
-<ConnectButton />
+// Auth API
+await mero.auth.getProviders();
+await mero.auth.generateTokens(request);
+await mero.auth.refreshToken(request);
 
-// Only remote
-<ConnectButton connectionType={ConnectionType.Remote} />
+// RPC
+await mero.rpc.execute({ contextId, method, argsJson, executorPublicKey });
 
-// Only local
-<ConnectButton connectionType={ConnectionType.Local} />
+// SSE events
+mero.events.connect();
+mero.events.subscribe(contextIds);
+mero.events.on('event', handler);
 
-// Custom URL (skip modal)
-<ConnectButton connectionType={{ type: ConnectionType.Custom, url: 'https://my-node.com' }} />
+// Tokens
+mero.getTokenData();        // { access_token, refresh_token, expires_at } | null
+mero.isAuthenticated();     // boolean
 ```
 
-## Styling
+### `useExecute(contextId, executorId)`
 
-The components come with default styles. You can override them by:
+Wraps `mero.rpc.execute()` with loading/error state. Unmount-safe.
 
-1. **CSS Variables**:
-```css
-:root {
-  --mero-bg: #1a1a2e;
-  --mero-text: #eaeaea;
-  --mero-accent: #7b68ee;
-  --mero-success: #a8e640;
-  --mero-error: #ff4d4d;
-  /* ... see styles.css for all variables */
-}
-```
-
-2. **Custom Classes**:
 ```tsx
-<ConnectButton className="my-custom-button" />
+const { execute, loading, error } = useExecute(contextId, contextIdentity);
+
+// Generic typed
+const todos = await execute<Todo[]>('list');
+await execute('add', { title: 'Buy milk' });
+await execute('toggle', { id: '1' });
 ```
 
-3. **Replace Components**: Create your own using `useMero()` hook.
+| Return | Type | Description |
+|--------|------|-------------|
+| `execute` | `<T>(method, params?) => Promise<T \| null>` | Call a contract method |
+| `loading` | `boolean` | Request in flight |
+| `error` | `Error \| null` | Last error |
 
-## Storage
+### `useSubscription(contextIds, callback)`
 
-Built-in localStorage utilities:
+Manages SSE event subscription lifecycle. StrictMode-safe — connects once per MeroJs instance, cleans up on unmount.
+
+```tsx
+useSubscription(
+  contextId ? [contextId] : [],
+  (event) => {
+    console.log('Context event:', event.contextId, event.data);
+    refreshData();
+  },
+);
+```
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `contextIds` | `string[]` | Context IDs to subscribe to (empty array = no subscription) |
+| `callback` | `(event: SseEventData) => void` | Called on each context event |
+
+The SSE connection is shared — multiple `useSubscription` hooks reuse the same connection. The first one to mount calls `connect()`, subsequent ones just add handlers.
+
+### `useContexts(applicationId?)`
+
+Fetches contexts from the node, optionally filtered by application ID.
+
+```tsx
+const { contexts, loading, error, refetch } = useContexts(applicationId);
+
+// contexts: Array<{ contextId: string; applicationId: string }>
+```
+
+### Storage helpers
+
+Persist/read node URL, application ID, context ID, and context identity in localStorage.
 
 ```tsx
 import {
-  localStorageTokenStorage,
-  getNodeUrl,
-  setNodeUrl,
-  getApplicationId,
+  getNodeUrl, setNodeUrl, clearNodeUrl,
+  getApplicationId, setApplicationId, clearApplicationId,
   clearAllStorage,
 } from '@calimero-network/mero-react';
-
-// localStorageTokenStorage implements MeroJs TokenStorage interface
-// It's automatically used by MeroProvider
 ```
 
-## Accessing MeroJs APIs
+These are used internally by `MeroProvider` but exported for apps that need direct access.
 
-All MeroJs APIs are available through the `mero` instance:
+### Re-exports from mero-js
+
+mero-react re-exports everything from mero-js via `export * from '@calimero-network/mero-js'`. Any new API added to mero-js is automatically available from mero-react — no manual sync needed.
 
 ```tsx
-const { mero } = useMero();
-
-// Admin APIs
-await mero.admin.applications.listApplications();
-await mero.admin.contexts.createContext({ applicationId, ... });
-await mero.admin.blobs.uploadBlob(file);
-
-// Auth APIs
-await mero.auth.getHealth();
-await mero.auth.refreshToken();
-
-// RPC
-await mero.rpc.execute({ contextId, method, args, executorPublicKey });
-
-// WebSocket subscriptions
-mero.ws.subscribe(contextId, onEvent);
-
-// SSE subscriptions  
-mero.sse.subscribe(contextId, onEvent);
+// All of these work from a single import
+import {
+  MeroProvider, useMero, useExecute, useSubscription,  // react
+  MeroJs, RpcClient, SseClient, WsClient,              // core
+  parseAuthCallback, buildAuthLoginUrl,                  // auth helpers
+  LocalStorageTokenStore, MemoryTokenStore,              // token stores
+} from '@calimero-network/mero-react';
 ```
 
-## TypeScript
+## Enums
 
-Full TypeScript support:
+```tsx
+import { AppMode, ConnectionType, EventStreamMode } from '@calimero-network/mero-react';
+
+AppMode.SingleContext   // 'single-context'
+AppMode.MultiContext    // 'multi-context'
+AppMode.Admin           // 'admin'
+
+ConnectionType.Custom   // 'custom'
+ConnectionType.Local    // 'local'
+ConnectionType.Remote   // 'remote'
+
+EventStreamMode.SSE       // 'sse'
+EventStreamMode.WebSocket // 'websocket'
+```
+
+## Types
 
 ```tsx
 import type {
-  MeroContextValue,
-  MeroProviderConfig,
-  AppContext,
-  ExecutionResult,
+  MeroContextValue,      // useMero() return type
+  MeroProviderConfig,    // MeroProvider props (without children)
+  MeroProviderProps,     // MeroProvider props (with children)
+  CustomConnectionConfig,// { type: ConnectionType.Custom, url: string }
+  AppContext,            // { contextId, executorId, applicationId }
+  ExecutionResult,       // { success, result?, error? }
 } from '@calimero-network/mero-react';
+```
+
+## Full exports list
+
+```
+// Provider & hooks (mero-react)
+MeroProvider, useMero, MeroContext
+useExecute, useSubscription, useContexts
+
+// Enums (mero-react)
+AppMode, ConnectionType, EventStreamMode
+
+// Types (mero-react)
+MeroContextValue, MeroProviderConfig, MeroProviderProps
+CustomConnectionConfig, AppContext, ExecutionResult
+
+// Storage (mero-react)
+localStorageTokenStorage
+getNodeUrl, setNodeUrl, clearNodeUrl
+getApplicationId, setApplicationId, clearApplicationId
+clearAllStorage
+
+// Everything from @calimero-network/mero-js (auto re-exported)
+MeroJs, createMeroJs, MeroJsConfig, TokenData
+RpcClient, RpcError, ExecuteParams
+SseClient, SseEventData, WsClient, WsEventData
+AuthApiClient, AdminApiClient
+LocalStorageTokenStore, MemoryTokenStore, TokenStore
+parseAuthCallback, buildAuthLoginUrl, AuthCallbackResult, AuthLoginOptions
+WebHttpClient, HttpClient, HTTPError
+// ...and all other mero-js exports
 ```
 
 ## License

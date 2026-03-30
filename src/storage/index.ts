@@ -4,7 +4,7 @@
  * Provides localStorage-based token storage and other persistence utilities.
  */
 
-import type { TokenStorage, TokenData } from '@calimero-network/mero-js';
+import type { TokenData } from '@calimero-network/mero-js';
 
 // Storage keys
 const STORAGE_KEYS = {
@@ -14,30 +14,29 @@ const STORAGE_KEYS = {
   NODE_URL: 'mero:node_url',
   APPLICATION_ID: 'mero:application_id',
   CONTEXT_ID: 'mero:context_id',
+  CONTEXT_IDENTITY: 'mero:context_identity',
 } as const;
 
-/**
- * Check if localStorage is available
- */
+let _storageAvailable: boolean | null = null;
+
 function isLocalStorageAvailable(): boolean {
+  if (_storageAvailable !== null) return _storageAvailable;
   try {
     if (typeof window === 'undefined' || !window.localStorage) {
+      _storageAvailable = false;
       return false;
     }
-    // Test that we can actually write to localStorage
     const testKey = '__mero_test__';
     localStorage.setItem(testKey, 'test');
     localStorage.removeItem(testKey);
-    return true;
+    _storageAvailable = true;
   } catch {
-    return false;
+    _storageAvailable = false;
   }
+  return _storageAvailable;
 }
 
-/**
- * localStorage-based TokenStorage implementation for MeroJs
- */
-export const localStorageTokenStorage: TokenStorage = {
+export const localStorageTokenStorage = {
   async get(): Promise<TokenData | null> {
     if (!isLocalStorageAvailable()) {
       return null;
@@ -165,6 +164,30 @@ export function clearContextId(): void {
 }
 
 /**
+ * Get the stored context identity
+ */
+export function getContextIdentity(): string | null {
+  if (!isLocalStorageAvailable()) return null;
+  return localStorage.getItem(STORAGE_KEYS.CONTEXT_IDENTITY);
+}
+
+/**
+ * Set the context identity
+ */
+export function setContextIdentity(id: string): void {
+  if (!isLocalStorageAvailable()) return;
+  localStorage.setItem(STORAGE_KEYS.CONTEXT_IDENTITY, id);
+}
+
+/**
+ * Clear the context identity
+ */
+export function clearContextIdentity(): void {
+  if (!isLocalStorageAvailable()) return;
+  localStorage.removeItem(STORAGE_KEYS.CONTEXT_IDENTITY);
+}
+
+/**
  * Clear all mero-react storage
  */
 export function clearAllStorage(): void {
@@ -173,5 +196,3 @@ export function clearAllStorage(): void {
     localStorage.removeItem(key);
   });
 }
-
-export { STORAGE_KEYS };

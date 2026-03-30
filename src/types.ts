@@ -80,6 +80,8 @@ export interface MeroContextValue {
   applicationId: string | null;
   /** The context ID (from auth flow) */
   contextId: string | null;
+  /** The context identity / executor public key (from auth flow) */
+  contextIdentity: string | null;
   /** Connect to a node URL and start auth flow */
   connectToNode: (url: string) => void;
   /** Logout and clear tokens */
@@ -100,12 +102,6 @@ export interface MeroProviderConfig {
   packageVersion?: string;
   /** Registry URL (optional) */
   registryUrl?: string;
-  /** Legacy: Application ID (hash-based) */
-  applicationId?: string;
-  /** Application path for auth callback */
-  applicationPath?: string;
-  /** Event streaming mode */
-  eventStreamMode?: EventStreamMode;
   /** Request timeout in milliseconds */
   timeoutMs?: number;
 }
