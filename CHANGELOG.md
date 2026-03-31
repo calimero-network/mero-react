@@ -1,3 +1,9 @@
+## [1.0.1](https://github.com/calimero-network/mero-react/compare/mero-react-v1.0.0...mero-react-v1.0.1) (2026-03-31)
+
+### Bug Fixes
+
+* release workflow detection pattern for semantic-release output ([11ea7fa](https://github.com/calimero-network/mero-react/commit/11ea7faecc5b5a48555d1528ae68f61fa6b9eb90))
+
 ## 1.0.0 (2026-03-31)
 
 ### Features
