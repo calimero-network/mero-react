@@ -65,6 +65,8 @@ jobs:
       - name: Publish to npm with OIDC
         if: steps.semantic.outputs.new_release == 'true'
         run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Push release commit and tag
         if: steps.semantic.outputs.new_release == 'true'
