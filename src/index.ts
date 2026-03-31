@@ -1,6 +1,6 @@
 /**
  * mero-react - React bindings for MeroJs
- * 
+ *
  * @packageDocumentation
  */
 
@@ -8,15 +8,13 @@
 export { MeroProvider, useMero, MeroContext } from './context';
 export type { MeroProviderProps } from './context';
 
-// Components
-export { ConnectButton, LoginModal } from './components';
-export type { ConnectButtonProps, LoginModalProps } from './components';
+// Hooks
+export { useExecute, useSubscription, useContexts } from './hooks';
 
 // Types
 export {
   AppMode,
   ConnectionType,
-  EventStreamMode,
 } from './types';
 export type {
   MeroContextValue,
@@ -35,9 +33,14 @@ export {
   getApplicationId,
   setApplicationId,
   clearApplicationId,
+  getContextId,
+  setContextId,
+  clearContextId,
+  getContextIdentity,
+  setContextIdentity,
+  clearContextIdentity,
   clearAllStorage,
 } from './storage';
 
-// Re-export MeroJs for convenience
-export { MeroJs } from '@calimero-network/mero-js';
-export type { TokenStorage, TokenData } from '@calimero-network/mero-js';
+// Re-export everything from mero-js so apps only need one import
+export * from '@calimero-network/mero-js';
