@@ -1,3 +1,9 @@
+## [1.0.2](https://github.com/calimero-network/mero-react/compare/mero-react-v1.0.1...mero-react-v1.0.2) (2026-03-31)
+
+### Bug Fixes
+
+* trigger npm publish (1.0.1 failed due to private repo) ([9b8f453](https://github.com/calimero-network/mero-react/commit/9b8f4536d95ba6a4bd6cb34d37cd7c954e128bcd))
+
 ## [1.0.1](https://github.com/calimero-network/mero-react/compare/mero-react-v1.0.0...mero-react-v1.0.1) (2026-03-31)
 
 ### Bug Fixes
