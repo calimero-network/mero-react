@@ -237,7 +237,6 @@ import {
 ## Enums
 
 ```tsx
-import { AppMode, ConnectionType, EventStreamMode } from '@calimero-network/mero-react';
 
 AppMode.SingleContext   // 'single-context'
 AppMode.MultiContext    // 'multi-context'
@@ -247,8 +246,6 @@ ConnectionType.Custom   // 'custom'
 ConnectionType.Local    // 'local'
 ConnectionType.Remote   // 'remote'
 
-EventStreamMode.SSE       // 'sse'
-EventStreamMode.WebSocket // 'websocket'
 ```
 
 ## Types
@@ -272,7 +269,6 @@ MeroProvider, useMero, MeroContext
 useExecute, useSubscription, useContexts
 
 // Enums (mero-react)
-AppMode, ConnectionType, EventStreamMode
 
 // Types (mero-react)
 MeroContextValue, MeroProviderConfig, MeroProviderProps

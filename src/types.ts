@@ -39,14 +39,6 @@ export interface CustomConnectionConfig {
 }
 
 /**
- * Event streaming mode
- */
-export enum EventStreamMode {
-  WebSocket = 'websocket',
-  SSE = 'sse',
-}
-
-/**
  * Context for an application
  */
 export interface AppContext {

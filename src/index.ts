@@ -15,7 +15,6 @@ export { useExecute, useSubscription, useContexts } from './hooks';
 export {
   AppMode,
   ConnectionType,
-  EventStreamMode,
 } from './types';
 export type {
   MeroContextValue,

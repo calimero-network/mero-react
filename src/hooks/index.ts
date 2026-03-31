@@ -67,8 +67,6 @@ export function useSubscription(
 
   const contextIdsKey = JSON.stringify(contextIds);
 
-  const connectedSseRef = useRef<object | null>(null);
-
   useEffect(() => {
     if (!mero || contextIds.length === 0) return;
 
@@ -79,18 +77,12 @@ export function useSubscription(
     };
 
     sse.on('event', handler);
+    sse.connect().catch(() => {});
     sse.subscribe(contextIds).catch(() => {});
-
-    if (connectedSseRef.current !== sse) {
-      connectedSseRef.current = sse;
-      sse.connect().catch(() => {});
-    }
 
     return () => {
       sse.off('event', handler);
-      sse.unsubscribe(contextIds).catch(() => {});
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mero, contextIdsKey]);
 }
 
@@ -119,8 +111,7 @@ export function useContexts(applicationId?: string | null) {
     }
     try {
       const response = await mero.admin.getContexts();
-      const raw = (response as { data?: { contexts?: Array<{ id: string; applicationId: string }> } })?.data?.contexts ?? [];
-      let list = raw.map((c) => ({ contextId: c.id, applicationId: c.applicationId }));
+      let list = (response.contexts ?? []).map((c) => ({ contextId: c.id, applicationId: c.applicationId }));
       if (applicationId) {
         list = list.filter((c) => c.applicationId === applicationId);
       }

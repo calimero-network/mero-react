@@ -57,7 +57,9 @@ function parseJwtExpiry(token: string): number {
   try {
     const parts = token.split('.');
     if (parts.length === 3) {
-      const payload: { exp?: number } = JSON.parse(atob(parts[1]));
+      let b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      while (b64.length % 4) b64 += '=';
+      const payload: { exp?: number } = JSON.parse(atob(b64));
       if (payload.exp && payload.exp > 0) {
         return payload.exp * 1000;
       }
@@ -117,7 +119,7 @@ export function MeroProvider({
 
   const checkAuth = useCallback(async (instance: MeroJs): Promise<boolean> => {
     try {
-      await instance.admin.healthCheck();
+      await instance.admin.getContexts();
       return true;
     } catch {
       return false;
@@ -227,7 +229,6 @@ export function MeroProvider({
 
     return () => {
       active = false;
-      meroRef.current?.close();
     };
   }, [createMeroInstance, checkAuth]);
 
@@ -239,7 +240,13 @@ export function MeroProvider({
     const sse = meroRef.current.events;
 
     const onConnect = () => { if (active) setIsOnline(true); };
-    const onError = () => { if (active) setIsOnline(false); };
+    const onError = (err: Error) => {
+      if (!active) return;
+      setIsOnline(false);
+      if (err.message.includes('401')) {
+        logout();
+      }
+    };
 
     sse.on('connect', onConnect);
     sse.on('error', onError);
@@ -249,7 +256,6 @@ export function MeroProvider({
       active = false;
       sse.off('connect', onConnect);
       sse.off('error', onError);
-      sse.close();
     };
   }, [isAuthenticated, mero]);
 
