@@ -9,7 +9,21 @@ export { MeroProvider, useMero, MeroContext } from './context';
 export type { MeroProviderProps } from './context';
 
 // Hooks
-export { useExecute, useSubscription, useContexts } from './hooks';
+export {
+  useApplicationContexts,
+  useContextDiscovery,
+  useCreateGroup,
+  useExecute,
+  useGroupCapabilities,
+  useGroupContexts,
+  useGroupInvitations,
+  useGroupMembers,
+  useGroups,
+  useJoinGroup,
+  useJoinGroupContext,
+  useSubscription,
+  useContexts,
+} from './hooks';
 
 // Types
 export {
@@ -17,11 +31,14 @@ export {
   ConnectionType,
 } from './types';
 export type {
+  AppContext,
+  ApplicationContextRecord,
+  ContextDiscoveryOptions,
+  ContextDiscoveryState,
+  CustomConnectionConfig,
+  ExecutionResult,
   MeroContextValue,
   MeroProviderConfig,
-  CustomConnectionConfig,
-  AppContext,
-  ExecutionResult,
 } from './types';
 
 // Storage utilities

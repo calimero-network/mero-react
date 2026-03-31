@@ -56,6 +56,27 @@ export interface ExecutionResult<T = unknown> {
   error?: string;
 }
 
+export interface ApplicationContextRecord {
+  contextId: string;
+  applicationId: string;
+}
+
+export interface ContextDiscoveryOptions {
+  applicationId: string;
+  knownContextIds?: string[];
+  targetAlias?: string;
+  pollIntervalMs?: number;
+  timeoutMs?: number;
+}
+
+export interface ContextDiscoveryState {
+  context: ApplicationContextRecord | null;
+  loading: boolean;
+  error: Error | null;
+  discover: () => Promise<ApplicationContextRecord | null>;
+  reset: () => void;
+}
+
 /**
  * Mero context value exposed by useMero hook
  */
