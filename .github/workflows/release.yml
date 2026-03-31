@@ -52,7 +52,7 @@ jobs:
         run: |
           OUTPUT=$(pnpm exec semantic-release 2>&1) || true
           echo "$OUTPUT"
-          if echo "$OUTPUT" | grep -q "Published release"; then
+          if echo "$OUTPUT" | grep -qE "Published release|Created tag|next release version"; then
             echo "new_release=true" >> $GITHUB_OUTPUT
           else
             echo "new_release=false" >> $GITHUB_OUTPUT
