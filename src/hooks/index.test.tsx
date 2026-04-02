@@ -5,15 +5,25 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   useApplicationContexts,
   useContextDiscovery,
+  useContextGroup,
   useContexts,
+  useCreateContext,
   useCreateGroup,
+  useDeleteContext,
+  useDeleteGroup,
   useGroupCapabilities,
   useGroupContexts,
+  useGroupInfo,
   useGroupInvitations,
   useGroupMembers,
   useGroups,
+  useInviteToContext,
+  useJoinContext,
   useJoinGroup,
   useJoinGroupContext,
+  useAddGroupMembers,
+  useRemoveGroupMembers,
+  useSyncGroup,
 } from './index';
 import { useMero } from '../context';
 
@@ -28,10 +38,35 @@ function createMero(adminOverrides: Record<string, unknown> = {}) {
     admin: {
       getContexts: vi.fn().mockResolvedValue({ contexts: [] }),
       getContextsForApplication: vi.fn().mockResolvedValue({ contexts: [] }),
+      createContext: vi.fn().mockResolvedValue({ contextId: 'ctx-1', memberPublicKey: 'pk-1' }),
+      deleteContext: vi.fn().mockResolvedValue({ isDeleted: true }),
+      inviteToContext: vi.fn().mockResolvedValue(null),
+      joinContext: vi.fn().mockResolvedValue({ contextId: 'ctx-1', memberPublicKey: 'pk-1' }),
+      getContextGroup: vi.fn().mockResolvedValue('group-hex-id'),
       listGroups: vi.fn().mockResolvedValue([]),
       listGroupMembers: vi.fn().mockResolvedValue({ data: [] }),
       listGroupContexts: vi.fn().mockResolvedValue([]),
       createGroup: vi.fn().mockResolvedValue({ groupId: 'group-1' }),
+      deleteGroup: vi.fn().mockResolvedValue({ isDeleted: true }),
+      getGroupInfo: vi.fn().mockResolvedValue({
+        groupId: 'group-1',
+        appKey: 'app-key-1',
+        targetApplicationId: 'app-1',
+        upgradePolicy: 'manual',
+        memberCount: 2,
+        contextCount: 1,
+        defaultCapabilities: 7,
+        defaultVisibility: 'open',
+      }),
+      syncGroup: vi.fn().mockResolvedValue({
+        groupId: 'group-1',
+        appKey: 'app-key-1',
+        targetApplicationId: 'app-1',
+        memberCount: 2,
+        contextCount: 1,
+      }),
+      addGroupMembers: vi.fn().mockResolvedValue(null),
+      removeGroupMembers: vi.fn().mockResolvedValue(null),
       createGroupInvitation: vi.fn().mockResolvedValue({
         invitation: {
           invitation: {
@@ -334,6 +369,219 @@ describe('group and context hooks', () => {
       expect(result.current.error).toBeNull();
       expect(result.current.capabilities).toBeNull();
     });
+  });
+
+  // ---- Context CRUD Hooks ----
+
+  it('useCreateContext creates a context and returns the result', async () => {
+    const createContext = vi.fn().mockResolvedValue({ contextId: 'ctx-9', memberPublicKey: 'pk-9' });
+    const mero = createMero({ createContext });
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    const { result } = renderHook(() => useCreateContext());
+
+    await act(async () => {
+      const created = await result.current.createContext({ applicationId: 'app-1' });
+      expect(created).toEqual({ contextId: 'ctx-9', memberPublicKey: 'pk-9' });
+    });
+
+    expect(createContext).toHaveBeenCalledWith({ applicationId: 'app-1' });
+  });
+
+  it('useDeleteContext deletes a context and returns the result', async () => {
+    const deleteContext = vi.fn().mockResolvedValue({ isDeleted: true });
+    const mero = createMero({ deleteContext });
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    const { result } = renderHook(() => useDeleteContext());
+
+    await act(async () => {
+      const deleted = await result.current.deleteContext('ctx-1');
+      expect(deleted).toEqual({ isDeleted: true });
+    });
+
+    expect(deleteContext).toHaveBeenCalledWith('ctx-1');
+  });
+
+  it('useInviteToContext invites to a context and returns invitation', async () => {
+    const invitation = {
+      invitation: { inviter_identity: 'id-1', context_id: 'ctx-1', expiration_timestamp: 123, secret_salt: [0] },
+      inviter_signature: 'sig-1',
+    };
+    const inviteToContext = vi.fn().mockResolvedValue(invitation);
+    const mero = createMero({ inviteToContext });
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    const { result } = renderHook(() => useInviteToContext());
+
+    await act(async () => {
+      const inv = await result.current.inviteToContext({ contextId: 'ctx-1', inviterId: 'id-1', validForSeconds: 3600 });
+      expect(inv).toEqual(invitation);
+    });
+  });
+
+  it('useJoinContext joins a context and returns join data', async () => {
+    const joinContext = vi.fn().mockResolvedValue({ contextId: 'ctx-1', memberPublicKey: 'pk-2' });
+    const mero = createMero({ joinContext });
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    const { result } = renderHook(() => useJoinContext());
+
+    await act(async () => {
+      const joined = await result.current.joinContext({
+        invitation: {
+          invitation: { inviter_identity: 'id-1', context_id: 'ctx-1', expiration_timestamp: 123, secret_salt: [0] },
+          inviter_signature: 'sig-1',
+        },
+        newMemberPublicKey: 'pk-2',
+      });
+      expect(joined).toEqual({ contextId: 'ctx-1', memberPublicKey: 'pk-2' });
+    });
+  });
+
+  it('useContextGroup fetches the group id for a context', async () => {
+    const getContextGroup = vi.fn().mockResolvedValue('group-abc');
+    const mero = createMero({ getContextGroup });
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    const { result } = renderHook(() => useContextGroup('ctx-1'));
+
+    await waitFor(() => {
+      expect(result.current.groupId).toBe('group-abc');
+    });
+
+    expect(getContextGroup).toHaveBeenCalledWith('ctx-1');
+  });
+
+  it('useContextGroup clears stale errors when contextId becomes null', async () => {
+    const getContextGroup = vi.fn().mockRejectedValue(new Error('boom'));
+    const mero = createMero({ getContextGroup });
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    const { result, rerender } = renderHook(
+      ({ contextId }) => useContextGroup(contextId),
+      { initialProps: { contextId: 'ctx-1' as string | null } },
+    );
+
+    await waitFor(() => {
+      expect(result.current.error?.message).toBe('boom');
+    });
+
+    rerender({ contextId: null });
+
+    await waitFor(() => {
+      expect(result.current.error).toBeNull();
+      expect(result.current.groupId).toBeNull();
+    });
+  });
+
+  // ---- Group Info / Management Hooks ----
+
+  it('useGroupInfo loads group info', async () => {
+    const mero = createMero({
+      getGroupInfo: vi.fn().mockResolvedValue({
+        groupId: 'group-1',
+        memberCount: 5,
+        contextCount: 2,
+        defaultCapabilities: 7,
+        defaultVisibility: 'open',
+      }),
+    });
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    const { result } = renderHook(() => useGroupInfo('group-1'));
+
+    await waitFor(() => {
+      expect(result.current.groupInfo?.memberCount).toBe(5);
+    });
+  });
+
+  it('useGroupInfo clears stale errors when groupId becomes null', async () => {
+    const getGroupInfo = vi.fn().mockRejectedValue(new Error('boom'));
+    const mero = createMero({ getGroupInfo });
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    const { result, rerender } = renderHook(
+      ({ groupId }) => useGroupInfo(groupId),
+      { initialProps: { groupId: 'group-1' as string | null } },
+    );
+
+    await waitFor(() => {
+      expect(result.current.error?.message).toBe('boom');
+    });
+
+    rerender({ groupId: null });
+
+    await waitFor(() => {
+      expect(result.current.error).toBeNull();
+      expect(result.current.groupInfo).toBeNull();
+    });
+  });
+
+  it('useDeleteGroup deletes a group', async () => {
+    const deleteGroup = vi.fn().mockResolvedValue({ isDeleted: true });
+    const mero = createMero({ deleteGroup });
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    const { result } = renderHook(() => useDeleteGroup());
+
+    await act(async () => {
+      const deleted = await result.current.deleteGroup('group-1');
+      expect(deleted).toEqual({ isDeleted: true });
+    });
+
+    expect(deleteGroup).toHaveBeenCalledWith('group-1', undefined);
+  });
+
+  it('useSyncGroup syncs a group', async () => {
+    const syncGroup = vi.fn().mockResolvedValue({
+      groupId: 'group-1',
+      appKey: 'key',
+      targetApplicationId: 'app-1',
+      memberCount: 2,
+      contextCount: 1,
+    });
+    const mero = createMero({ syncGroup });
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    const { result } = renderHook(() => useSyncGroup());
+
+    await act(async () => {
+      const synced = await result.current.syncGroup('group-1');
+      expect(synced?.groupId).toBe('group-1');
+    });
+
+    expect(syncGroup).toHaveBeenCalledWith('group-1', undefined);
+  });
+
+  it('useAddGroupMembers adds members to a group', async () => {
+    const addGroupMembers = vi.fn().mockResolvedValue(null);
+    const mero = createMero({ addGroupMembers });
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    const { result } = renderHook(() => useAddGroupMembers());
+
+    const request = { members: [{ identity: 'member-2', role: 'Member' as const }] };
+    await act(async () => {
+      await result.current.addGroupMembers('group-1', request);
+    });
+
+    expect(addGroupMembers).toHaveBeenCalledWith('group-1', request);
+  });
+
+  it('useRemoveGroupMembers removes members from a group', async () => {
+    const removeGroupMembers = vi.fn().mockResolvedValue(null);
+    const mero = createMero({ removeGroupMembers });
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    const { result } = renderHook(() => useRemoveGroupMembers());
+
+    const request = { members: ['member-2'] };
+    await act(async () => {
+      await result.current.removeGroupMembers('group-1', request);
+    });
+
+    expect(removeGroupMembers).toHaveBeenCalledWith('group-1', request);
   });
 
   it('useContextDiscovery finds the first unseen application context', async () => {

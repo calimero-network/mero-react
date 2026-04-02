@@ -8,21 +8,37 @@
 export { MeroProvider, useMero, MeroContext } from './context';
 export type { MeroProviderProps } from './context';
 
+// Components
+export { ConnectButton } from './components';
+export type { ConnectButtonProps } from './components';
+export { LoginModal } from './components';
+export type { LoginModalProps } from './components';
+
 // Hooks
 export {
   useApplicationContexts,
   useContextDiscovery,
+  useContextGroup,
+  useContexts,
+  useCreateContext,
   useCreateGroup,
+  useDeleteContext,
+  useDeleteGroup,
   useExecute,
   useGroupCapabilities,
   useGroupContexts,
+  useGroupInfo,
   useGroupInvitations,
   useGroupMembers,
   useGroups,
+  useInviteToContext,
+  useJoinContext,
   useJoinGroup,
   useJoinGroupContext,
+  useAddGroupMembers,
+  useRemoveGroupMembers,
   useSubscription,
-  useContexts,
+  useSyncGroup,
 } from './hooks';
 
 // Types

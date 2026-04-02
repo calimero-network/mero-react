@@ -2,13 +2,21 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { useMero } from '../context';
 import type {
   Context,
+  CreateContextRequest,
+  InviteToContextRequest,
+  JoinContextRequest,
   CreateGroupInvitationRequest,
   CreateGroupRequest,
+  DeleteGroupRequest,
   GroupContext,
+  GroupInfo,
   GroupMember,
   GroupSummary,
   JoinGroupRequest,
   ListGroupMembersResponseData,
+  AddGroupMembersRequest,
+  RemoveGroupMembersRequest,
+  SyncGroupRequest,
   SseEventData,
 } from '@calimero-network/mero-js';
 import type {
@@ -624,4 +632,220 @@ export function useContextDiscovery(options: ContextDiscoveryOptions): ContextDi
   }, [mountedRef]);
 
   return { context, loading, error, discover, reset };
+}
+
+// ---- Context CRUD Hooks ----
+
+export function useCreateContext() {
+  const { mero } = useMero();
+  const { loading, error, run } = useAsyncMutation();
+
+  const createContext = useCallback(
+    async (request: CreateContextRequest) => {
+      if (!mero) return null;
+      return run(() => mero.admin.createContext(request));
+    },
+    [mero, run],
+  );
+
+  return { createContext, loading, error };
+}
+
+export function useDeleteContext() {
+  const { mero } = useMero();
+  const { loading, error, run } = useAsyncMutation();
+
+  const deleteContext = useCallback(
+    async (contextId: string) => {
+      if (!mero) return null;
+      return run(() => mero.admin.deleteContext(contextId));
+    },
+    [mero, run],
+  );
+
+  return { deleteContext, loading, error };
+}
+
+export function useInviteToContext() {
+  const { mero } = useMero();
+  const { loading, error, run } = useAsyncMutation();
+
+  const inviteToContext = useCallback(
+    async (request: InviteToContextRequest) => {
+      if (!mero) return null;
+      return run(() => mero.admin.inviteToContext(request));
+    },
+    [mero, run],
+  );
+
+  return { inviteToContext, loading, error };
+}
+
+export function useJoinContext() {
+  const { mero } = useMero();
+  const { loading, error, run } = useAsyncMutation();
+
+  const joinContext = useCallback(
+    async (request: JoinContextRequest) => {
+      if (!mero) return null;
+      return run(() => mero.admin.joinContext(request));
+    },
+    [mero, run],
+  );
+
+  return { joinContext, loading, error };
+}
+
+export function useContextGroup(contextId?: string | null) {
+  const { mero } = useMero();
+  const [groupId, setGroupId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+  const mountedRef = useMountedRef();
+
+  const refetch = useCallback(async () => {
+    if (!mero || !contextId) {
+      if (mountedRef.current) {
+        setGroupId(null);
+        setError(null);
+        setLoading(false);
+      }
+      return;
+    }
+
+    if (mountedRef.current) {
+      setLoading(true);
+      setError(null);
+    }
+
+    try {
+      const result = await mero.admin.getContextGroup(contextId);
+      if (mountedRef.current) {
+        setGroupId(result);
+      }
+    } catch (err) {
+      const errorValue = toError(err);
+      if (mountedRef.current) {
+        setError(errorValue);
+      }
+    } finally {
+      if (mountedRef.current) {
+        setLoading(false);
+      }
+    }
+  }, [contextId, mero, mountedRef]);
+
+  useEffect(() => {
+    void refetch();
+  }, [refetch]);
+
+  return { groupId, loading, error, refetch };
+}
+
+// ---- Group Info / Management Hooks ----
+
+export function useGroupInfo(groupId?: string | null) {
+  const { mero } = useMero();
+  const [groupInfo, setGroupInfo] = useState<GroupInfo | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+  const mountedRef = useMountedRef();
+
+  const refetch = useCallback(async () => {
+    if (!mero || !groupId) {
+      if (mountedRef.current) {
+        setGroupInfo(null);
+        setError(null);
+        setLoading(false);
+      }
+      return;
+    }
+
+    if (mountedRef.current) {
+      setLoading(true);
+      setError(null);
+    }
+
+    try {
+      const result = await mero.admin.getGroupInfo(groupId);
+      if (mountedRef.current) {
+        setGroupInfo(result);
+      }
+    } catch (err) {
+      const errorValue = toError(err);
+      if (mountedRef.current) {
+        setError(errorValue);
+      }
+    } finally {
+      if (mountedRef.current) {
+        setLoading(false);
+      }
+    }
+  }, [groupId, mero, mountedRef]);
+
+  useEffect(() => {
+    void refetch();
+  }, [refetch]);
+
+  return { groupInfo, loading, error, refetch };
+}
+
+export function useDeleteGroup() {
+  const { mero } = useMero();
+  const { loading, error, run } = useAsyncMutation();
+
+  const deleteGroup = useCallback(
+    async (groupId: string, request?: DeleteGroupRequest) => {
+      if (!mero) return null;
+      return run(() => mero.admin.deleteGroup(groupId, request));
+    },
+    [mero, run],
+  );
+
+  return { deleteGroup, loading, error };
+}
+
+export function useSyncGroup() {
+  const { mero } = useMero();
+  const { loading, error, run } = useAsyncMutation();
+
+  const syncGroup = useCallback(
+    async (groupId: string, request?: SyncGroupRequest) => {
+      if (!mero) return null;
+      return run(() => mero.admin.syncGroup(groupId, request));
+    },
+    [mero, run],
+  );
+
+  return { syncGroup, loading, error };
+}
+
+export function useAddGroupMembers() {
+  const { mero } = useMero();
+  const { loading, error, run } = useAsyncMutation();
+
+  const addGroupMembers = useCallback(
+    async (groupId: string, request: AddGroupMembersRequest) => {
+      if (!mero) return null;
+      return run(() => mero.admin.addGroupMembers(groupId, request));
+    },
+    [mero, run],
+  );
+
+  return { addGroupMembers, loading, error };
+}
+
+export function useRemoveGroupMembers() {
+  const { mero } = useMero();
+  const { loading, error, run } = useAsyncMutation();
+
+  const removeGroupMembers = useCallback(
+    async (groupId: string, request: RemoveGroupMembersRequest) => {
+      if (!mero) return null;
+      return run(() => mero.admin.removeGroupMembers(groupId, request));
+    },
+    [mero, run],
+  );
+
+  return { removeGroupMembers, loading, error };
 }
