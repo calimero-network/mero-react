@@ -24,10 +24,8 @@ import type {
   NestGroupRequest,
   AddGroupMembersRequest,
   RegisterGroupSigningKeyRequest,
-  RegisterGroupSigningKeyResponseData,
   RemoveGroupMembersRequest,
   RetryGroupUpgradeRequest,
-  RetryGroupUpgradeResponseData,
   SetDefaultCapabilitiesRequest,
   SetDefaultVisibilityRequest,
   SetGroupAliasRequest,
@@ -40,7 +38,6 @@ import type {
   UpdateGroupSettingsRequest,
   UpdateMemberRoleRequest,
   UpgradeGroupRequest,
-  UpgradeGroupResponseData,
 } from '@calimero-network/mero-js';
 import type {
   ApplicationContextRecord,

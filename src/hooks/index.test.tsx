@@ -131,7 +131,7 @@ function createMero(adminOverrides: Record<string, unknown> = {}) {
       createNamespace: vi.fn().mockResolvedValue({ namespaceId: 'ns-1' }),
       deleteNamespace: vi.fn().mockResolvedValue({ isDeleted: true }),
       createNamespaceInvitation: vi.fn().mockResolvedValue({
-        invitation: { invitation: { inviterIdentity: [], groupId: [], expirationTimestamp: 0 }, inviterSignature: 'sig-1' },
+        invitation: { invitation: { inviterIdentity: [], groupId: [], expirationTimestamp: 0, secretSalt: [] }, inviterSignature: 'sig-1' },
         groupAlias: 'test-ns',
       }),
       joinNamespace: vi.fn().mockResolvedValue({ groupId: 'ns-1', memberIdentity: 'member-1', governanceOp: 'MemberAdded' }),
@@ -262,11 +262,12 @@ describe('group and context hooks', () => {
     const createGroupInvitation = vi.fn().mockResolvedValue({
       invitation: {
         invitation: {
-          inviter_identity: [0],
-          group_id: [1],
-          expiration_timestamp: 123,
+          inviterIdentity: [0],
+          groupId: [1],
+          expirationTimestamp: 123,
+          secretSalt: [42],
         },
-        inviter_signature: 'sig-1',
+        inviterSignature: 'sig-1',
       },
     });
     const mero = createMero({ createGroupInvitation });
@@ -275,13 +276,15 @@ describe('group and context hooks', () => {
     const { result } = renderHook(() => useGroupInvitations());
 
     await act(async () => {
-      const invitation = await result.current.createInvitation('group-1', {
+      const response = await result.current.createInvitation('group-1', {
         expirationTimestamp: 123,
       });
-      if (!invitation) {
+      if (!response) {
         throw new Error('Expected invitation to be created');
       }
-      expect(invitation.invitation.inviter_signature).toBe('sig-1');
+      if ('invitation' in response) {
+        expect(response.invitation.inviterSignature).toBe('sig-1');
+      }
     });
 
     expect(createGroupInvitation).toHaveBeenCalledWith('group-1', {
@@ -300,11 +303,12 @@ describe('group and context hooks', () => {
       const joined = await result.current.joinGroup({
         invitation: {
           invitation: {
-            inviter_identity: [0],
-            group_id: [1],
-            expiration_timestamp: 123,
+            inviterIdentity: [0],
+            groupId: [1],
+            expirationTimestamp: 123,
+            secretSalt: [42],
           },
-          inviter_signature: 'sig-1',
+          inviterSignature: 'sig-1',
         },
         groupAlias: 'Lobby',
       });
@@ -768,7 +772,7 @@ describe('group and context hooks', () => {
 
   it('useCreateNamespaceInvitation creates an invitation', async () => {
     const invitation = {
-      invitation: { invitation: { inviterIdentity: [], groupId: [], expirationTimestamp: 123 }, inviterSignature: 'sig-1' },
+      invitation: { invitation: { inviterIdentity: [], groupId: [], expirationTimestamp: 123, secretSalt: [] }, inviterSignature: 'sig-1' },
       groupAlias: 'test-ns',
     };
     const createNamespaceInvitation = vi.fn().mockResolvedValue(invitation);
@@ -795,7 +799,7 @@ describe('group and context hooks', () => {
     await act(async () => {
       const joined = await result.current.joinNamespace('ns-1', {
         invitation: {
-          invitation: { inviterIdentity: [], groupId: [], expirationTimestamp: 123 },
+          invitation: { inviterIdentity: [], groupId: [], expirationTimestamp: 123, secretSalt: [] },
           inviterSignature: 'sig-1',
         },
       });
