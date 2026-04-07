@@ -4,16 +4,43 @@ import type {
   Context,
   CreateContextRequest,
   CreateGroupInvitationRequest,
+  CreateGroupInNamespaceRequest,
+  CreateNamespaceInvitationRequest,
+  CreateNamespaceInvitationResponseData,
+  CreateNamespaceRequest,
+  CreateRecursiveInvitationResponseData,
   DeleteGroupRequest,
+  DeleteNamespaceRequest,
+  DetachContextFromGroupRequest,
   GroupContextEntry,
   GroupInfo,
   GroupMember,
+  GroupUpgradeStatusResponseData,
   JoinGroupRequest,
+  JoinNamespaceRequest,
   ListGroupMembersResponseData,
+  Namespace,
+  NamespaceIdentity,
+  NestGroupRequest,
   AddGroupMembersRequest,
+  RegisterGroupSigningKeyRequest,
+  RegisterGroupSigningKeyResponseData,
   RemoveGroupMembersRequest,
+  RetryGroupUpgradeRequest,
+  RetryGroupUpgradeResponseData,
+  SetDefaultCapabilitiesRequest,
+  SetDefaultVisibilityRequest,
+  SetGroupAliasRequest,
+  SetMemberAliasRequest,
+  SetTeeAdmissionPolicyRequest,
+  SubgroupEntry,
   SyncGroupRequest,
   SseEventData,
+  UnnestGroupRequest,
+  UpdateGroupSettingsRequest,
+  UpdateMemberRoleRequest,
+  UpgradeGroupRequest,
+  UpgradeGroupResponseData,
 } from '@calimero-network/mero-js';
 import type {
   ApplicationContextRecord,
@@ -756,4 +783,600 @@ export function useRemoveGroupMembers() {
   );
 
   return { removeGroupMembers, loading, error };
+}
+
+// ---- Namespace Hooks ----
+
+export function useNamespaces() {
+  const { mero } = useMero();
+  const [namespaces, setNamespaces] = useState<Namespace[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+  const mountedRef = useMountedRef();
+
+  const refetch = useCallback(async () => {
+    if (!mero) return;
+
+    if (mountedRef.current) {
+      setLoading(true);
+      setError(null);
+    }
+
+    try {
+      const result = await mero.admin.listNamespaces();
+      if (mountedRef.current) {
+        setNamespaces(result);
+      }
+    } catch (err) {
+      const errorValue = toError(err);
+      if (mountedRef.current) {
+        setError(errorValue);
+      }
+    } finally {
+      if (mountedRef.current) {
+        setLoading(false);
+      }
+    }
+  }, [mero, mountedRef]);
+
+  useEffect(() => {
+    void refetch();
+  }, [refetch]);
+
+  return { namespaces, loading, error, refetch };
+}
+
+export function useNamespace(namespaceId?: string | null) {
+  const { mero } = useMero();
+  const [namespace, setNamespace] = useState<Namespace | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+  const mountedRef = useMountedRef();
+
+  const refetch = useCallback(async () => {
+    if (!mero || !namespaceId) {
+      if (mountedRef.current) {
+        setNamespace(null);
+        setError(null);
+        setLoading(false);
+      }
+      return;
+    }
+
+    if (mountedRef.current) {
+      setLoading(true);
+      setError(null);
+    }
+
+    try {
+      const result = await mero.admin.getNamespace(namespaceId);
+      if (mountedRef.current) {
+        setNamespace(result);
+      }
+    } catch (err) {
+      const errorValue = toError(err);
+      if (mountedRef.current) {
+        setError(errorValue);
+      }
+    } finally {
+      if (mountedRef.current) {
+        setLoading(false);
+      }
+    }
+  }, [namespaceId, mero, mountedRef]);
+
+  useEffect(() => {
+    void refetch();
+  }, [refetch]);
+
+  return { namespace, loading, error, refetch };
+}
+
+export function useNamespaceIdentity(namespaceId?: string | null) {
+  const { mero } = useMero();
+  const [identity, setIdentity] = useState<NamespaceIdentity | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+  const mountedRef = useMountedRef();
+
+  const refetch = useCallback(async () => {
+    if (!mero || !namespaceId) {
+      if (mountedRef.current) {
+        setIdentity(null);
+        setError(null);
+        setLoading(false);
+      }
+      return;
+    }
+
+    if (mountedRef.current) {
+      setLoading(true);
+      setError(null);
+    }
+
+    try {
+      const result = await mero.admin.getNamespaceIdentity(namespaceId);
+      if (mountedRef.current) {
+        setIdentity(result);
+      }
+    } catch (err) {
+      const errorValue = toError(err);
+      if (mountedRef.current) {
+        setError(errorValue);
+      }
+    } finally {
+      if (mountedRef.current) {
+        setLoading(false);
+      }
+    }
+  }, [namespaceId, mero, mountedRef]);
+
+  useEffect(() => {
+    void refetch();
+  }, [refetch]);
+
+  return { identity, loading, error, refetch };
+}
+
+export function useNamespacesForApplication(applicationId?: string | null) {
+  const { mero } = useMero();
+  const [namespaces, setNamespaces] = useState<Namespace[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+  const mountedRef = useMountedRef();
+
+  const refetch = useCallback(async () => {
+    if (!mero || !applicationId) {
+      if (mountedRef.current) {
+        setNamespaces([]);
+        setError(null);
+        setLoading(false);
+      }
+      return;
+    }
+
+    if (mountedRef.current) {
+      setLoading(true);
+      setError(null);
+    }
+
+    try {
+      const result = await mero.admin.listNamespacesForApplication(applicationId);
+      if (mountedRef.current) {
+        setNamespaces(result);
+      }
+    } catch (err) {
+      const errorValue = toError(err);
+      if (mountedRef.current) {
+        setError(errorValue);
+      }
+    } finally {
+      if (mountedRef.current) {
+        setLoading(false);
+      }
+    }
+  }, [applicationId, mero, mountedRef]);
+
+  useEffect(() => {
+    void refetch();
+  }, [refetch]);
+
+  return { namespaces, loading, error, refetch };
+}
+
+export function useCreateNamespace() {
+  const { mero } = useMero();
+  const { loading, error, run } = useAsyncMutation();
+
+  const createNamespace = useCallback(
+    async (request: CreateNamespaceRequest) => {
+      if (!mero) return null;
+      return run(() => mero.admin.createNamespace(request));
+    },
+    [mero, run],
+  );
+
+  return { createNamespace, loading, error };
+}
+
+export function useDeleteNamespace() {
+  const { mero } = useMero();
+  const { loading, error, run } = useAsyncMutation();
+
+  const deleteNamespace = useCallback(
+    async (namespaceId: string, request?: DeleteNamespaceRequest) => {
+      if (!mero) return null;
+      return run(() => mero.admin.deleteNamespace(namespaceId, request));
+    },
+    [mero, run],
+  );
+
+  return { deleteNamespace, loading, error };
+}
+
+export function useCreateNamespaceInvitation() {
+  const { mero } = useMero();
+  const { loading, error, run } = useAsyncMutation();
+
+  const createNamespaceInvitation = useCallback(
+    async (
+      namespaceId: string,
+      request?: CreateNamespaceInvitationRequest,
+    ): Promise<CreateNamespaceInvitationResponseData | CreateRecursiveInvitationResponseData | null> => {
+      if (!mero) return null;
+      return run(() => mero.admin.createNamespaceInvitation(namespaceId, request));
+    },
+    [mero, run],
+  );
+
+  return { createNamespaceInvitation, loading, error };
+}
+
+export function useJoinNamespace() {
+  const { mero } = useMero();
+  const { loading, error, run } = useAsyncMutation();
+
+  const joinNamespace = useCallback(
+    async (namespaceId: string, request: JoinNamespaceRequest) => {
+      if (!mero) return null;
+      return run(() => mero.admin.joinNamespace(namespaceId, request));
+    },
+    [mero, run],
+  );
+
+  return { joinNamespace, loading, error };
+}
+
+export function useCreateGroupInNamespace() {
+  const { mero } = useMero();
+  const { loading, error, run } = useAsyncMutation();
+
+  const createGroupInNamespace = useCallback(
+    async (namespaceId: string, request?: CreateGroupInNamespaceRequest) => {
+      if (!mero) return null;
+      return run(() => mero.admin.createGroupInNamespace(namespaceId, request));
+    },
+    [mero, run],
+  );
+
+  return { createGroupInNamespace, loading, error };
+}
+
+export function useNamespaceGroups(namespaceId?: string | null) {
+  const { mero } = useMero();
+  const [groups, setGroups] = useState<SubgroupEntry[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+  const mountedRef = useMountedRef();
+
+  const refetch = useCallback(async () => {
+    if (!mero || !namespaceId) {
+      if (mountedRef.current) {
+        setGroups([]);
+        setError(null);
+        setLoading(false);
+      }
+      return;
+    }
+
+    if (mountedRef.current) {
+      setLoading(true);
+      setError(null);
+    }
+
+    try {
+      const result = await mero.admin.listNamespaceGroups(namespaceId);
+      if (mountedRef.current) {
+        setGroups(result);
+      }
+    } catch (err) {
+      const errorValue = toError(err);
+      if (mountedRef.current) {
+        setError(errorValue);
+      }
+    } finally {
+      if (mountedRef.current) {
+        setLoading(false);
+      }
+    }
+  }, [namespaceId, mero, mountedRef]);
+
+  useEffect(() => {
+    void refetch();
+  }, [refetch]);
+
+  return { groups, loading, error, refetch };
+}
+
+// ---- Group Settings & Role Management ----
+
+export function useUpdateMemberRole() {
+  const { mero } = useMero();
+  const { loading, error, run } = useAsyncMutation();
+
+  const updateMemberRole = useCallback(
+    async (groupId: string, identity: string, request: UpdateMemberRoleRequest) => {
+      if (!mero) return null;
+      return run(() => mero.admin.updateMemberRole(groupId, identity, request));
+    },
+    [mero, run],
+  );
+
+  return { updateMemberRole, loading, error };
+}
+
+export function useSetDefaultCapabilities() {
+  const { mero } = useMero();
+  const { loading, error, run } = useAsyncMutation();
+
+  const setDefaultCapabilities = useCallback(
+    async (groupId: string, request: SetDefaultCapabilitiesRequest) => {
+      if (!mero) return null;
+      return run(() => mero.admin.setDefaultCapabilities(groupId, request));
+    },
+    [mero, run],
+  );
+
+  return { setDefaultCapabilities, loading, error };
+}
+
+export function useSetDefaultVisibility() {
+  const { mero } = useMero();
+  const { loading, error, run } = useAsyncMutation();
+
+  const setDefaultVisibility = useCallback(
+    async (groupId: string, request: SetDefaultVisibilityRequest) => {
+      if (!mero) return null;
+      return run(() => mero.admin.setDefaultVisibility(groupId, request));
+    },
+    [mero, run],
+  );
+
+  return { setDefaultVisibility, loading, error };
+}
+
+export function useSetTeeAdmissionPolicy() {
+  const { mero } = useMero();
+  const { loading, error, run } = useAsyncMutation();
+
+  const setTeeAdmissionPolicy = useCallback(
+    async (groupId: string, request: SetTeeAdmissionPolicyRequest) => {
+      if (!mero) return null;
+      return run(() => mero.admin.setTeeAdmissionPolicy(groupId, request));
+    },
+    [mero, run],
+  );
+
+  return { setTeeAdmissionPolicy, loading, error };
+}
+
+export function useUpdateGroupSettings() {
+  const { mero } = useMero();
+  const { loading, error, run } = useAsyncMutation();
+
+  const updateGroupSettings = useCallback(
+    async (groupId: string, request: UpdateGroupSettingsRequest) => {
+      if (!mero) return null;
+      return run(() => mero.admin.updateGroupSettings(groupId, request));
+    },
+    [mero, run],
+  );
+
+  return { updateGroupSettings, loading, error };
+}
+
+export function useSetGroupAlias() {
+  const { mero } = useMero();
+  const { loading, error, run } = useAsyncMutation();
+
+  const setGroupAlias = useCallback(
+    async (groupId: string, request: SetGroupAliasRequest) => {
+      if (!mero) return null;
+      return run(() => mero.admin.setGroupAlias(groupId, request));
+    },
+    [mero, run],
+  );
+
+  return { setGroupAlias, loading, error };
+}
+
+export function useSetMemberAlias() {
+  const { mero } = useMero();
+  const { loading, error, run } = useAsyncMutation();
+
+  const setMemberAlias = useCallback(
+    async (groupId: string, identity: string, request: SetMemberAliasRequest) => {
+      if (!mero) return null;
+      return run(() => mero.admin.setMemberAlias(groupId, identity, request));
+    },
+    [mero, run],
+  );
+
+  return { setMemberAlias, loading, error };
+}
+
+// ---- Group Signing Key, Upgrades & Hierarchy ----
+
+export function useRegisterGroupSigningKey() {
+  const { mero } = useMero();
+  const { loading, error, run } = useAsyncMutation();
+
+  const registerGroupSigningKey = useCallback(
+    async (groupId: string, request: RegisterGroupSigningKeyRequest) => {
+      if (!mero) return null;
+      return run(() => mero.admin.registerGroupSigningKey(groupId, request));
+    },
+    [mero, run],
+  );
+
+  return { registerGroupSigningKey, loading, error };
+}
+
+export function useUpgradeGroup() {
+  const { mero } = useMero();
+  const { loading, error, run } = useAsyncMutation();
+
+  const upgradeGroup = useCallback(
+    async (groupId: string, request: UpgradeGroupRequest) => {
+      if (!mero) return null;
+      return run(() => mero.admin.upgradeGroup(groupId, request));
+    },
+    [mero, run],
+  );
+
+  return { upgradeGroup, loading, error };
+}
+
+export function useGroupUpgradeStatus(groupId?: string | null) {
+  const { mero } = useMero();
+  const [upgradeStatus, setUpgradeStatus] = useState<GroupUpgradeStatusResponseData>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+  const mountedRef = useMountedRef();
+
+  const refetch = useCallback(async () => {
+    if (!mero || !groupId) {
+      if (mountedRef.current) {
+        setUpgradeStatus(null);
+        setError(null);
+        setLoading(false);
+      }
+      return;
+    }
+
+    if (mountedRef.current) {
+      setLoading(true);
+      setError(null);
+    }
+
+    try {
+      const result = await mero.admin.getGroupUpgradeStatus(groupId);
+      if (mountedRef.current) {
+        setUpgradeStatus(result);
+      }
+    } catch (err) {
+      const errorValue = toError(err);
+      if (mountedRef.current) {
+        setError(errorValue);
+      }
+    } finally {
+      if (mountedRef.current) {
+        setLoading(false);
+      }
+    }
+  }, [groupId, mero, mountedRef]);
+
+  useEffect(() => {
+    void refetch();
+  }, [refetch]);
+
+  return { upgradeStatus, loading, error, refetch };
+}
+
+export function useRetryGroupUpgrade() {
+  const { mero } = useMero();
+  const { loading, error, run } = useAsyncMutation();
+
+  const retryGroupUpgrade = useCallback(
+    async (groupId: string, request?: RetryGroupUpgradeRequest) => {
+      if (!mero) return null;
+      return run(() => mero.admin.retryGroupUpgrade(groupId, request));
+    },
+    [mero, run],
+  );
+
+  return { retryGroupUpgrade, loading, error };
+}
+
+export function useNestGroup() {
+  const { mero } = useMero();
+  const { loading, error, run } = useAsyncMutation();
+
+  const nestGroup = useCallback(
+    async (parentGroupId: string, request: NestGroupRequest) => {
+      if (!mero) return null;
+      return run(() => mero.admin.nestGroup(parentGroupId, request));
+    },
+    [mero, run],
+  );
+
+  return { nestGroup, loading, error };
+}
+
+export function useUnnestGroup() {
+  const { mero } = useMero();
+  const { loading, error, run } = useAsyncMutation();
+
+  const unnestGroup = useCallback(
+    async (parentGroupId: string, request: UnnestGroupRequest) => {
+      if (!mero) return null;
+      return run(() => mero.admin.unnestGroup(parentGroupId, request));
+    },
+    [mero, run],
+  );
+
+  return { unnestGroup, loading, error };
+}
+
+export function useSubgroups(groupId?: string | null) {
+  const { mero } = useMero();
+  const [subgroups, setSubgroups] = useState<SubgroupEntry[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+  const mountedRef = useMountedRef();
+
+  const refetch = useCallback(async () => {
+    if (!mero || !groupId) {
+      if (mountedRef.current) {
+        setSubgroups([]);
+        setError(null);
+        setLoading(false);
+      }
+      return;
+    }
+
+    if (mountedRef.current) {
+      setLoading(true);
+      setError(null);
+    }
+
+    try {
+      const result = await mero.admin.listSubgroups(groupId);
+      if (mountedRef.current) {
+        setSubgroups(result);
+      }
+    } catch (err) {
+      const errorValue = toError(err);
+      if (mountedRef.current) {
+        setError(errorValue);
+      }
+    } finally {
+      if (mountedRef.current) {
+        setLoading(false);
+      }
+    }
+  }, [groupId, mero, mountedRef]);
+
+  useEffect(() => {
+    void refetch();
+  }, [refetch]);
+
+  return { subgroups, loading, error, refetch };
+}
+
+// ---- Context-Group Relationship ----
+
+export function useDetachContextFromGroup() {
+  const { mero } = useMero();
+  const { loading, error, run } = useAsyncMutation();
+
+  const detachContextFromGroup = useCallback(
+    async (groupId: string, contextId: string, request?: DetachContextFromGroupRequest) => {
+      if (!mero) return null;
+      return run(() => mero.admin.detachContextFromGroup(groupId, contextId, request));
+    },
+    [mero, run],
+  );
+
+  return { detachContextFromGroup, loading, error };
 }

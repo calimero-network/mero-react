@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@calimero-network/mero-js':
-        specifier: file:../mero-js
-        version: file:../mero-js
+        specifier: ^1.4.0
+        version: 1.4.0
     devDependencies:
       '@semantic-release/changelog':
         specifier: ^6.0.3
@@ -114,8 +114,8 @@ packages:
     resolution: {integrity: sha512-ctxtJ/eA+t+6q2++vj5j7FYX3nRu311q1wfYH3xjlLOsczhlhxAg2FWNUXhpGvAw3BWo1xBcvOV6/YLc2r5FJw==}
     hasBin: true
 
-  '@calimero-network/mero-js@file:../mero-js':
-    resolution: {directory: ../mero-js, type: directory}
+  '@calimero-network/mero-js@1.4.0':
+    resolution: {integrity: sha512-kApqUK5PKyTxRh2wo33yqlhcJ1Hms1fZWOaIiZy06R0+AkKbrcPaxVhxv6/I19c7J5o56FfNgu2i7k93d3jbGA==}
     engines: {node: '>=18.0.0'}
 
   '@colors/colors@1.5.0':
@@ -2900,7 +2900,7 @@ snapshots:
     dependencies:
       css-tree: 3.2.1
 
-  '@calimero-network/mero-js@file:../mero-js': {}
+  '@calimero-network/mero-js@1.4.0': {}
 
   '@colors/colors@1.5.0':
     optional: true

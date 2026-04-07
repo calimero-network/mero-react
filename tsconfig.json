@@ -13,10 +13,6 @@
     "sourceMap": true,
     "outDir": "dist",
     "rootDir": "src",
-    "baseUrl": ".",
-    "paths": {
-      "@calimero-network/mero-js": ["../mero-js/dist/index.d.ts"]
-    },
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noUnusedLocals": true,
