@@ -3,15 +3,11 @@ import { useMero } from '../context';
 import type {
   Context,
   CreateContextRequest,
-  InviteToContextRequest,
-  JoinContextRequest,
   CreateGroupInvitationRequest,
-  CreateGroupRequest,
   DeleteGroupRequest,
-  GroupContext,
+  GroupContextEntry,
   GroupInfo,
   GroupMember,
-  GroupSummary,
   JoinGroupRequest,
   ListGroupMembersResponseData,
   AddGroupMembersRequest,
@@ -240,45 +236,6 @@ export function useApplicationContexts(applicationId?: string | null) {
   return useContexts(applicationId);
 }
 
-export function useGroups() {
-  const { mero } = useMero();
-  const [groups, setGroups] = useState<GroupSummary[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
-  const mountedRef = useMountedRef();
-
-  const refetch = useCallback(async () => {
-    if (!mero) return;
-
-    if (mountedRef.current) {
-      setLoading(true);
-      setError(null);
-    }
-
-    try {
-      const nextGroups = await mero.admin.listGroups();
-      if (mountedRef.current) {
-        setGroups(nextGroups);
-      }
-    } catch (err) {
-      const errorValue = toError(err);
-      if (mountedRef.current) {
-        setError(errorValue);
-      }
-    } finally {
-      if (mountedRef.current) {
-        setLoading(false);
-      }
-    }
-  }, [mero, mountedRef]);
-
-  useEffect(() => {
-    void refetch();
-  }, [refetch]);
-
-  return { groups, loading, error, refetch };
-}
-
 export function useGroupMembers(groupId?: string | null) {
   const { mero } = useMero();
   const [members, setMembers] = useState<GroupMember[]>([]);
@@ -330,7 +287,7 @@ export function useGroupMembers(groupId?: string | null) {
 
 export function useGroupContexts(groupId?: string | null) {
   const { mero } = useMero();
-  const [contexts, setContexts] = useState<GroupContext[]>([]);
+  const [contexts, setContexts] = useState<GroupContextEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const mountedRef = useMountedRef();
@@ -374,23 +331,6 @@ export function useGroupContexts(groupId?: string | null) {
   return { contexts, loading, error, refetch };
 }
 
-export function useCreateGroup() {
-  const { mero } = useMero();
-  const { loading, error, run } = useAsyncMutation();
-
-  const createGroup = useCallback(
-    async (request: CreateGroupRequest) => {
-      if (!mero) {
-        return null;
-      }
-      return run(() => mero.admin.createGroup(request));
-    },
-    [mero, run],
-  );
-
-  return { createGroup, loading, error };
-}
-
 export function useGroupInvitations() {
   const { mero } = useMero();
   const { loading, error, run } = useAsyncMutation();
@@ -423,23 +363,6 @@ export function useJoinGroup() {
   );
 
   return { joinGroup, loading, error };
-}
-
-export function useJoinGroupContext() {
-  const { mero } = useMero();
-  const { loading, error, run } = useAsyncMutation();
-
-  const joinGroupContext = useCallback(
-    async (groupId: string, contextId: string) => {
-      if (!mero) {
-        return null;
-      }
-      return run(() => mero.admin.joinGroupContext(groupId, contextId));
-    },
-    [mero, run],
-  );
-
-  return { joinGroupContext, loading, error };
 }
 
 export function useGroupCapabilities(groupId?: string | null, memberId?: string | null) {
@@ -664,21 +587,6 @@ export function useDeleteContext() {
   );
 
   return { deleteContext, loading, error };
-}
-
-export function useInviteToContext() {
-  const { mero } = useMero();
-  const { loading, error, run } = useAsyncMutation();
-
-  const inviteToContext = useCallback(
-    async (request: InviteToContextRequest) => {
-      if (!mero) return null;
-      return run(() => mero.admin.inviteToContext(request));
-    },
-    [mero, run],
-  );
-
-  return { inviteToContext, loading, error };
 }
 
 export function useJoinContext() {
