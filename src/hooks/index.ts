@@ -422,7 +422,7 @@ export function useGroupCapabilities(groupId?: string | null, memberId?: string 
       }
 
       try {
-        await mero.admin.setMemberCapabilities(groupId, memberId, nextCapabilities);
+        await mero.admin.setMemberCapabilities(groupId, memberId, { capabilities: nextCapabilities });
         if (mountedRef.current) {
           setCapabilitiesState(nextCapabilities);
         }
@@ -594,9 +594,9 @@ export function useJoinContext() {
   const { loading, error, run } = useAsyncMutation();
 
   const joinContext = useCallback(
-    async (request: JoinContextRequest) => {
+    async (contextId: string) => {
       if (!mero) return null;
-      return run(() => mero.admin.joinContext(request));
+      return run(() => mero.admin.joinContext(contextId));
     },
     [mero, run],
   );
