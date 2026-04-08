@@ -8,8 +8,59 @@
 export { MeroProvider, useMero, MeroContext } from './context';
 export type { MeroProviderProps } from './context';
 
+// Components
+export { ConnectButton } from './components';
+export type { ConnectButtonProps } from './components';
+export { LoginModal } from './components';
+export type { LoginModalProps } from './components';
+
 // Hooks
-export { useExecute, useSubscription, useContexts } from './hooks';
+export {
+  useApplicationContexts,
+  useContextDiscovery,
+  useContextGroup,
+  useContexts,
+  useCreateContext,
+  useCreateGroupInNamespace,
+  useCreateNamespace,
+  useCreateNamespaceInvitation,
+  useDeleteContext,
+  useDeleteGroup,
+  useDeleteNamespace,
+  useDetachContextFromGroup,
+  useExecute,
+  useGroupCapabilities,
+  useGroupContexts,
+  useGroupInfo,
+  useGroupInvitations,
+  useGroupMembers,
+  useGroupUpgradeStatus,
+  useJoinContext,
+  useJoinGroup,
+  useJoinNamespace,
+  useNamespace,
+  useNamespaceGroups,
+  useNamespaceIdentity,
+  useNamespaces,
+  useNamespacesForApplication,
+  useNestGroup,
+  useRegisterGroupSigningKey,
+  useRetryGroupUpgrade,
+  useSetDefaultCapabilities,
+  useSetDefaultVisibility,
+  useSetGroupAlias,
+  useSetMemberAlias,
+  useSetTeeAdmissionPolicy,
+  useSubgroups,
+  useUnnestGroup,
+  useUpdateGroupSettings,
+  useUpdateMemberRole,
+  useUpgradeGroup,
+  useAddGroupMembers,
+  useRemoveGroupMembers,
+  useSubscription,
+  useSyncGroup,
+} from './hooks';
 
 // Types
 export {
@@ -17,11 +68,14 @@ export {
   ConnectionType,
 } from './types';
 export type {
+  AppContext,
+  ApplicationContextRecord,
+  ContextDiscoveryOptions,
+  ContextDiscoveryState,
+  CustomConnectionConfig,
+  ExecutionResult,
   MeroContextValue,
   MeroProviderConfig,
-  CustomConnectionConfig,
-  AppContext,
-  ExecutionResult,
 } from './types';
 
 // Storage utilities
