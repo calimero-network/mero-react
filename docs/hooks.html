@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calimero | mero-react — Hooks</title>
+<link rel="stylesheet" href="styles.css">
+<meta name="theme-color" content="#0d1117">
+</head>
+<body>
+<div class="main">
+<div class="content">
+<div class="breadcrumb"><a href="index.html">Home</a><span class="sep">/</span><span>Hooks</span></div>
+
+<h1>Hooks</h1>
+<p class="page-subtitle">React hooks for auth state, SDK access, and context management</p>
+
+<div class="card ga">
+<h2>useCalimero</h2>
+<p style="margin-bottom:12px;">Primary hook — returns the SDK instance and current auth state:</p>
+<div class="typedef">
+<span class="kw">import</span> &#123; <span class="ty">useCalimero</span> &#125; <span class="kw">from</span> <span class="comment">'@calimero-network/mero-react'</span>;<br><br>
+<span class="kw">const</span> &#123;<br>
+&nbsp;&nbsp;<span class="field">sdk</span>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">// MeroJs instance</span><br>
+&nbsp;&nbsp;<span class="field">isAuthenticated</span>,<span class="comment">// boolean</span><br>
+&nbsp;&nbsp;<span class="field">isLoading</span>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">// boolean — true during init</span><br>
+&nbsp;&nbsp;<span class="field">login</span>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">// (username, password) =&gt; Promise&lt;void&gt;</span><br>
+&nbsp;&nbsp;<span class="field">logout</span>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">// () =&gt; void</span><br>
+&#125; = <span class="ty">useCalimero</span>();
+</div>
+</div>
+
+<div class="card gb">
+<h2>useCalimeroAdmin</h2>
+<p style="margin-bottom:12px;">Convenience hook for admin API operations:</p>
+<div class="typedef">
+<span class="kw">import</span> &#123; <span class="ty">useCalimeroAdmin</span> &#125; <span class="kw">from</span> <span class="comment">'@calimero-network/mero-react'</span>;<br><br>
+<span class="kw">function</span> <span class="ty">ContextList</span>() &#123;<br>
+&nbsp;&nbsp;<span class="kw">const</span> &#123; <span class="field">getContexts</span>, <span class="field">createContext</span> &#125; = <span class="ty">useCalimeroAdmin</span>();<br><br>
+&nbsp;&nbsp;<span class="kw">const</span> [<span class="field">contexts</span>, <span class="field">setContexts</span>] = useState([]);<br><br>
+&nbsp;&nbsp;useEffect(() =&gt; &#123;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="field">getContexts</span>().<span class="ty">then</span>(<span class="field">setContexts</span>);<br>
+&nbsp;&nbsp;&#125;, []);<br><br>
+&nbsp;&nbsp;<span class="kw">return</span> &lt;<span class="ty">ul</span>&gt;&#123;<span class="field">contexts</span>.<span class="ty">map</span>(<span class="field">c</span> =&gt; &lt;<span class="ty">li</span>&gt;&#123;<span class="field">c</span>.<span class="field">id</span>&#125;&lt;/<span class="ty">li</span>&gt;)&#125;&lt;/<span class="ty">ul</span>&gt;;<br>
+&#125;
+</div>
+</div>
+
+<div class="card gc">
+<h2>useCalimeroRpc</h2>
+<p style="margin-bottom:12px;">Execute WASM methods directly from components:</p>
+<div class="typedef">
+<span class="kw">import</span> &#123; <span class="ty">useCalimeroRpc</span> &#125; <span class="kw">from</span> <span class="comment">'@calimero-network/mero-react'</span>;<br><br>
+<span class="kw">function</span> <span class="ty">PostList</span>(&#123; <span class="field">contextId</span> &#125;) &#123;<br>
+&nbsp;&nbsp;<span class="kw">const</span> &#123; <span class="field">execute</span>, <span class="field">query</span>, <span class="field">mutate</span> &#125; = <span class="ty">useCalimeroRpc</span>(<span class="field">contextId</span>);<br><br>
+&nbsp;&nbsp;<span class="kw">const</span> <span class="ty">loadPosts</span> = <span class="kw">async</span> () =&gt; &#123;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">return await</span> <span class="field">query</span>(<span class="comment">'get_posts'</span>, &#123;&#125;);<br>
+&nbsp;&nbsp;&#125;;<br><br>
+&nbsp;&nbsp;<span class="kw">const</span> <span class="ty">createPost</span> = <span class="kw">async</span> (<span class="field">title</span>) =&gt; &#123;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">await</span> <span class="field">mutate</span>(<span class="comment">'create_post'</span>, &#123; <span class="field">title</span> &#125;);<br>
+&nbsp;&nbsp;&#125;;<br>
+&#125;
+</div>
+</div>
+
+<div class="card gd">
+<h2>useCalimeroSubscription</h2>
+<p style="margin-bottom:12px;">Subscribe to real-time node events in a component:</p>
+<div class="typedef">
+<span class="kw">import</span> &#123; <span class="ty">useCalimeroSubscription</span> &#125; <span class="kw">from</span> <span class="comment">'@calimero-network/mero-react'</span>;<br><br>
+<span class="kw">function</span> <span class="ty">EventFeed</span>(&#123; <span class="field">contextId</span> &#125;) &#123;<br>
+&nbsp;&nbsp;<span class="kw">const</span> <span class="field">events</span> = <span class="ty">useCalimeroSubscription</span>(<span class="field">contextId</span>, &#123;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="field">protocol</span>: <span class="comment">'sse'</span>, <span class="comment">// or 'ws'</span><br>
+&nbsp;&nbsp;&#125;);<br><br>
+&nbsp;&nbsp;<span class="kw">return</span> (<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&lt;<span class="ty">ul</span>&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&#123;<span class="field">events</span>.<span class="ty">map</span>(<span class="field">e</span> =&gt; (<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&lt;<span class="ty">li</span>&gt;&#123;<span class="field">e</span>.<span class="field">eventType</span>&#125;: &#123;JSON.<span class="ty">stringify</span>(<span class="field">e</span>.<span class="field">payload</span>)&#125;&lt;/<span class="ty">li</span>&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;))&#125;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&lt;/<span class="ty">ul</span>&gt;<br>
+&nbsp;&nbsp;);<br>
+&#125;
+</div>
+</div>
+
+</div>
+</div>
+<script src="nav.js"></script>
+</body>
+</html>

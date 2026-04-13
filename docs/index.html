@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calimero | mero-react — React SDK Bindings</title>
+<link rel="stylesheet" href="styles.css">
+<meta name="description" content="mero-react — minimal React provider, hooks, and storage helpers for the Calimero SDK.">
+<meta name="theme-color" content="#0d1117">
+</head>
+<body>
+<div class="main">
+<div class="content">
+
+<div class="hero">
+  <h1>Calimero <em>mero-react</em></h1>
+  <p class="tagline">React bindings for <span class="code">@calimero-network/mero-js</span> — a provider, hooks, and storage helpers. No UI components. No styled-components. Just the plumbing you need.</p>
+
+  <div class="g4" style="margin-bottom:36px;">
+    <div class="stat"><div class="v">0</div><div class="l">UI components</div></div>
+    <div class="stat"><div class="v">React</div><div class="l">^18 | ^19</div></div>
+    <div class="stat"><div class="v">TS</div><div class="l">TypeScript</div></div>
+    <div class="stat"><div class="v">v1.1</div><div class="l">current</div></div>
+  </div>
+</div>
+
+<div class="card ga">
+<h2>Quick Start</h2>
+<div class="g3">
+  <div class="step"><div class="n">1</div><h4>Install</h4>
+    <div class="typedef" style="margin-top:6px;"><span class="comment">pnpm add @calimero-network/mero-react \<br>&nbsp;&nbsp;@calimero-network/mero-js</span></div>
+  </div>
+  <div class="step"><div class="n">2</div><h4>Wrap your app</h4>
+    <div class="typedef" style="margin-top:6px;"><span class="kw">import</span> <span class="ty">{ MeroProvider, AppMode }</span><br><span class="kw">from</span> <span class="field">'@calimero-network/mero-react'</span>;<br><br><span class="kw">function</span> <span class="ty">App</span>() &#123;<br>&nbsp;&nbsp;<span class="kw">return</span> (<br>&nbsp;&nbsp;&nbsp;&nbsp;&lt;<span class="ty">MeroProvider</span> <span class="field">mode</span>=&#123;<span class="ty">AppMode</span>.<span class="field">SingleContext</span>&#125; <span class="field">packageName</span>=<span class="comment">"com.example.app"</span>&gt;<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&lt;<span class="ty">MyApp</span> /&gt;<br>&nbsp;&nbsp;&nbsp;&nbsp;&lt;/<span class="ty">MeroProvider</span>&gt;<br>&nbsp;&nbsp;);<br>&#125;</div>
+  </div>
+  <div class="step"><div class="n">3</div><h4>Use hooks</h4>
+    <div class="typedef" style="margin-top:6px;"><span class="kw">const</span> &#123; <span class="field">isAuthenticated</span>, <span class="field">contextId</span> &#125; = <span class="ty">useMero</span>();<br><span class="kw">const</span> &#123; <span class="field">execute</span> &#125; = <span class="ty">useExecute</span>();<br><span class="kw">const</span> &#123; <span class="field">subscribe</span> &#125; = <span class="ty">useSubscription</span>();</div>
+  </div>
+</div>
+</div>
+
+<div class="card gb">
+<h2>Architecture</h2>
+<svg viewBox="0 0 820 280" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <filter id="glow-r"><feDropShadow dx="0" dy="0" stdDeviation="3" flood-color="#a5ff11" flood-opacity="0.25"/></filter>
+  </defs>
+
+  <!-- MeroProvider -->
+  <rect x="20" y="30" width="760" height="220" rx="14" fill="#a5ff1105" stroke="#a5ff11" stroke-width="1.6" filter="url(#glow-r)"/>
+  <text x="40" y="58" fill="#a5ff11" font-family="JetBrains Mono" font-size="13" font-weight="700">MeroProvider</text>
+  <text x="40" y="76" fill="#6b6b80" font-family="DM Sans" font-size="10">manages MeroJs instance, auth state, JWT token lifecycle</text>
+
+  <!-- Context -->
+  <rect x="40" y="90" width="200" height="50" rx="8" fill="#58a6ff10" stroke="#58a6ff" stroke-width="1.2"/>
+  <text x="140" y="112" text-anchor="middle" fill="#58a6ff" font-family="JetBrains Mono" font-size="11" font-weight="600">React Context</text>
+  <text x="140" y="130" text-anchor="middle" fill="#6b6b80" font-family="DM Sans" font-size="9">isAuthenticated, contextId, contextIdentity</text>
+
+  <!-- Hooks -->
+  <rect x="260" y="90" width="120" height="50" rx="8" fill="#3fb95010" stroke="#3fb950" stroke-width="1.2"/>
+  <text x="320" y="112" text-anchor="middle" fill="#3fb950" font-family="JetBrains Mono" font-size="10" font-weight="600">useMero</text>
+  <text x="320" y="130" text-anchor="middle" fill="#6b6b80" font-family="DM Sans" font-size="9">read auth state</text>
+
+  <rect x="390" y="90" width="120" height="50" rx="8" fill="#f778ba10" stroke="#f778ba" stroke-width="1.2"/>
+  <text x="450" y="112" text-anchor="middle" fill="#f778ba" font-family="JetBrains Mono" font-size="10" font-weight="600">useExecute</text>
+  <text x="450" y="130" text-anchor="middle" fill="#6b6b80" font-family="DM Sans" font-size="9">RPC calls</text>
+
+  <rect x="520" y="90" width="140" height="50" rx="8" fill="#a371f710" stroke="#a371f7" stroke-width="1.2"/>
+  <text x="590" y="112" text-anchor="middle" fill="#a371f7" font-family="JetBrains Mono" font-size="10" font-weight="600">useSubscription</text>
+  <text x="590" y="130" text-anchor="middle" fill="#6b6b80" font-family="DM Sans" font-size="9">real-time events</text>
+
+  <rect x="670" y="90" width="90" height="50" rx="8" fill="#f59e0b10" stroke="#f59e0b" stroke-width="1.2"/>
+  <text x="715" y="112" text-anchor="middle" fill="#f59e0b" font-family="JetBrains Mono" font-size="10" font-weight="600">Storage</text>
+  <text x="715" y="130" text-anchor="middle" fill="#6b6b80" font-family="DM Sans" font-size="9">token persist</text>
+
+  <!-- mero-js -->
+  <rect x="200" y="165" width="400" height="60" rx="10" fill="#8b8b9b10" stroke="#8b8b9b" stroke-width="1.2"/>
+  <text x="400" y="190" text-anchor="middle" fill="#8b8b9b" font-family="JetBrains Mono" font-size="12" font-weight="700">@calimero-network/mero-js</text>
+  <text x="400" y="210" text-anchor="middle" fill="#6b6b80" font-family="DM Sans" font-size="10">HttpClient, AuthApiClient, AdminApiClient, SseClient, WsClient</text>
+
+  <!-- Arrows -->
+  <line x1="320" y1="142" x2="340" y2="165" stroke="#3fb950" stroke-width="1" stroke-dasharray="3 3"/>
+  <line x1="450" y1="142" x2="400" y2="165" stroke="#f778ba" stroke-width="1" stroke-dasharray="3 3"/>
+  <line x1="590" y1="142" x2="500" y2="165" stroke="#a371f7" stroke-width="1" stroke-dasharray="3 3"/>
+</svg>
+</div>
+
+<h2 style="margin-top:40px;">Reference</h2>
+<div class="g3">
+  <a href="provider.html" class="hero-card">
+    <span class="card-icon" style="color:var(--accent);">&#9670;</span>
+    <h3 style="color:var(--accent)">MeroProvider</h3>
+    <p>Props, AppMode enum, SSO token reading from URL hash, and how it manages the MeroJs instance lifecycle.</p>
+  </a>
+  <a href="hooks.html" class="hero-card">
+    <span class="card-icon" style="color:var(--green);">&#9670;</span>
+    <h3 style="color:var(--green)">Hooks</h3>
+    <p><span class="code">useMero</span>, <span class="code">useExecute</span>, <span class="code">useSubscription</span> — full signature reference with TypeScript types.</p>
+  </a>
+  <a href="storage.html" class="hero-card">
+    <span class="card-icon" style="color:var(--amber);">&#9670;</span>
+    <h3 style="color:var(--amber)">Storage</h3>
+    <p>How JWT tokens are persisted between page loads, localStorage key names, and how to customize storage.</p>
+  </a>
+</div>
+
+</div>
+</div>
+<script src="nav.js"></script>
+</body>
+</html>

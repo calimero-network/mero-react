@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calimero | mero-react — Architecture</title>
+<link rel="stylesheet" href="styles.css">
+<meta name="theme-color" content="#0d1117">
+</head>
+<body>
+<div class="main">
+<div class="content">
+<div class="breadcrumb"><a href="index.html">Home</a><span class="sep">/</span><span>Architecture</span></div>
+
+<h1>Architecture</h1>
+<p class="page-subtitle">Provider + Context + Hooks — thin React layer over mero-js</p>
+
+<div class="card ga">
+<h2>Source Structure</h2>
+<div class="fr"><div class="fp">src/index.ts</div><div class="fd">Public API. Exports <span class="code">MeroProvider</span>, <span class="code">AppMode</span>, <span class="code">useMero</span>, <span class="code">useExecute</span>, <span class="code">useSubscription</span>, and storage helpers.</div></div>
+<div class="fr"><div class="fp">src/context/</div><div class="fd">React Context definition and <span class="code">MeroProvider</span> component. Holds the <span class="code">MeroJs</span> instance and auth state. Reads SSO tokens from URL hash on mount.</div></div>
+<div class="fr"><div class="fp">src/hooks/index.ts</div><div class="fd"><span class="code">useMero()</span> — reads auth state from context. <span class="code">useExecute()</span> — wraps <span class="code">sdk.rpc.execute()</span> with React state. <span class="code">useSubscription()</span> — sets up and tears down event subscriptions.</div></div>
+<div class="fr"><div class="fp">src/storage/</div><div class="fd">Token persistence helpers. Default: <span class="code">localStorage</span> with known key names. Pluggable via <span class="code">MeroProvider</span> prop.</div></div>
+<div class="fr"><div class="fp">src/types.ts</div><div class="fd">Shared TypeScript types exposed from the package. Mirrors and re-exports key types from <span class="code">mero-js</span>.</div></div>
+</div>
+
+<div class="card gb">
+<h2>MeroProvider Internals</h2>
+<p style="margin-bottom:14px;">On mount, <span class="code">MeroProvider</span> does the following:</p>
+<div class="g2">
+  <div class="step"><div class="n">1</div><h4>Check URL Hash</h4><p>Calls <span class="code">parseAuthCallback(window.location.hash)</span> from <span class="code">mero-js</span>. If tokens are present (SSO from Desktop), initialises immediately without showing auth UI.</p></div>
+  <div class="step"><div class="n">2</div><h4>Check Stored Tokens</h4><p>Checks the <span class="code">TokenStore</span> (default: <span class="code">localStorage</span>) for existing tokens. If found and not expired, restores the session.</p></div>
+  <div class="step"><div class="n">3</div><h4>Auth Required</h4><p>If no valid tokens are found, sets <span class="code">isAuthenticated = false</span>. The app can render its own login UI and call <span class="code">connectToNode()</span>.</p></div>
+  <div class="step"><div class="n">4</div><h4>Token Refresh</h4><p>Schedules background token refresh before expiry. No manual refresh required from application code.</p></div>
+</div>
+</div>
+
+<div class="card gc">
+<h2>AppMode</h2>
+<p style="margin-bottom:14px;">Controls how the provider scopes context selection:</p>
+<div class="typedef">
+<span class="kw">enum</span> <span class="ty">AppMode</span> &#123;<br>
+&nbsp;&nbsp;<span class="comment">// One context per node — simplest case for single-context apps</span><br>
+&nbsp;&nbsp;<span class="field">SingleContext</span> = <span class="comment">'single_context'</span>,<br><br>
+&nbsp;&nbsp;<span class="comment">// Multiple contexts — user picks which context to operate in</span><br>
+&nbsp;&nbsp;<span class="field">MultiContext</span> = <span class="comment">'multi_context'</span>,<br>
+&#125;
+</div>
+<p style="margin-top:10px;">Most applications use <span class="code">AppMode.SingleContext</span>. Use <span class="code">MultiContext</span> if your app needs to let users switch between contexts at runtime.</p>
+</div>
+
+<div class="card gd">
+<h2>Relationship to mero-js</h2>
+<p><span class="code">mero-react</span> is a thin React wrapper. It does not duplicate any SDK logic — it only manages the React lifecycle:</p>
+<ul>
+  <li style="margin-bottom:6px;">Creates the <span class="code">MeroJs</span> instance once and provides it via context</li>
+  <li style="margin-bottom:6px;">Converts imperative SDK calls into reactive hook values</li>
+  <li style="margin-bottom:6px;">Handles cleanup (unsubscribing, aborting requests) in <span class="code">useEffect</span> teardowns</li>
+  <li>Exposes a stable hook API so application components never import from <span class="code">mero-js</span> directly</li>
+</ul>
+</div>
+
+</div>
+</div>
+<script src="nav.js"></script>
+</body>
+</html>

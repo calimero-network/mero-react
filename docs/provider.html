@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calimero | mero-react — MeroProvider</title>
+<link rel="stylesheet" href="styles.css">
+<meta name="theme-color" content="#0d1117">
+</head>
+<body>
+<div class="main">
+<div class="content">
+<div class="breadcrumb"><a href="index.html">Home</a><span class="sep">/</span><span>MeroProvider</span></div>
+
+<h1>MeroProvider</h1>
+<p class="page-subtitle">Root context provider — wrap your app once, access auth state anywhere</p>
+
+<div class="card ga">
+<h2>Basic Setup</h2>
+<div class="typedef">
+<span class="kw">import</span> &#123; <span class="ty">MeroProvider</span> &#125; <span class="kw">from</span> <span class="comment">'@calimero-network/mero-react'</span>;<br><br>
+<span class="kw">function</span> <span class="ty">App</span>() &#123;<br>
+&nbsp;&nbsp;<span class="kw">return</span> (<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&lt;<span class="ty">MeroProvider</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="field">nodeUrl</span>=<span class="comment">"http://localhost:2428"</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&lt;<span class="ty">YourApp</span> /&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&lt;/<span class="ty">MeroProvider</span>&gt;<br>
+&nbsp;&nbsp;);<br>
+&#125;
+</div>
+<p style="margin-top:12px;color:#8b949e;font-size:13px;">Place <span class="code">MeroProvider</span> at the root of your component tree. It initializes the <span class="code">MeroJs</span> SDK instance, checks for SSO tokens in the URL hash, restores stored tokens, and manages the token refresh cycle.</p>
+</div>
+
+<div class="card gb">
+<h2>MeroProvider Props</h2>
+<div class="fr"><div class="fp">nodeUrl: string</div><div class="fd"><strong>Required.</strong> Base URL of the Calimero node. Used to initialize the SDK instance.</div></div>
+<div class="fr"><div class="fp">storageKey?: string</div><div class="fd">localStorage key for persisting tokens. Default: <span class="code">'calimero_tokens'</span>.</div></div>
+<div class="fr"><div class="fp">onAuthRequired?: () =&gt; void</div><div class="fd">Called when no tokens are found and no SSO hash is present. Use to redirect to login.</div></div>
+<div class="fr"><div class="fp">children: ReactNode</div><div class="fd">Your application tree.</div></div>
+</div>
+
+<div class="card gc">
+<h2>Initialization Flow</h2>
+<div class="g2">
+  <div>
+    <div class="step"><div class="n">1</div><h4>Check URL hash</h4><p>Calls <span class="code">parseAuthCallback(window.location.hash)</span>. If tokens found, stores them and clears the hash.</p></div>
+    <div class="step" style="margin-top:10px;"><div class="n">2</div><h4>Restore stored tokens</h4><p>Reads tokens from localStorage. If valid and not expired, initializes auth state silently.</p></div>
+  </div>
+  <div>
+    <div class="step"><div class="n">3</div><h4>Auth required</h4><p>If neither hash nor stored tokens present, calls <span class="code">onAuthRequired()</span>. Provider renders children in unauthenticated state.</p></div>
+    <div class="step" style="margin-top:10px;"><div class="n">4</div><h4>Token refresh</h4><p>Schedules automatic refresh before expiry. Tokens are updated in storage transparently.</p></div>
+  </div>
+</div>
+</div>
+
+<div class="card gd">
+<h2>Accessing the SDK</h2>
+<p style="margin-bottom:12px;">The MeroJs instance is available via the <span class="code">useCalimero</span> hook:</p>
+<div class="typedef">
+<span class="kw">import</span> &#123; <span class="ty">useCalimero</span> &#125; <span class="kw">from</span> <span class="comment">'@calimero-network/mero-react'</span>;<br><br>
+<span class="kw">function</span> <span class="ty">MyComponent</span>() &#123;<br>
+&nbsp;&nbsp;<span class="kw">const</span> &#123; <span class="field">sdk</span>, <span class="field">isAuthenticated</span>, <span class="field">logout</span> &#125; = <span class="ty">useCalimero</span>();<br><br>
+&nbsp;&nbsp;<span class="kw">const</span> <span class="ty">handleLoad</span> = <span class="kw">async</span> () =&gt; &#123;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">const</span> <span class="field">contexts</span> = <span class="kw">await</span> <span class="field">sdk</span>.<span class="field">admin</span>.<span class="ty">getContexts</span>();<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">// ...</span><br>
+&nbsp;&nbsp;&#125;;<br>
+&#125;
+</div>
+</div>
+
+</div>
+</div>
+<script src="nav.js"></script>
+</body>
+</html>
