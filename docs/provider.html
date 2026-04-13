@@ -4,6 +4,8 @@
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Calimero | mero-react — MeroProvider</title>
 <link rel="stylesheet" href="styles.css">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<meta name="description" content="MeroProvider, AppMode, ConnectionType, and context value reference.">
 <meta name="theme-color" content="#0d1117">
 </head>
 <body>
@@ -12,59 +14,90 @@
 <div class="breadcrumb"><a href="index.html">Home</a><span class="sep">/</span><span>MeroProvider</span></div>
 
 <h1>MeroProvider</h1>
-<p class="page-subtitle">Root context provider — wrap your app once, access auth state anywhere</p>
+<p class="page-subtitle">Context provider that creates the SDK instance and manages connection state</p>
 
 <div class="card ga">
-<h2>Basic Setup</h2>
+<h2>Usage</h2>
+<p style="margin-bottom:12px;">Wrap your application once at the root. All hooks must be used inside a <span class="code">MeroProvider</span>.</p>
 <div class="typedef">
-<span class="kw">import</span> &#123; <span class="ty">MeroProvider</span> &#125; <span class="kw">from</span> <span class="comment">'@calimero-network/mero-react'</span>;<br><br>
-<span class="kw">function</span> <span class="ty">App</span>() &#123;<br>
+<span class="kw">import</span> &#123; <span class="ty">MeroProvider</span>, <span class="ty">AppMode</span> &#125; <span class="kw">from</span> <span class="comment">'@calimero-network/mero-react'</span>;<br><br>
+<span class="kw">function</span> <span class="ty">Root</span>() &#123;<br>
 &nbsp;&nbsp;<span class="kw">return</span> (<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&lt;<span class="ty">MeroProvider</span><br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="field">nodeUrl</span>=<span class="comment">"http://localhost:2428"</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="field">mode</span>=&#123;<span class="ty">AppMode</span>.<span class="field">SingleContext</span>&#125;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="field">packageName</span>=<span class="comment">"com.example.myapp"</span><br>
 &nbsp;&nbsp;&nbsp;&nbsp;&gt;<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&lt;<span class="ty">YourApp</span> /&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&lt;<span class="ty">App</span> /&gt;<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&lt;/<span class="ty">MeroProvider</span>&gt;<br>
 &nbsp;&nbsp;);<br>
 &#125;
 </div>
-<p style="margin-top:12px;color:#8b949e;font-size:13px;">Place <span class="code">MeroProvider</span> at the root of your component tree. It initializes the <span class="code">MeroJs</span> SDK instance, checks for SSO tokens in the URL hash, restores stored tokens, and manages the token refresh cycle.</p>
 </div>
 
 <div class="card gb">
-<h2>MeroProvider Props</h2>
-<div class="fr"><div class="fp">nodeUrl: string</div><div class="fd"><strong>Required.</strong> Base URL of the Calimero node. Used to initialize the SDK instance.</div></div>
-<div class="fr"><div class="fp">storageKey?: string</div><div class="fd">localStorage key for persisting tokens. Default: <span class="code">'calimero_tokens'</span>.</div></div>
-<div class="fr"><div class="fp">onAuthRequired?: () =&gt; void</div><div class="fd">Called when no tokens are found and no SSO hash is present. Use to redirect to login.</div></div>
-<div class="fr"><div class="fp">children: ReactNode</div><div class="fd">Your application tree.</div></div>
+<h2>MeroProviderProps</h2>
+<div class="fr"><div class="fp">mode</div><div class="fd"><strong>Required.</strong> <span class="ty">AppMode</span> — the application mode. Controls how contexts are managed.</div></div>
+<div class="fr"><div class="fp">packageName</div><div class="fd">Optional. Your app's package identifier, e.g. <span class="code">'com.example.myapp'</span>. Used during auth flow.</div></div>
+<div class="fr"><div class="fp">packageVersion</div><div class="fd">Optional. Version string for your package. Used during application installation.</div></div>
+<div class="fr"><div class="fp">registryUrl</div><div class="fd">Optional. Custom registry URL for package discovery.</div></div>
+<div class="fr"><div class="fp">timeoutMs</div><div class="fd">Optional. HTTP request timeout in ms. Passed to the underlying <span class="code">MeroJs</span> instance. Default: 10 000.</div></div>
+<div class="fr"><div class="fp">children</div><div class="fd">React children — your application tree.</div></div>
 </div>
 
 <div class="card gc">
-<h2>Initialization Flow</h2>
-<div class="g2">
-  <div>
-    <div class="step"><div class="n">1</div><h4>Check URL hash</h4><p>Calls <span class="code">parseAuthCallback(window.location.hash)</span>. If tokens found, stores them and clears the hash.</p></div>
-    <div class="step" style="margin-top:10px;"><div class="n">2</div><h4>Restore stored tokens</h4><p>Reads tokens from localStorage. If valid and not expired, initializes auth state silently.</p></div>
-  </div>
-  <div>
-    <div class="step"><div class="n">3</div><h4>Auth required</h4><p>If neither hash nor stored tokens present, calls <span class="code">onAuthRequired()</span>. Provider renders children in unauthenticated state.</p></div>
-    <div class="step" style="margin-top:10px;"><div class="n">4</div><h4>Token refresh</h4><p>Schedules automatic refresh before expiry. Tokens are updated in storage transparently.</p></div>
-  </div>
+<h2>AppMode</h2>
+<p style="margin-bottom:12px;">Controls how the provider initialises and which context is active.</p>
+<div class="fr"><div class="fp">AppMode.SingleContext</div><div class="fd">App operates within a single fixed context. The provider reads <span class="code">contextId</span> from localStorage on mount. Use this for most applications.</div></div>
+<div class="fr"><div class="fp">AppMode.MultiContext</div><div class="fd">App can switch between multiple contexts. Context must be selected by the user.</div></div>
+<div class="fr"><div class="fp">AppMode.Admin</div><div class="fd">Administrative mode with full node access. Skips application-level context scoping.</div></div>
+<div class="typedef" style="margin-top:12px;">
+<span class="kw">import</span> &#123; <span class="ty">AppMode</span> &#125; <span class="kw">from</span> <span class="comment">'@calimero-network/mero-react'</span>;<br><br>
+<span class="ty">AppMode</span>.<span class="field">SingleContext</span>  <span class="comment">// 'single-context'</span><br>
+<span class="ty">AppMode</span>.<span class="field">MultiContext</span>   <span class="comment">// 'multi-context'</span><br>
+<span class="ty">AppMode</span>.<span class="field">Admin</span>          <span class="comment">// 'admin'</span>
 </div>
 </div>
 
 <div class="card gd">
-<h2>Accessing the SDK</h2>
-<p style="margin-bottom:12px;">The MeroJs instance is available via the <span class="code">useCalimero</span> hook:</p>
+<h2>ConnectionType</h2>
+<p style="margin-bottom:12px;">Used with <span class="code">ConnectButton</span> and <span class="code">LoginModal</span> to control which node URLs are offered.</p>
+<div class="fr"><div class="fp">ConnectionType.Remote</div><div class="fd">Only remote/cloud nodes. Users enter a node URL.</div></div>
+<div class="fr"><div class="fp">ConnectionType.Local</div><div class="fd">Only localhost nodes.</div></div>
+<div class="fr"><div class="fp">ConnectionType.RemoteAndLocal</div><div class="fd">Both remote and local options available.</div></div>
+<div class="fr"><div class="fp">ConnectionType.Custom</div><div class="fd">Custom connection — pass a <span class="code">CustomConnectionConfig</span> object instead.</div></div>
+<div class="typedef" style="margin-top:12px;">
+<span class="kw">import</span> &#123; <span class="ty">ConnectionType</span> &#125; <span class="kw">from</span> <span class="comment">'@calimero-network/mero-react'</span>;<br><br>
+<span class="comment">// Use with ConnectButton:</span><br>
+&lt;<span class="ty">ConnectButton</span> <span class="field">connectionType</span>=&#123;<span class="ty">ConnectionType</span>.<span class="field">Remote</span>&#125; /&gt;
+</div>
+</div>
+
+<div class="card ge">
+<h2>MeroContextValue — useMero() return type</h2>
 <div class="typedef">
-<span class="kw">import</span> &#123; <span class="ty">useCalimero</span> &#125; <span class="kw">from</span> <span class="comment">'@calimero-network/mero-react'</span>;<br><br>
-<span class="kw">function</span> <span class="ty">MyComponent</span>() &#123;<br>
-&nbsp;&nbsp;<span class="kw">const</span> &#123; <span class="field">sdk</span>, <span class="field">isAuthenticated</span>, <span class="field">logout</span> &#125; = <span class="ty">useCalimero</span>();<br><br>
-&nbsp;&nbsp;<span class="kw">const</span> <span class="ty">handleLoad</span> = <span class="kw">async</span> () =&gt; &#123;<br>
-&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">const</span> <span class="field">contexts</span> = <span class="kw">await</span> <span class="field">sdk</span>.<span class="field">admin</span>.<span class="ty">getContexts</span>();<br>
-&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">// ...</span><br>
-&nbsp;&nbsp;&#125;;<br>
+<span class="kw">interface</span> <span class="ty">MeroContextValue</span> &#123;<br>
+&nbsp;&nbsp;<span class="field">mero</span>: <span class="ty">MeroJs</span> | <span class="ty">null</span>;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">// SDK instance (null before connected)</span><br>
+&nbsp;&nbsp;<span class="field">isAuthenticated</span>: <span class="ty">boolean</span>;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">// true when tokens are present</span><br>
+&nbsp;&nbsp;<span class="field">isOnline</span>: <span class="ty">boolean</span>;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">// true when node is reachable</span><br>
+&nbsp;&nbsp;<span class="field">isLoading</span>: <span class="ty">boolean</span>;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">// true during initialisation</span><br>
+&nbsp;&nbsp;<span class="field">nodeUrl</span>: <span class="ty">string</span> | <span class="ty">null</span>;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">// current node URL</span><br>
+&nbsp;&nbsp;<span class="field">applicationId</span>: <span class="ty">string</span> | <span class="ty">null</span>;&nbsp;&nbsp;&nbsp;<span class="comment">// current application ID</span><br>
+&nbsp;&nbsp;<span class="field">contextId</span>: <span class="ty">string</span> | <span class="ty">null</span>;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">// active context ID</span><br>
+&nbsp;&nbsp;<span class="field">contextIdentity</span>: <span class="ty">string</span> | <span class="ty">null</span>;<span class="comment">// context identity (executor public key)</span><br>
+&nbsp;&nbsp;<span class="field">connectToNode</span>: (<span class="field">url</span>: <span class="ty">string</span>) =&gt; <span class="ty">void</span>;&nbsp;<span class="comment">// set node URL and init</span><br>
+&nbsp;&nbsp;<span class="field">logout</span>: () =&gt; <span class="ty">void</span>;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">// clear tokens and disconnect</span><br>
 &#125;
+</div>
+</div>
+
+<div class="card gf">
+<h2>SSO — Tokens from URL Hash</h2>
+<p style="margin-bottom:12px;">When your app is opened from Calimero Desktop, the provider automatically reads tokens from <span class="code">window.location.hash</span> and calls <span class="code">sdk.setTokenData()</span>. You don't need to do anything extra — the provider handles it.</p>
+<div class="typedef">
+<span class="comment">// Desktop opens app at:</span><br>
+<span class="comment">// https://app.example.com/#access_token=...&amp;node_url=...&amp;context_id=...&amp;context_identity=...</span><br><br>
+<span class="comment">// MeroProvider reads these automatically on mount.</span><br>
+<span class="comment">// useMero().isAuthenticated will be true immediately.</span>
 </div>
 </div>
 

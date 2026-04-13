@@ -4,6 +4,8 @@
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Calimero | mero-react — Architecture</title>
 <link rel="stylesheet" href="styles.css">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<meta name="description" content="mero-react architecture — provider, context, hooks, SSO flow, and storage.">
 <meta name="theme-color" content="#0d1117">
 </head>
 <body>
@@ -12,51 +14,89 @@
 <div class="breadcrumb"><a href="index.html">Home</a><span class="sep">/</span><span>Architecture</span></div>
 
 <h1>Architecture</h1>
-<p class="page-subtitle">Provider + Context + Hooks — thin React layer over mero-js</p>
+<p class="page-subtitle">How MeroProvider, hooks, SSO, and storage fit together</p>
+
+<div class="g4" style="margin-bottom:36px;">
+  <div class="stat"><div class="v">1</div><div class="l">provider</div></div>
+  <div class="stat"><div class="v">40+</div><div class="l">hooks</div></div>
+  <div class="stat"><div class="v">SSO</div><div class="l">hash-based</div></div>
+  <div class="stat"><div class="v">0</div><div class="l">UI components</div></div>
+</div>
 
 <div class="card ga">
-<h2>Source Structure</h2>
-<div class="fr"><div class="fp">src/index.ts</div><div class="fd">Public API. Exports <span class="code">MeroProvider</span>, <span class="code">AppMode</span>, <span class="code">useMero</span>, <span class="code">useExecute</span>, <span class="code">useSubscription</span>, and storage helpers.</div></div>
-<div class="fr"><div class="fp">src/context/</div><div class="fd">React Context definition and <span class="code">MeroProvider</span> component. Holds the <span class="code">MeroJs</span> instance and auth state. Reads SSO tokens from URL hash on mount.</div></div>
-<div class="fr"><div class="fp">src/hooks/index.ts</div><div class="fd"><span class="code">useMero()</span> — reads auth state from context. <span class="code">useExecute()</span> — wraps <span class="code">sdk.rpc.execute()</span> with React state. <span class="code">useSubscription()</span> — sets up and tears down event subscriptions.</div></div>
-<div class="fr"><div class="fp">src/storage/</div><div class="fd">Token persistence helpers. Default: <span class="code">localStorage</span> with known key names. Pluggable via <span class="code">MeroProvider</span> prop.</div></div>
-<div class="fr"><div class="fp">src/types.ts</div><div class="fd">Shared TypeScript types exposed from the package. Mirrors and re-exports key types from <span class="code">mero-js</span>.</div></div>
+<h2>Provider Lifecycle</h2>
+<p style="margin-bottom:14px;"><span class="code">MeroProvider</span> owns the <span class="code">MeroJs</span> SDK instance and the React context. On mount it runs the following initialisation sequence:</p>
+<div class="g3">
+  <div class="step"><div class="n">1</div><h4>Read localStorage</h4><p>Reads <span class="code">nodeUrl</span>, <span class="code">contextId</span>, <span class="code">contextIdentity</span>, <span class="code">applicationId</span>, and saved tokens from localStorage.</p></div>
+  <div class="step"><div class="n">2</div><h4>Check URL hash</h4><p>If <span class="code">window.location.hash</span> contains auth tokens (SSO flow), reads them with <span class="code">parseAuthCallback()</span> and applies them via <span class="code">sdk.setTokenData()</span>. Clears the hash from the URL bar.</p></div>
+  <div class="step"><div class="n">3</div><h4>Create MeroJs</h4><p>Creates a <span class="code">MeroJs</span> instance with the node URL and tokens. Sets <span class="code">isLoading: false</span> when ready. Exposes the instance via context so all hooks can access it.</p></div>
+</div>
 </div>
 
 <div class="card gb">
-<h2>MeroProvider Internals</h2>
-<p style="margin-bottom:14px;">On mount, <span class="code">MeroProvider</span> does the following:</p>
+<h2>Context → Hooks</h2>
+<p style="margin-bottom:12px;">All hooks call <span class="code">useMero()</span> internally to get the SDK instance. This means:</p>
 <div class="g2">
-  <div class="step"><div class="n">1</div><h4>Check URL Hash</h4><p>Calls <span class="code">parseAuthCallback(window.location.hash)</span> from <span class="code">mero-js</span>. If tokens are present (SSO from Desktop), initialises immediately without showing auth UI.</p></div>
-  <div class="step"><div class="n">2</div><h4>Check Stored Tokens</h4><p>Checks the <span class="code">TokenStore</span> (default: <span class="code">localStorage</span>) for existing tokens. If found and not expired, restores the session.</p></div>
-  <div class="step"><div class="n">3</div><h4>Auth Required</h4><p>If no valid tokens are found, sets <span class="code">isAuthenticated = false</span>. The app can render its own login UI and call <span class="code">connectToNode()</span>.</p></div>
-  <div class="step"><div class="n">4</div><h4>Token Refresh</h4><p>Schedules background token refresh before expiry. No manual refresh required from application code.</p></div>
+  <div>
+    <div class="fr"><div class="fp">Single source of truth</div><div class="fd">The SDK instance lives in context — no prop drilling, no duplicated state.</div></div>
+    <div class="fr"><div class="fp">Consistent auth state</div><div class="fd">All hooks see the same <span class="code">isAuthenticated</span> flag. When tokens expire and refresh, all components re-render consistently.</div></div>
+  </div>
+  <div>
+    <div class="fr"><div class="fp">Null safety</div><div class="fd">Hooks that call the SDK return <span class="code">null</span> / <span class="code">false</span> / empty state when <span class="code">mero === null</span> (before connection). No crashes.</div></div>
+    <div class="fr"><div class="fp">Stable references</div><div class="fd">Hook functions are wrapped with <span class="code">useCallback</span> and tracked with <span class="code">useRef</span> — safe to use in dependency arrays.</div></div>
+  </div>
 </div>
 </div>
 
 <div class="card gc">
-<h2>AppMode</h2>
-<p style="margin-bottom:14px;">Controls how the provider scopes context selection:</p>
+<h2>SSO Flow</h2>
 <div class="typedef">
-<span class="kw">enum</span> <span class="ty">AppMode</span> &#123;<br>
-&nbsp;&nbsp;<span class="comment">// One context per node — simplest case for single-context apps</span><br>
-&nbsp;&nbsp;<span class="field">SingleContext</span> = <span class="comment">'single_context'</span>,<br><br>
-&nbsp;&nbsp;<span class="comment">// Multiple contexts — user picks which context to operate in</span><br>
-&nbsp;&nbsp;<span class="field">MultiContext</span> = <span class="comment">'multi_context'</span>,<br>
-&#125;
+<span class="comment">// 1. Calimero Desktop opens your app URL with tokens in hash:</span><br>
+<span class="comment">//    https://your-app.com/#access_token=eyJ...&amp;refresh_token=eyJ...</span><br>
+<span class="comment">//    &amp;node_url=http://node:2428&amp;application_id=abc&amp;context_id=xyz&amp;context_identity=pub</span><br><br>
+<span class="comment">// 2. MeroProvider.useEffect on mount:</span><br>
+<span class="kw">const</span> <span class="field">auth</span> = <span class="ty">parseAuthCallback</span>(window.location.hash);<br>
+<span class="kw">if</span> (<span class="field">auth</span>) &#123;<br>
+&nbsp;&nbsp;sdk.<span class="ty">setTokenData</span>(&#123; <span class="field">access_token</span>: <span class="field">auth</span>.<span class="field">accessToken</span>, ... &#125;);<br>
+&nbsp;&nbsp;<span class="ty">setNodeUrl</span>(<span class="field">auth</span>.<span class="field">nodeUrl</span>);<br>
+&nbsp;&nbsp;<span class="ty">setContextId</span>(<span class="field">auth</span>.<span class="field">contextId</span>);<br>
+&nbsp;&nbsp;<span class="ty">setContextIdentity</span>(<span class="field">auth</span>.<span class="field">contextIdentity</span>);<br>
+&nbsp;&nbsp;history.<span class="ty">replaceState</span>(null, <span class="comment">''</span>, location.pathname);<br>
+&#125;<br><br>
+<span class="comment">// 3. Component code just reads:</span><br>
+<span class="kw">const</span> &#123; <span class="field">isAuthenticated</span>, <span class="field">contextId</span> &#125; = <span class="ty">useMero</span>();<br>
+<span class="comment">// isAuthenticated is already true — no login screen needed</span>
 </div>
-<p style="margin-top:10px;">Most applications use <span class="code">AppMode.SingleContext</span>. Use <span class="code">MultiContext</span> if your app needs to let users switch between contexts at runtime.</p>
 </div>
 
 <div class="card gd">
-<h2>Relationship to mero-js</h2>
-<p><span class="code">mero-react</span> is a thin React wrapper. It does not duplicate any SDK logic — it only manages the React lifecycle:</p>
-<ul>
-  <li style="margin-bottom:6px;">Creates the <span class="code">MeroJs</span> instance once and provides it via context</li>
-  <li style="margin-bottom:6px;">Converts imperative SDK calls into reactive hook values</li>
-  <li style="margin-bottom:6px;">Handles cleanup (unsubscribing, aborting requests) in <span class="code">useEffect</span> teardowns</li>
-  <li>Exposes a stable hook API so application components never import from <span class="code">mero-js</span> directly</li>
-</ul>
+<h2>Mutation Hooks Pattern</h2>
+<p style="margin-bottom:12px;">Mutation hooks (create, delete, join, etc.) all follow the same pattern:</p>
+<div class="typedef">
+<span class="kw">const</span> &#123; <span class="field">createContext</span>, <span class="field">loading</span>, <span class="field">error</span> &#125; = <span class="ty">useCreateContext</span>();<br><br>
+<span class="comment">// Call the mutation:</span><br>
+<span class="kw">await</span> <span class="ty">createContext</span>(&#123;<br>
+&nbsp;&nbsp;<span class="field">applicationId</span>: <span class="comment">'app-id'</span>,<br>
+&nbsp;&nbsp;<span class="field">initParams</span>: JSON.<span class="ty">stringify</span>(&#123; <span class="field">key</span>: <span class="comment">'value'</span> &#125;),<br>
+&#125;);<br><br>
+<span class="comment">// loading: true while in-flight</span><br>
+<span class="comment">// error: Error | null on failure</span><br>
+<span class="comment">// The function returns the result or null on failure</span>
+</div>
+<p style="margin-top:10px;">The mutation is automatically guarded: if <span class="code">mero === null</span>, sets <span class="code">error</span> to "Not connected" and returns early.</p>
+</div>
+
+<div class="card ge">
+<h2>Re-exports from mero-js</h2>
+<p style="margin-bottom:10px;"><span class="code">mero-react</span> re-exports everything from <span class="code">mero-js</span>, so your app only needs one import:</p>
+<div class="typedef">
+<span class="comment">// Instead of importing from both packages:</span><br>
+<span class="kw">import</span> &#123; <span class="ty">HTTPError</span> &#125; <span class="kw">from</span> <span class="comment">'@calimero-network/mero-js'</span>;<br>
+<span class="kw">import</span> &#123; <span class="ty">useMero</span> &#125; <span class="kw">from</span> <span class="comment">'@calimero-network/mero-react'</span>;<br><br>
+<span class="comment">// You can import everything from mero-react:</span><br>
+<span class="kw">import</span> &#123; <span class="ty">useMero</span>, <span class="ty">HTTPError</span>, <span class="ty">RpcError</span>, <span class="ty">parseAuthCallback</span> &#125;<br>
+&nbsp;&nbsp;<span class="kw">from</span> <span class="comment">'@calimero-network/mero-react'</span>;
+</div>
 </div>
 
 </div>

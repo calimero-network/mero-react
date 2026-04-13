@@ -4,6 +4,8 @@
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Calimero | mero-react — Hooks</title>
 <link rel="stylesheet" href="styles.css">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<meta name="description" content="React hooks for auth state, RPC execution, subscriptions, contexts, groups, and namespaces.">
 <meta name="theme-color" content="#0d1117">
 </head>
 <body>
@@ -12,74 +14,131 @@
 <div class="breadcrumb"><a href="index.html">Home</a><span class="sep">/</span><span>Hooks</span></div>
 
 <h1>Hooks</h1>
-<p class="page-subtitle">React hooks for auth state, SDK access, and context management</p>
+<p class="page-subtitle">React hooks for auth state, RPC execution, real-time events, and context management</p>
 
 <div class="card ga">
-<h2>useCalimero</h2>
-<p style="margin-bottom:12px;">Primary hook — returns the SDK instance and current auth state:</p>
+<h2>useMero</h2>
+<p style="margin-bottom:12px;">Primary hook — returns the SDK instance and current connection state. Must be called inside <a href="provider.html">MeroProvider</a>.</p>
 <div class="typedef">
-<span class="kw">import</span> &#123; <span class="ty">useCalimero</span> &#125; <span class="kw">from</span> <span class="comment">'@calimero-network/mero-react'</span>;<br><br>
+<span class="kw">import</span> &#123; <span class="ty">useMero</span> &#125; <span class="kw">from</span> <span class="comment">'@calimero-network/mero-react'</span>;<br><br>
 <span class="kw">const</span> &#123;<br>
-&nbsp;&nbsp;<span class="field">sdk</span>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">// MeroJs instance</span><br>
-&nbsp;&nbsp;<span class="field">isAuthenticated</span>,<span class="comment">// boolean</span><br>
-&nbsp;&nbsp;<span class="field">isLoading</span>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">// boolean — true during init</span><br>
-&nbsp;&nbsp;<span class="field">login</span>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">// (username, password) =&gt; Promise&lt;void&gt;</span><br>
-&nbsp;&nbsp;<span class="field">logout</span>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">// () =&gt; void</span><br>
-&#125; = <span class="ty">useCalimero</span>();
+&nbsp;&nbsp;<span class="field">mero</span>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">// MeroJs | null — the SDK instance</span><br>
+&nbsp;&nbsp;<span class="field">isAuthenticated</span>,&nbsp;&nbsp;<span class="comment">// boolean</span><br>
+&nbsp;&nbsp;<span class="field">isOnline</span>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">// boolean — node reachable</span><br>
+&nbsp;&nbsp;<span class="field">isLoading</span>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">// boolean — true during initialisation</span><br>
+&nbsp;&nbsp;<span class="field">nodeUrl</span>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">// string | null</span><br>
+&nbsp;&nbsp;<span class="field">applicationId</span>,&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">// string | null</span><br>
+&nbsp;&nbsp;<span class="field">contextId</span>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">// string | null</span><br>
+&nbsp;&nbsp;<span class="field">contextIdentity</span>,&nbsp;&nbsp;<span class="comment">// string | null</span><br>
+&nbsp;&nbsp;<span class="field">connectToNode</span>,&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">// (url: string) =&gt; void</span><br>
+&nbsp;&nbsp;<span class="field">logout</span>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">// () =&gt; void</span><br>
+&#125; = <span class="ty">useMero</span>();
 </div>
+<p style="margin-top:12px;">Use <span class="code">mero</span> to access the underlying SDK directly. For component-level operations use the purpose-built hooks below.</p>
 </div>
 
 <div class="card gb">
-<h2>useCalimeroAdmin</h2>
-<p style="margin-bottom:12px;">Convenience hook for admin API operations:</p>
+<h2>useExecute</h2>
+<p style="margin-bottom:12px;">Execute a WASM contract method in a specific context. Requires both <span class="code">contextId</span> and <span class="code">executorId</span> (the identity executing the call).</p>
 <div class="typedef">
-<span class="kw">import</span> &#123; <span class="ty">useCalimeroAdmin</span> &#125; <span class="kw">from</span> <span class="comment">'@calimero-network/mero-react'</span>;<br><br>
-<span class="kw">function</span> <span class="ty">ContextList</span>() &#123;<br>
-&nbsp;&nbsp;<span class="kw">const</span> &#123; <span class="field">getContexts</span>, <span class="field">createContext</span> &#125; = <span class="ty">useCalimeroAdmin</span>();<br><br>
-&nbsp;&nbsp;<span class="kw">const</span> [<span class="field">contexts</span>, <span class="field">setContexts</span>] = useState([]);<br><br>
-&nbsp;&nbsp;useEffect(() =&gt; &#123;<br>
-&nbsp;&nbsp;&nbsp;&nbsp;<span class="field">getContexts</span>().<span class="ty">then</span>(<span class="field">setContexts</span>);<br>
-&nbsp;&nbsp;&#125;, []);<br><br>
-&nbsp;&nbsp;<span class="kw">return</span> &lt;<span class="ty">ul</span>&gt;&#123;<span class="field">contexts</span>.<span class="ty">map</span>(<span class="field">c</span> =&gt; &lt;<span class="ty">li</span>&gt;&#123;<span class="field">c</span>.<span class="field">id</span>&#125;&lt;/<span class="ty">li</span>&gt;)&#125;&lt;/<span class="ty">ul</span>&gt;;<br>
+<span class="kw">import</span> &#123; <span class="ty">useExecute</span> &#125; <span class="kw">from</span> <span class="comment">'@calimero-network/mero-react'</span>;<br><br>
+<span class="kw">function</span> <span class="ty">KvStore</span>(&#123; <span class="field">contextId</span>, <span class="field">executorId</span> &#125;: &#123; <span class="field">contextId</span>: <span class="ty">string</span>, <span class="field">executorId</span>: <span class="ty">string</span> &#125;) &#123;<br>
+&nbsp;&nbsp;<span class="kw">const</span> &#123; <span class="field">execute</span>, <span class="field">loading</span>, <span class="field">error</span> &#125; = <span class="ty">useExecute</span>(<span class="field">contextId</span>, <span class="field">executorId</span>);<br><br>
+&nbsp;&nbsp;<span class="kw">const</span> <span class="ty">getValue</span> = <span class="kw">async</span> () =&gt; &#123;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">const</span> <span class="field">result</span> = <span class="kw">await</span> <span class="ty">execute</span>&lt;&#123; <span class="field">value</span>: <span class="ty">string</span> &#125;&gt;(<span class="comment">'get_value'</span>, &#123; <span class="field">key</span>: <span class="comment">'foo'</span> &#125;);<br>
+&nbsp;&nbsp;&nbsp;&nbsp;console.<span class="ty">log</span>(<span class="field">result</span>?.<span class="field">value</span>);<br>
+&nbsp;&nbsp;&#125;;<br>
+<span class="comment">// execute returns T | null (null if not connected)</span><br>
+<span class="comment">// loading and error track the in-flight state</span><br>
+&#125;
+</div>
+<div class="typedef" style="margin-top:10px;">
+<span class="comment">// Signature</span><br>
+<span class="kw">function</span> <span class="ty">useExecute</span>(<br>
+&nbsp;&nbsp;<span class="field">contextId</span>: <span class="ty">string</span> | <span class="ty">null</span>,<br>
+&nbsp;&nbsp;<span class="field">executorId</span>: <span class="ty">string</span> | <span class="ty">null</span>,<br>
+): &#123;<br>
+&nbsp;&nbsp;<span class="field">execute</span>: &lt;<span class="ty">T</span>&gt;(<span class="field">method</span>: <span class="ty">string</span>, <span class="field">params</span>?: <span class="ty">Record</span>&lt;<span class="ty">string</span>, <span class="ty">unknown</span>&gt;) =&gt; <span class="ty">Promise</span>&lt;<span class="ty">T</span> | <span class="ty">null</span>&gt;;<br>
+&nbsp;&nbsp;<span class="field">loading</span>: <span class="ty">boolean</span>;<br>
+&nbsp;&nbsp;<span class="field">error</span>: <span class="ty">Error</span> | <span class="ty">null</span>;<br>
 &#125;
 </div>
 </div>
 
 <div class="card gc">
-<h2>useCalimeroRpc</h2>
-<p style="margin-bottom:12px;">Execute WASM methods directly from components:</p>
+<h2>useSubscription</h2>
+<p style="margin-bottom:12px;">Subscribe to real-time SSE events from one or more contexts. The subscription is automatically set up and torn down with the component lifecycle.</p>
 <div class="typedef">
-<span class="kw">import</span> &#123; <span class="ty">useCalimeroRpc</span> &#125; <span class="kw">from</span> <span class="comment">'@calimero-network/mero-react'</span>;<br><br>
-<span class="kw">function</span> <span class="ty">PostList</span>(&#123; <span class="field">contextId</span> &#125;) &#123;<br>
-&nbsp;&nbsp;<span class="kw">const</span> &#123; <span class="field">execute</span>, <span class="field">query</span>, <span class="field">mutate</span> &#125; = <span class="ty">useCalimeroRpc</span>(<span class="field">contextId</span>);<br><br>
-&nbsp;&nbsp;<span class="kw">const</span> <span class="ty">loadPosts</span> = <span class="kw">async</span> () =&gt; &#123;<br>
-&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">return await</span> <span class="field">query</span>(<span class="comment">'get_posts'</span>, &#123;&#125;);<br>
-&nbsp;&nbsp;&#125;;<br><br>
-&nbsp;&nbsp;<span class="kw">const</span> <span class="ty">createPost</span> = <span class="kw">async</span> (<span class="field">title</span>) =&gt; &#123;<br>
-&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">await</span> <span class="field">mutate</span>(<span class="comment">'create_post'</span>, &#123; <span class="field">title</span> &#125;);<br>
-&nbsp;&nbsp;&#125;;<br>
+<span class="kw">import</span> &#123; <span class="ty">useSubscription</span> &#125; <span class="kw">from</span> <span class="comment">'@calimero-network/mero-react'</span>;<br><br>
+<span class="kw">function</span> <span class="ty">EventFeed</span>(&#123; <span class="field">contextId</span> &#125;: &#123; <span class="field">contextId</span>: <span class="ty">string</span> &#125;) &#123;<br>
+&nbsp;&nbsp;<span class="kw">const</span> [<span class="field">events</span>, <span class="field">setEvents</span>] = useState&lt;<span class="ty">SseEventData</span>[]&gt;([]);<br><br>
+&nbsp;&nbsp;<span class="ty">useSubscription</span>([<span class="field">contextId</span>], (<span class="field">event</span>) =&gt; &#123;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="field">setEvents</span>(<span class="field">prev</span> =&gt; [...<span class="field">prev</span>, <span class="field">event</span>]);<br>
+&nbsp;&nbsp;&#125;);<br>
 &#125;
 </div>
+<div class="typedef" style="margin-top:10px;">
+<span class="comment">// Signature</span><br>
+<span class="kw">function</span> <span class="ty">useSubscription</span>(<br>
+&nbsp;&nbsp;<span class="field">contextIds</span>: <span class="ty">string</span>[],<br>
+&nbsp;&nbsp;<span class="field">callback</span>: (<span class="field">event</span>: <span class="ty">SseEventData</span>) =&gt; <span class="ty">void</span>,<br>
+): <span class="ty">void</span>
+</div>
+<p style="margin-top:10px;">The callback ref is updated on each render so you never capture stale state. Re-subscribes automatically when <span class="code">contextIds</span> change.</p>
 </div>
 
 <div class="card gd">
-<h2>useCalimeroSubscription</h2>
-<p style="margin-bottom:12px;">Subscribe to real-time node events in a component:</p>
-<div class="typedef">
-<span class="kw">import</span> &#123; <span class="ty">useCalimeroSubscription</span> &#125; <span class="kw">from</span> <span class="comment">'@calimero-network/mero-react'</span>;<br><br>
-<span class="kw">function</span> <span class="ty">EventFeed</span>(&#123; <span class="field">contextId</span> &#125;) &#123;<br>
-&nbsp;&nbsp;<span class="kw">const</span> <span class="field">events</span> = <span class="ty">useCalimeroSubscription</span>(<span class="field">contextId</span>, &#123;<br>
-&nbsp;&nbsp;&nbsp;&nbsp;<span class="field">protocol</span>: <span class="comment">'sse'</span>, <span class="comment">// or 'ws'</span><br>
-&nbsp;&nbsp;&#125;);<br><br>
-&nbsp;&nbsp;<span class="kw">return</span> (<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&lt;<span class="ty">ul</span>&gt;<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&#123;<span class="field">events</span>.<span class="ty">map</span>(<span class="field">e</span> =&gt; (<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&lt;<span class="ty">li</span>&gt;&#123;<span class="field">e</span>.<span class="field">eventType</span>&#125;: &#123;JSON.<span class="ty">stringify</span>(<span class="field">e</span>.<span class="field">payload</span>)&#125;&lt;/<span class="ty">li</span>&gt;<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;))&#125;<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&lt;/<span class="ty">ul</span>&gt;<br>
-&nbsp;&nbsp;);<br>
-&#125;
+<h2>Context Hooks</h2>
+<div class="fr"><div class="fp">useContexts(applicationId?)</div><div class="fd">List contexts, optionally filtered by application ID. Returns <span class="code">&#123; data, loading, error &#125;</span>.</div></div>
+<div class="fr"><div class="fp">useApplicationContexts(applicationId?)</div><div class="fd">Same as <span class="code">useContexts</span> but returns <span class="code">ApplicationContextRecord[]</span> (contextId + applicationId pairs).</div></div>
+<div class="fr"><div class="fp">useContextGroup(contextId?)</div><div class="fd">Fetch the group that a context belongs to.</div></div>
+<div class="fr"><div class="fp">useContextDiscovery(options)</div><div class="fd">Discover joinable contexts. Returns <span class="code">ContextDiscoveryState</span> with items and pagination.</div></div>
+<div class="fr"><div class="fp">useCreateContext()</div><div class="fd">Returns <span class="code">&#123; createContext, loading, error &#125;</span>. Call <span class="code">createContext(req)</span> to create.</div></div>
+<div class="fr"><div class="fp">useDeleteContext()</div><div class="fd">Returns <span class="code">&#123; deleteContext, loading, error &#125;</span>.</div></div>
+<div class="fr"><div class="fp">useJoinContext()</div><div class="fd">Returns <span class="code">&#123; joinContext, loading, error &#125;</span>.</div></div>
 </div>
+
+<div class="card ge">
+<h2>Group Hooks</h2>
+<div class="fr"><div class="fp">useGroupInfo(groupId?)</div><div class="fd">Fetch group metadata. Returns <span class="code">&#123; data: GroupInfo | null, loading, error &#125;</span>.</div></div>
+<div class="fr"><div class="fp">useGroupMembers(groupId?)</div><div class="fd">List members in a group.</div></div>
+<div class="fr"><div class="fp">useGroupContexts(groupId?)</div><div class="fd">List contexts attached to a group.</div></div>
+<div class="fr"><div class="fp">useGroupInvitations()</div><div class="fd">List pending group invitations for the current identity.</div></div>
+<div class="fr"><div class="fp">useGroupCapabilities(groupId?, memberId?)</div><div class="fd">Fetch capabilities for a member in a group.</div></div>
+<div class="fr"><div class="fp">useJoinGroup()</div><div class="fd">Returns <span class="code">&#123; joinGroup, loading, error &#125;</span>.</div></div>
+<div class="fr"><div class="fp">useDeleteGroup()</div><div class="fd">Returns <span class="code">&#123; deleteGroup, loading, error &#125;</span>.</div></div>
+<div class="fr"><div class="fp">useAddGroupMembers()</div><div class="fd">Add members to a group. Returns <span class="code">&#123; addGroupMembers, loading, error &#125;</span>.</div></div>
+<div class="fr"><div class="fp">useRemoveGroupMembers()</div><div class="fd">Remove members from a group.</div></div>
+<div class="fr"><div class="fp">useSyncGroup()</div><div class="fd">Trigger group state synchronisation.</div></div>
+<div class="fr"><div class="fp">useNestGroup()</div><div class="fd">Nest a group inside a parent group.</div></div>
+<div class="fr"><div class="fp">useUnnestGroup()</div><div class="fd">Remove a group from its parent.</div></div>
+<div class="fr"><div class="fp">useSubgroups()</div><div class="fd">List subgroups of a group.</div></div>
+<div class="fr"><div class="fp">useUpgradeGroup()</div><div class="fd">Upgrade a group to a newer version.</div></div>
+<div class="fr"><div class="fp">useGroupUpgradeStatus()</div><div class="fd">Check if a group upgrade is in progress.</div></div>
+<div class="fr"><div class="fp">useRetryGroupUpgrade()</div><div class="fd">Retry a failed group upgrade.</div></div>
+<div class="fr"><div class="fp">useRegisterGroupSigningKey()</div><div class="fd">Register a signing key for a group.</div></div>
+<div class="fr"><div class="fp">useUpdateGroupSettings()</div><div class="fd">Update group settings (visibility, etc.).</div></div>
+<div class="fr"><div class="fp">useSetGroupAlias()</div><div class="fd">Set a display alias for a group.</div></div>
+<div class="fr"><div class="fp">useSetMemberAlias()</div><div class="fd">Set a display alias for a member.</div></div>
+<div class="fr"><div class="fp">useUpdateMemberRole()</div><div class="fd">Change a member's role in a group.</div></div>
+<div class="fr"><div class="fp">useSetDefaultCapabilities()</div><div class="fd">Set default capabilities for new members.</div></div>
+<div class="fr"><div class="fp">useSetDefaultVisibility()</div><div class="fd">Set the default context visibility for a group.</div></div>
+<div class="fr"><div class="fp">useSetTeeAdmissionPolicy()</div><div class="fd">Configure TEE admission policy for a group.</div></div>
+<div class="fr"><div class="fp">useDetachContextFromGroup()</div><div class="fd">Detach a context from its group.</div></div>
+</div>
+
+<div class="card gf">
+<h2>Namespace Hooks</h2>
+<div class="fr"><div class="fp">useNamespaces()</div><div class="fd">List all namespaces. Returns <span class="code">&#123; data: Namespace[], loading, error &#125;</span>.</div></div>
+<div class="fr"><div class="fp">useNamespace(namespaceId?)</div><div class="fd">Fetch a single namespace.</div></div>
+<div class="fr"><div class="fp">useNamespaceGroups(namespaceId?)</div><div class="fd">List groups inside a namespace.</div></div>
+<div class="fr"><div class="fp">useNamespaceIdentity(namespaceId?)</div><div class="fd">Fetch the identity for a namespace.</div></div>
+<div class="fr"><div class="fp">useNamespacesForApplication(applicationId?)</div><div class="fd">List namespaces associated with an application.</div></div>
+<div class="fr"><div class="fp">useCreateNamespace()</div><div class="fd">Returns <span class="code">&#123; createNamespace, loading, error &#125;</span>.</div></div>
+<div class="fr"><div class="fp">useDeleteNamespace()</div><div class="fd">Delete a namespace.</div></div>
+<div class="fr"><div class="fp">useJoinNamespace()</div><div class="fd">Join a namespace by invitation.</div></div>
+<div class="fr"><div class="fp">useCreateNamespaceInvitation()</div><div class="fd">Create an invitation for a namespace.</div></div>
+<div class="fr"><div class="fp">useCreateGroupInNamespace()</div><div class="fd">Create a new group inside a namespace.</div></div>
 </div>
 
 </div>

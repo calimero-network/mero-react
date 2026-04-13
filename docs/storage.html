@@ -2,74 +2,76 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Calimero | mero-react — Token Storage</title>
+<title>Calimero | mero-react — Storage</title>
 <link rel="stylesheet" href="styles.css">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<meta name="description" content="localStorage utilities for node URL, application ID, context ID, and auth tokens.">
 <meta name="theme-color" content="#0d1117">
 </head>
 <body>
 <div class="main">
 <div class="content">
-<div class="breadcrumb"><a href="index.html">Home</a><span class="sep">/</span><span>Token Storage</span></div>
+<div class="breadcrumb"><a href="index.html">Home</a><span class="sep">/</span><span>Storage</span></div>
 
-<h1>Token Storage</h1>
-<p class="page-subtitle">How tokens are persisted and restored across sessions</p>
+<h1>Storage</h1>
+<p class="page-subtitle">localStorage helpers for persisting connection state across page loads</p>
 
 <div class="card ga">
-<h2>Default Storage</h2>
-<p style="margin-bottom:12px;"><span class="code">MeroProvider</span> uses <span class="code">localStorage</span> by default. Tokens survive page reloads and new tabs in the same origin:</p>
+<h2>Overview</h2>
+<p style="margin-bottom:12px;">The storage module provides typed <span class="code">localStorage</span> accessors for the values the provider uses to restore state on page load. You generally do not call these directly — <span class="code">MeroProvider</span> reads and writes them automatically. They are useful when you need to pre-populate state or implement custom connection UI.</p>
 <div class="typedef">
-<span class="comment">// Default — tokens stored in localStorage</span><br>
-&lt;<span class="ty">MeroProvider</span> <span class="field">nodeUrl</span>=<span class="comment">"http://localhost:2428"</span>&gt;<br>
-&nbsp;&nbsp;&lt;<span class="ty">App</span> /&gt;<br>
-&lt;/<span class="ty">MeroProvider</span>&gt;<br><br>
-<span class="comment">// Custom localStorage key:</span><br>
-&lt;<span class="ty">MeroProvider</span><br>
-&nbsp;&nbsp;<span class="field">nodeUrl</span>=<span class="comment">"http://localhost:2428"</span><br>
-&nbsp;&nbsp;<span class="field">storageKey</span>=<span class="comment">"my_app_tokens"</span><br>
-&gt;<br>
-&nbsp;&nbsp;&lt;<span class="ty">App</span> /&gt;<br>
-&lt;/<span class="ty">MeroProvider</span>&gt;
+<span class="kw">import</span> &#123;<br>
+&nbsp;&nbsp;<span class="ty">getNodeUrl</span>, <span class="ty">setNodeUrl</span>, <span class="ty">clearNodeUrl</span>,<br>
+&nbsp;&nbsp;<span class="ty">getApplicationId</span>, <span class="ty">setApplicationId</span>, <span class="ty">clearApplicationId</span>,<br>
+&nbsp;&nbsp;<span class="ty">getContextId</span>, <span class="ty">setContextId</span>, <span class="ty">clearContextId</span>,<br>
+&nbsp;&nbsp;<span class="ty">getContextIdentity</span>, <span class="ty">setContextIdentity</span>, <span class="ty">clearContextIdentity</span>,<br>
+&nbsp;&nbsp;<span class="ty">clearAllStorage</span>,<br>
+&nbsp;&nbsp;<span class="ty">localStorageTokenStorage</span>,<br>
+&#125; <span class="kw">from</span> <span class="comment">'@calimero-network/mero-react'</span>;
 </div>
 </div>
 
 <div class="card gb">
-<h2>Custom TokenStore</h2>
-<p style="margin-bottom:12px;">Pass a custom <span class="code">TokenStore</span> implementation for non-browser environments (e.g. React Native, Electron, encrypted storage):</p>
-<div class="typedef">
-<span class="kw">import</span> &#123; <span class="ty">MeroProvider</span>, <span class="ty">TokenStore</span> &#125; <span class="kw">from</span> <span class="comment">'@calimero-network/mero-react'</span>;<br><br>
-<span class="kw">const</span> <span class="field">secureStore</span>: <span class="ty">TokenStore</span> = &#123;<br>
-&nbsp;&nbsp;<span class="ty">get</span>: () =&gt; SecureStorage.<span class="ty">getItem</span>(<span class="comment">'tokens'</span>),<br>
-&nbsp;&nbsp;<span class="ty">set</span>: (<span class="field">tokens</span>) =&gt; SecureStorage.<span class="ty">setItem</span>(<span class="comment">'tokens'</span>, <span class="field">tokens</span>),<br>
-&nbsp;&nbsp;<span class="ty">clear</span>: () =&gt; SecureStorage.<span class="ty">removeItem</span>(<span class="comment">'tokens'</span>),<br>
-&#125;;<br><br>
-&lt;<span class="ty">MeroProvider</span> <span class="field">nodeUrl</span>=<span class="comment">"..."</span> <span class="field">tokenStore</span>=&#123;<span class="field">secureStore</span>&#125;&gt;<br>
-&nbsp;&nbsp;&lt;<span class="ty">App</span> /&gt;<br>
-&lt;/<span class="ty">MeroProvider</span>&gt;
-</div>
+<h2>String Key Helpers</h2>
+<p style="margin-bottom:12px;">Each value has a <span class="code">get</span>, <span class="code">set</span>, and <span class="code">clear</span> function. All values are stored as plain strings.</p>
+<div class="fr"><div class="fp">getNodeUrl() → string | null</div><div class="fd">Read the persisted node URL. Returns <span class="code">null</span> if not set.</div></div>
+<div class="fr"><div class="fp">setNodeUrl(url)</div><div class="fd">Persist the node URL.</div></div>
+<div class="fr"><div class="fp">clearNodeUrl()</div><div class="fd">Remove the node URL from storage.</div></div>
+<div class="fr" style="margin-top:8px;"><div class="fp">getApplicationId() → string | null</div><div class="fd">Read the persisted application ID.</div></div>
+<div class="fr"><div class="fp">setApplicationId(id)</div><div class="fd">Persist the application ID.</div></div>
+<div class="fr"><div class="fp">clearApplicationId()</div><div class="fd">Remove the application ID.</div></div>
+<div class="fr" style="margin-top:8px;"><div class="fp">getContextId() → string | null</div><div class="fd">Read the persisted context ID.</div></div>
+<div class="fr"><div class="fp">setContextId(id)</div><div class="fd">Persist the context ID. Provider reads this on mount.</div></div>
+<div class="fr"><div class="fp">clearContextId()</div><div class="fd">Remove the context ID.</div></div>
+<div class="fr" style="margin-top:8px;"><div class="fp">getContextIdentity() → string | null</div><div class="fd">Read the persisted context identity (executor public key).</div></div>
+<div class="fr"><div class="fp">setContextIdentity(id)</div><div class="fd">Persist the context identity.</div></div>
+<div class="fr"><div class="fp">clearContextIdentity()</div><div class="fd">Remove the context identity.</div></div>
+<div class="fr" style="margin-top:8px;"><div class="fp">clearAllStorage()</div><div class="fd">Remove all mero-react keys from localStorage — equivalent to logout cleanup.</div></div>
 </div>
 
 <div class="card gc">
-<h2>TokenStore Interface</h2>
+<h2>localStorageTokenStorage</h2>
+<p style="margin-bottom:12px;">An async token storage adapter compatible with the <span class="code">TokenStore</span> interface from mero-js.</p>
 <div class="typedef">
-<span class="kw">interface</span> <span class="ty">TokenStore</span> &#123;<br>
-&nbsp;&nbsp;<span class="ty">get</span>(): <span class="ty">StoredTokens</span> | <span class="ty">null</span>;<br>
-&nbsp;&nbsp;<span class="ty">set</span>(<span class="field">tokens</span>: <span class="ty">StoredTokens</span>): <span class="ty">void</span>;<br>
-&nbsp;&nbsp;<span class="ty">clear</span>(): <span class="ty">void</span>;<br>
-&#125;<br><br>
-<span class="kw">interface</span> <span class="ty">StoredTokens</span> &#123;<br>
-&nbsp;&nbsp;<span class="field">accessToken</span>: <span class="ty">string</span>;<br>
-&nbsp;&nbsp;<span class="field">refreshToken</span>: <span class="ty">string</span>;<br>
-&nbsp;&nbsp;<span class="field">expiresAt</span>: <span class="ty">number</span>; <span class="comment">// Unix timestamp ms</span><br>
+<span class="kw">const</span> <span class="ty">localStorageTokenStorage</span>: &#123;<br>
+&nbsp;&nbsp;<span class="field">get</span>(): <span class="ty">Promise</span>&lt;<span class="ty">TokenData</span> | <span class="ty">null</span>&gt;;<br>
+&nbsp;&nbsp;<span class="field">set</span>(<span class="field">token</span>: <span class="ty">TokenData</span>): <span class="ty">Promise</span>&lt;<span class="ty">void</span>&gt;;<br>
+&nbsp;&nbsp;<span class="field">clear</span>(): <span class="ty">Promise</span>&lt;<span class="ty">void</span>&gt;;<br>
 &#125;
 </div>
+<p style="margin-top:10px;">This is what <span class="code">MeroProvider</span> uses internally. You can use it directly if you need to read or clear tokens outside of a React component.</p>
 </div>
 
 <div class="card gd">
-<h2>Token Lifecycle</h2>
-<div class="fr"><div class="fp">On mount</div><div class="fd">Provider reads <span class="code">TokenStore.get()</span>. If tokens exist and <span class="code">expiresAt &gt; Date.now()</span>, initializes auth state without network call.</div></div>
-<div class="fr"><div class="fp">Auto-refresh</div><div class="fd">Provider schedules a refresh 60 seconds before <span class="code">expiresAt</span>. On success, calls <span class="code">TokenStore.set()</span> with new tokens.</div></div>
-<div class="fr"><div class="fp">On logout</div><div class="fd">Calls <span class="code">sdk.auth.logout()</span> (revokes server-side), then <span class="code">TokenStore.clear()</span>.</div></div>
-<div class="fr"><div class="fp">SSO override</div><div class="fd">If URL hash contains tokens (from Tauri desktop app), those take precedence and overwrite any stored tokens.</div></div>
+<h2>Logout Pattern</h2>
+<div class="typedef">
+<span class="kw">import</span> &#123; <span class="ty">useMero</span> &#125; <span class="kw">from</span> <span class="comment">'@calimero-network/mero-react'</span>;<br><br>
+<span class="kw">function</span> <span class="ty">LogoutButton</span>() &#123;<br>
+&nbsp;&nbsp;<span class="kw">const</span> &#123; <span class="field">logout</span> &#125; = <span class="ty">useMero</span>();<br><br>
+&nbsp;&nbsp;<span class="comment">// logout() clears tokens and storage keys automatically</span><br>
+&nbsp;&nbsp;<span class="kw">return</span> &lt;<span class="ty">button</span> <span class="field">onClick</span>=&#123;<span class="field">logout</span>&#125;&gt;Log out&lt;/<span class="ty">button</span>&gt;;<br>
+&#125;
+</div>
 </div>
 
 </div>
