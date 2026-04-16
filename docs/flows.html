@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calimero | mero-react — Auth Flows</title>
+<link rel="stylesheet" href="styles.css">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<meta name="description" content="Authentication flows in mero-react — connect, redirect, token handling, and logout.">
+<meta name="theme-color" content="#0d1117">
+</head>
+<body>
+<div class="main">
+<div class="content">
+<div class="breadcrumb"><a href="index.html">Home</a><span class="sep">/</span><span>Auth Flows</span></div>
+
+<h1>Auth Flows</h1>
+<p class="page-subtitle">How authentication works end to end — connect, redirect, callback, and logout</p>
+
+<div class="card ga">
+<h2>Standard Connect Flow</h2>
+<p style="margin-bottom:14px;">The full sequence when a user connects for the first time:</p>
+<div class="g3">
+  <div class="step"><div class="n">1</div><h4>connectToNode(url)</h4><p>Calling <span class="code">connectToNode(url)</span> from <span class="code">useMero()</span> stores the node URL and redirects the browser to the node's auth page via <span class="code">buildAuthLoginUrl()</span>. The callback URL is the current page (hash stripped).</p></div>
+  <div class="step"><div class="n">2</div><h4>Node auth page</h4><p>The node serves its own login UI. The user authenticates (username/password or another provider). The node issues tokens and redirects back to your app's callback URL with tokens in the hash.</p></div>
+  <div class="step"><div class="n">3</div><h4>Token callback</h4><p>On remount, <span class="code">MeroProvider</span> detects the hash via <span class="code">parseAuthCallback(window.location.href)</span>, stores the tokens, clears the hash from the URL bar, and sets <span class="code">isAuthenticated = true</span>.</p></div>
+</div>
+<div class="typedef" style="margin-top:16px;">
+<span class="comment">// Minimal connect UI</span><br>
+<span class="kw">function</span> <span class="ty">ConnectPage</span>() &#123;<br>
+&nbsp;&nbsp;<span class="kw">const</span> &#123; <span class="field">isAuthenticated</span>, <span class="field">isLoading</span>, <span class="field">connectToNode</span> &#125; = <span class="ty">useMero</span>();<br><br>
+&nbsp;&nbsp;<span class="kw">if</span> (<span class="field">isLoading</span>) <span class="kw">return</span> &lt;<span class="ty">p</span>&gt;Restoring session...&lt;/<span class="ty">p</span>&gt;;<br>
+&nbsp;&nbsp;<span class="kw">if</span> (<span class="field">isAuthenticated</span>) <span class="kw">return</span> &lt;<span class="ty">App</span> /&gt;;<br><br>
+&nbsp;&nbsp;<span class="kw">return</span> (<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&lt;<span class="ty">button</span> <span class="field">onClick</span>=&#123;() =&gt; <span class="ty">connectToNode</span>(<span class="comment">'http://localhost:4001'</span>)&#125;&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Connect to Node<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&lt;/<span class="ty">button</span>&gt;<br>
+&nbsp;&nbsp;);<br>
+&#125;
+</div>
+</div>
+
+<div class="card gb">
+<h2>Session Restore Flow</h2>
+<p style="margin-bottom:12px;">On every page load, <span class="code">MeroProvider</span> tries to restore the previous session before rendering children:</p>
+<div class="typedef">
+<span class="comment">// What happens on mount (simplified):</span><br>
+<span class="comment">// 1. Read nodeUrl from localStorage</span><br>
+<span class="comment">// 2. Read tokens from localStorage (access_token, refresh_token)</span><br>
+<span class="comment">// 3. Create MeroJs instance with saved nodeUrl</span><br>
+<span class="comment">// 4. Call admin.getContexts() to verify tokens are still valid</span><br>
+<span class="comment">// 5a. Valid → isAuthenticated = true, isLoading = false</span><br>
+<span class="comment">// 5b. Invalid → isAuthenticated = false, isLoading = false</span>
+</div>
+<p style="margin-top:12px;">Use <span class="code">isLoading</span> to gate your UI while this check runs. It completes in one round-trip to the node.</p>
+<div class="typedef" style="margin-top:10px;">
+<span class="kw">const</span> &#123; <span class="field">isAuthenticated</span>, <span class="field">isLoading</span> &#125; = <span class="ty">useMero</span>();<br><br>
+<span class="kw">if</span> (<span class="field">isLoading</span>) <span class="kw">return</span> &lt;<span class="ty">Spinner</span> /&gt;;<br>
+<span class="kw">if</span> (!<span class="field">isAuthenticated</span>) <span class="kw">return</span> &lt;<span class="ty">ConnectPage</span> /&gt;;<br>
+<span class="kw">return</span> &lt;<span class="ty">App</span> /&gt;;
+</div>
+</div>
+
+<div class="card gc">
+<h2>Token Lifecycle</h2>
+<div class="fr"><div class="fp">access_token</div><div class="fd">Short-lived JWT. Used as <span class="code">Authorization: Bearer</span> on every request. Expiry parsed from JWT payload.</div></div>
+<div class="fr"><div class="fp">refresh_token</div><div class="fd">Long-lived token. Used by the SDK to silently refresh the access token when it expires. Handled by <span class="code">LocalStorageTokenStore</span> inside the provider.</div></div>
+<div class="fr"><div class="fp">expires_at</div><div class="fd">Timestamp (ms). Parsed from the JWT <span class="code">exp</span> claim. Falls back to <span class="code">now + 1h</span> if the token has no expiry.</div></div>
+<p style="margin-top:12px;">Token refresh happens transparently inside the SDK — your component code never needs to handle it. If a refresh fails (e.g. refresh token expired), the SSE connection emits a <span class="code">401</span> error and the provider calls <span class="code">logout()</span> automatically.</p>
+</div>
+
+<div class="card gd">
+<h2>Logout Flow</h2>
+<p style="margin-bottom:12px;">Calling <span class="code">logout()</span> from <span class="code">useMero()</span> does the following synchronously:</p>
+<div class="typedef">
+<span class="comment">// logout() implementation:</span><br>
+<span class="comment">// 1. mero.clearToken()       — wipes tokens from the SDK instance</span><br>
+<span class="comment">// 2. mero.close()            — closes SSE connection</span><br>
+<span class="comment">// 3. clearAllStorage()       — removes all mero:* localStorage keys</span><br>
+<span class="comment">// 4. Reset all state         — mero=null, isAuthenticated=false, etc.</span>
+</div>
+<p style="margin-top:12px;">After <span class="code">logout()</span>, <span class="code">isAuthenticated</span> becomes <span class="code">false</span> immediately, causing any guarded component to re-render to the connect state.</p>
+</div>
+
+<div class="card ge">
+<h2>Online / Offline Detection</h2>
+<p style="margin-bottom:12px;">After authentication, the provider opens an SSE connection to the node. <span class="code">isOnline</span> reflects whether that connection is active — no polling.</p>
+<div class="fr"><div class="fp">isOnline = true</div><div class="fd">SSE connection active. Node is reachable.</div></div>
+<div class="fr"><div class="fp">isOnline = false</div><div class="fd">SSE connection dropped. Node may be unreachable. SDK queues/retries requests.</div></div>
+<div class="typedef" style="margin-top:10px;">
+<span class="kw">const</span> &#123; <span class="field">isAuthenticated</span>, <span class="field">isOnline</span> &#125; = <span class="ty">useMero</span>();<br><br>
+&#123;<span class="field">isAuthenticated</span> &amp;&amp; !<span class="field">isOnline</span> &amp;&amp; &lt;<span class="ty">Banner</span>&gt;Reconnecting...&lt;/<span class="ty">Banner</span>&gt;&#125;
+</div>
+</div>
+
+</div>
+</div>
+<script src="nav.js"></script>
+</body>
+</html>

@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calimero | mero-react — SSO Integration</title>
+<link rel="stylesheet" href="styles.css">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<meta name="description" content="SSO integration for mero-react — how Calimero Desktop passes tokens via URL hash to skip the auth flow.">
+<meta name="theme-color" content="#0d1117">
+</head>
+<body>
+<div class="main">
+<div class="content">
+<div class="breadcrumb"><a href="index.html">Home</a><span class="sep">/</span><span>SSO Integration</span></div>
+
+<h1>SSO Integration</h1>
+<p class="page-subtitle">How Calimero Desktop opens your app already authenticated</p>
+
+<div class="card ga">
+<h2>How it works</h2>
+<p style="margin-bottom:12px;">When Calimero Desktop opens an installed application, it already holds valid tokens for that node. Instead of making the user log in again, Desktop passes the tokens directly in the URL hash. <span class="code">MeroProvider</span> detects and consumes them automatically on mount.</p>
+<div class="typedef">
+<span class="comment">// Desktop opens your app at:</span><br>
+https://your-app.example.com/<br>
+&nbsp;&nbsp;#access_token=eyJhbGci...<br>
+&nbsp;&nbsp;&amp;refresh_token=eyJhbGci...<br>
+&nbsp;&nbsp;&amp;node_url=http%3A%2F%2Flocalhost%3A4001<br>
+&nbsp;&nbsp;&amp;application_id=abc123<br>
+&nbsp;&nbsp;&amp;context_id=ctx456<br>
+&nbsp;&nbsp;&amp;context_identity=ed25519%3Apubkey...
+</div>
+<p style="margin-top:12px;"><span class="code">MeroProvider</span> reads these on mount via <span class="code">parseAuthCallback(window.location.href)</span>, stores the tokens, and immediately sets <span class="code">isAuthenticated = true</span> — the user never sees a login screen.</p>
+</div>
+
+<div class="card gb">
+<h2>URL hash parameters</h2>
+<div class="fr"><div class="fp">access_token</div><div class="fd">JWT access token. Used as <span class="code">Authorization: Bearer</span> for all API calls.</div></div>
+<div class="fr"><div class="fp">refresh_token</div><div class="fd">Long-lived token for silently refreshing the access token.</div></div>
+<div class="fr"><div class="fp">node_url</div><div class="fd">The node's base URL (URL-encoded). Stored in localStorage as <span class="code">mero:node_url</span>.</div></div>
+<div class="fr"><div class="fp">application_id</div><div class="fd">The application ID for this install. Stored as <span class="code">mero:application_id</span>.</div></div>
+<div class="fr"><div class="fp">context_id</div><div class="fd">The active context ID. Stored as <span class="code">mero:context_id</span>. Available via <span class="code">useMero().contextId</span>.</div></div>
+<div class="fr"><div class="fp">context_identity</div><div class="fd">The executor public key for this context. Stored as <span class="code">mero:context_identity</span>. Use as <span class="code">executorId</span> in <span class="code">useExecute</span>.</div></div>
+</div>
+
+<div class="card gc">
+<h2>What MeroProvider does with them</h2>
+<div class="typedef">
+<span class="comment">// On mount, provider runs (StrictMode-safe via ref):</span><br>
+<span class="kw">const</span> <span class="field">auth</span> = <span class="ty">parseAuthCallback</span>(window.location.href);<br>
+<span class="kw">if</span> (<span class="field">auth</span>) &#123;<br>
+&nbsp;&nbsp;<span class="comment">// 1. Store tokens</span><br>
+&nbsp;&nbsp;tokenStore.<span class="ty">setTokens</span>(&#123; <span class="field">access_token</span>, <span class="field">refresh_token</span>, <span class="field">expires_at</span> &#125;);<br>
+&nbsp;&nbsp;<span class="comment">// 2. Persist all values to localStorage</span><br>
+&nbsp;&nbsp;<span class="ty">setNodeUrl</span>(<span class="field">auth</span>.<span class="field">nodeUrl</span>);<br>
+&nbsp;&nbsp;<span class="ty">setApplicationId</span>(<span class="field">auth</span>.<span class="field">applicationId</span>);<br>
+&nbsp;&nbsp;<span class="ty">setContextId</span>(<span class="field">auth</span>.<span class="field">contextId</span>);<br>
+&nbsp;&nbsp;<span class="ty">setContextIdentity</span>(<span class="field">auth</span>.<span class="field">contextIdentity</span>);<br>
+&nbsp;&nbsp;<span class="comment">// 3. Clean up URL (keep path + query, drop hash)</span><br>
+&nbsp;&nbsp;history.<span class="ty">replaceState</span>(null, <span class="comment">''</span>, location.pathname + location.search);<br>
+&#125;
+</div>
+</div>
+
+<div class="card gd">
+<h2>Writing SSO-compatible apps</h2>
+<p style="margin-bottom:12px;">Because <span class="code">MeroProvider</span> handles the SSO tokens automatically, you don't need any special code. The same app works both ways:</p>
+<div class="g2">
+  <div>
+    <h4 style="color:#a5ff11;margin-bottom:8px;">Opened from Desktop</h4>
+    <p>Tokens arrive in the hash → <span class="code">isAuthenticated = true</span> immediately. User skips login.</p>
+  </div>
+  <div>
+    <h4 style="color:#58a6ff;margin-bottom:8px;">Opened standalone</h4>
+    <p>No hash tokens → <span class="code">isAuthenticated = false</span>. User sees your connect UI and logs in normally.</p>
+  </div>
+</div>
+<div class="typedef" style="margin-top:14px;">
+<span class="comment">// This component works in both cases — no changes needed:</span><br>
+<span class="kw">function</span> <span class="ty">App</span>() &#123;<br>
+&nbsp;&nbsp;<span class="kw">const</span> &#123; <span class="field">isAuthenticated</span>, <span class="field">isLoading</span>, <span class="field">connectToNode</span> &#125; = <span class="ty">useMero</span>();<br><br>
+&nbsp;&nbsp;<span class="kw">if</span> (<span class="field">isLoading</span>) <span class="kw">return</span> &lt;<span class="ty">Spinner</span> /&gt;;<br>
+&nbsp;&nbsp;<span class="kw">if</span> (!<span class="field">isAuthenticated</span>) <span class="kw">return</span> &lt;<span class="ty">ConnectButton</span> /&gt;;<br>
+&nbsp;&nbsp;<span class="kw">return</span> &lt;<span class="ty">Dashboard</span> /&gt;;<br>
+&#125;
+</div>
+</div>
+
+<div class="card ge">
+<h2>After SSO — using contextId and contextIdentity</h2>
+<p style="margin-bottom:12px;">After a successful SSO open, <span class="code">contextId</span> and <span class="code">contextIdentity</span> are already populated — you can make RPC calls immediately:</p>
+<div class="typedef">
+<span class="kw">function</span> <span class="ty">Dashboard</span>() &#123;<br>
+&nbsp;&nbsp;<span class="kw">const</span> &#123; <span class="field">contextId</span>, <span class="field">contextIdentity</span> &#125; = <span class="ty">useMero</span>();<br>
+&nbsp;&nbsp;<span class="kw">const</span> &#123; <span class="field">execute</span> &#125; = <span class="ty">useExecute</span>(<span class="field">contextId</span>, <span class="field">contextIdentity</span>);<br><br>
+&nbsp;&nbsp;<span class="comment">// Ready to go — no extra setup needed</span><br>
+&nbsp;&nbsp;<span class="kw">const</span> <span class="field">data</span> = <span class="kw">await</span> <span class="ty">execute</span>&lt;<span class="ty">MyData</span>&gt;(<span class="comment">'get_data'</span>);<br>
+&#125;
+</div>
+</div>
+
+</div>
+</div>
+<script src="nav.js"></script>
+</body>
+</html>

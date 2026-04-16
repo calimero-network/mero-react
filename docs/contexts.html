@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calimero | mero-react — Contexts</title>
+<link rel="stylesheet" href="styles.css">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<meta name="description" content="Working with contexts in mero-react — list, create, join, delete, and discover contexts.">
+<meta name="theme-color" content="#0d1117">
+</head>
+<body>
+<div class="main">
+<div class="content">
+<div class="breadcrumb"><a href="index.html">Home</a><span class="sep">/</span><span>Contexts</span></div>
+
+<h1>Contexts</h1>
+<p class="page-subtitle">A context is a running instance of a WASM application on the node</p>
+
+<div class="card ga">
+<h2>What is a context?</h2>
+<p style="margin-bottom:12px;">A context ties together an application (WASM binary), a group of participants, and an execution environment. Every RPC call targets a specific context ID. Each context has:</p>
+<div class="fr"><div class="fp">contextId</div><div class="fd">Unique identifier for the running application instance.</div></div>
+<div class="fr"><div class="fp">applicationId</div><div class="fd">The application (WASM bundle) installed in this context.</div></div>
+<div class="fr"><div class="fp">contextIdentity</div><div class="fd">The executor's public key — your identity within this context. Used as <span class="code">executorId</span> for RPC calls.</div></div>
+<p style="margin-top:12px;">In <span class="code">AppMode.SingleContext</span>, <span class="code">MeroProvider</span> reads <span class="code">contextId</span> and <span class="code">contextIdentity</span> from the auth callback and stores them in localStorage. Access them via <span class="code">useMero()</span>.</p>
+</div>
+
+<div class="card gb">
+<h2>Reading the active context</h2>
+<div class="typedef">
+<span class="kw">const</span> &#123;<br>
+&nbsp;&nbsp;<span class="field">contextId</span>,       <span class="comment">// string | null — active context ID</span><br>
+&nbsp;&nbsp;<span class="field">contextIdentity</span>,  <span class="comment">// string | null — your executor public key</span><br>
+&nbsp;&nbsp;<span class="field">applicationId</span>,   <span class="comment">// string | null — the installed application</span><br>
+&#125; = <span class="ty">useMero</span>();<br><br>
+<span class="comment">// Pass to useExecute to make RPC calls:</span><br>
+<span class="kw">const</span> &#123; <span class="field">execute</span> &#125; = <span class="ty">useExecute</span>(<span class="field">contextId</span>, <span class="field">contextIdentity</span>);
+</div>
+</div>
+
+<div class="card gc">
+<h2>Listing contexts</h2>
+<div class="typedef">
+<span class="kw">import</span> &#123; <span class="ty">useContexts</span> &#125; <span class="kw">from</span> <span class="comment">'@calimero-network/mero-react'</span>;<br><br>
+<span class="kw">function</span> <span class="ty">ContextList</span>(&#123; <span class="field">applicationId</span> &#125;) &#123;<br>
+&nbsp;&nbsp;<span class="kw">const</span> &#123; <span class="field">contexts</span>, <span class="field">loading</span>, <span class="field">error</span>, <span class="field">refetch</span> &#125; = <span class="ty">useContexts</span>(<span class="field">applicationId</span>);<br><br>
+&nbsp;&nbsp;<span class="comment">// contexts: Array&lt;&#123; contextId: string; applicationId: string &#125;&gt;</span><br>
+&nbsp;&nbsp;<span class="kw">return</span> (<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&lt;<span class="ty">ul</span>&gt;&#123;<span class="field">contexts</span>.<span class="ty">map</span>(<span class="field">c</span> =&gt; &lt;<span class="ty">li</span> <span class="field">key</span>=&#123;<span class="field">c</span>.<span class="field">contextId</span>&#125;&gt;&#123;<span class="field">c</span>.<span class="field">contextId</span>&#125;&lt;/<span class="ty">li</span>&gt;)&#125;&lt;/<span class="ty">ul</span>&gt;<br>
+&nbsp;&nbsp;);<br>
+&#125;
+</div>
+<p style="margin-top:10px;">Pass <span class="code">applicationId</span> to filter by application, or omit it to list all contexts on the node. <span class="code">useApplicationContexts</span> is an alias for the same hook.</p>
+</div>
+
+<div class="card gd">
+<h2>Creating a context</h2>
+<div class="typedef">
+<span class="kw">import</span> &#123; <span class="ty">useCreateContext</span> &#125; <span class="kw">from</span> <span class="comment">'@calimero-network/mero-react'</span>;<br><br>
+<span class="kw">function</span> <span class="ty">CreateContext</span>(&#123; <span class="field">applicationId</span> &#125;) &#123;<br>
+&nbsp;&nbsp;<span class="kw">const</span> &#123; <span class="field">createContext</span>, <span class="field">loading</span>, <span class="field">error</span> &#125; = <span class="ty">useCreateContext</span>();<br><br>
+&nbsp;&nbsp;<span class="kw">const</span> <span class="ty">handle</span> = <span class="kw">async</span> () =&gt; &#123;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">const</span> <span class="field">result</span> = <span class="kw">await</span> <span class="ty">createContext</span>(&#123;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="field">applicationId</span>,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="field">initParams</span>: JSON.<span class="ty">stringify</span>(&#123; <span class="field">key</span>: <span class="comment">'value'</span> &#125;), <span class="comment">// optional init args</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&#125;);<br>
+&nbsp;&nbsp;&nbsp;&nbsp;console.<span class="ty">log</span>(<span class="comment">'created:'</span>, <span class="field">result</span>?.<span class="field">contextId</span>);<br>
+&nbsp;&nbsp;&#125;;<br><br>
+&nbsp;&nbsp;<span class="kw">return</span> &lt;<span class="ty">button</span> <span class="field">onClick</span>=&#123;<span class="ty">handle</span>&#125; <span class="field">disabled</span>=&#123;<span class="field">loading</span>&#125;&gt;New Context&lt;/<span class="ty">button</span>&gt;;<br>
+&#125;
+</div>
+</div>
+
+<div class="card ge">
+<h2>Joining an existing context</h2>
+<div class="typedef">
+<span class="kw">import</span> &#123; <span class="ty">useJoinContext</span> &#125; <span class="kw">from</span> <span class="comment">'@calimero-network/mero-react'</span>;<br><br>
+<span class="kw">const</span> &#123; <span class="field">joinContext</span>, <span class="field">loading</span>, <span class="field">error</span> &#125; = <span class="ty">useJoinContext</span>();<br><br>
+<span class="kw">await</span> <span class="ty">joinContext</span>(&#123; <span class="field">contextId</span>: <span class="comment">'ctx-123'</span>, <span class="field">invitationPayload</span>: <span class="field">payload</span> &#125;);
+</div>
+</div>
+
+<div class="card gf">
+<h2>Context discovery</h2>
+<p style="margin-bottom:12px;"><span class="code">useContextDiscovery</span> polls the node until a context matching your application is found — useful for apps where another peer creates the context and you need to join it.</p>
+<div class="typedef">
+<span class="kw">import</span> &#123; <span class="ty">useContextDiscovery</span> &#125; <span class="kw">from</span> <span class="comment">'@calimero-network/mero-react'</span>;<br><br>
+<span class="kw">const</span> &#123; <span class="field">context</span>, <span class="field">loading</span>, <span class="field">error</span>, <span class="field">discover</span>, <span class="field">reset</span> &#125; = <span class="ty">useContextDiscovery</span>(&#123;<br>
+&nbsp;&nbsp;<span class="field">applicationId</span>: <span class="comment">'my-app-id'</span>,<br>
+&nbsp;&nbsp;<span class="field">knownContextIds</span>: [<span class="comment">'already-joined-ctx'</span>], <span class="comment">// skip these</span><br>
+&nbsp;&nbsp;<span class="field">pollIntervalMs</span>: 2000,<br>
+&nbsp;&nbsp;<span class="field">timeoutMs</span>: 30000,<br>
+&#125;);<br><br>
+<span class="comment">// context: ApplicationContextRecord | null when found</span><br>
+<span class="comment">// call discover() to start, reset() to clear result</span>
+</div>
+</div>
+
+<div class="card gg">
+<h2>Other context hooks</h2>
+<div class="fr"><div class="fp">useDeleteContext()</div><div class="fd">Returns <span class="code">&#123; deleteContext, loading, error &#125;</span>. Permanently removes a context from the node.</div></div>
+<div class="fr"><div class="fp">useContextGroup(contextId?)</div><div class="fd">Fetches the group that a context belongs to. Returns <span class="code">&#123; data, loading, error &#125;</span>.</div></div>
+<div class="fr"><div class="fp">useApplicationContexts(applicationId?)</div><div class="fd">Alias for <span class="code">useContexts</span> — returns the same <span class="code">&#123; contexts, loading, error, refetch &#125;</span>.</div></div>
+</div>
+
+</div>
+</div>
+<script src="nav.js"></script>
+</body>
+</html>

@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calimero | mero-react — MeroProvider</title>
+<link rel="stylesheet" href="styles.css">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<meta name="description" content="MeroProvider, AppMode, ConnectionType, and context value reference.">
+<meta name="theme-color" content="#0d1117">
+</head>
+<body>
+<div class="main">
+<div class="content">
+<div class="breadcrumb"><a href="index.html">Home</a><span class="sep">/</span><span>MeroProvider</span></div>
+
+<h1>MeroProvider</h1>
+<p class="page-subtitle">Context provider that creates the SDK instance and manages connection state</p>
+
+<div class="card ga">
+<h2>Usage</h2>
+<p style="margin-bottom:12px;">Wrap your application once at the root. All hooks must be used inside a <span class="code">MeroProvider</span>.</p>
+<div class="typedef">
+<span class="kw">import</span> &#123; <span class="ty">MeroProvider</span>, <span class="ty">AppMode</span> &#125; <span class="kw">from</span> <span class="comment">'@calimero-network/mero-react'</span>;<br><br>
+<span class="kw">function</span> <span class="ty">Root</span>() &#123;<br>
+&nbsp;&nbsp;<span class="kw">return</span> (<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&lt;<span class="ty">MeroProvider</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="field">mode</span>=&#123;<span class="ty">AppMode</span>.<span class="field">SingleContext</span>&#125;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="field">packageName</span>=<span class="comment">"com.example.myapp"</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&lt;<span class="ty">App</span> /&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&lt;/<span class="ty">MeroProvider</span>&gt;<br>
+&nbsp;&nbsp;);<br>
+&#125;
+</div>
+</div>
+
+<div class="card gb">
+<h2>MeroProviderProps</h2>
+<div class="fr"><div class="fp">mode</div><div class="fd"><strong>Required.</strong> <span class="ty">AppMode</span> — the application mode. Controls how contexts are managed.</div></div>
+<div class="fr"><div class="fp">packageName</div><div class="fd">Optional. Your app's package identifier, e.g. <span class="code">'com.example.myapp'</span>. Used during auth flow.</div></div>
+<div class="fr"><div class="fp">packageVersion</div><div class="fd">Optional. Version string for your package. Used during application installation.</div></div>
+<div class="fr"><div class="fp">registryUrl</div><div class="fd">Optional. Custom registry URL for package discovery.</div></div>
+<div class="fr"><div class="fp">timeoutMs</div><div class="fd">Optional. HTTP request timeout in ms. Passed to the underlying <span class="code">MeroJs</span> instance. Default: 30 000.</div></div>
+<div class="fr"><div class="fp">children</div><div class="fd">React children — your application tree.</div></div>
+</div>
+
+<div class="card gc">
+<h2>AppMode</h2>
+<p style="margin-bottom:12px;">Controls how the provider initialises and which context is active.</p>
+<div class="fr"><div class="fp">AppMode.SingleContext</div><div class="fd">App operates within a single fixed context. The provider reads <span class="code">contextId</span> from localStorage on mount. Use this for most applications.</div></div>
+<div class="fr"><div class="fp">AppMode.MultiContext</div><div class="fd">App can switch between multiple contexts. Context must be selected by the user.</div></div>
+<div class="fr"><div class="fp">AppMode.Admin</div><div class="fd">Administrative mode with full node access. Skips application-level context scoping.</div></div>
+<div class="typedef" style="margin-top:12px;">
+<span class="kw">import</span> &#123; <span class="ty">AppMode</span> &#125; <span class="kw">from</span> <span class="comment">'@calimero-network/mero-react'</span>;<br><br>
+<span class="ty">AppMode</span>.<span class="field">SingleContext</span>  <span class="comment">// 'single-context'</span><br>
+<span class="ty">AppMode</span>.<span class="field">MultiContext</span>   <span class="comment">// 'multi-context'</span><br>
+<span class="ty">AppMode</span>.<span class="field">Admin</span>          <span class="comment">// 'admin'</span>
+</div>
+</div>
+
+<div class="card gd">
+<h2>ConnectionType</h2>
+<p style="margin-bottom:12px;">Used with <span class="code">ConnectButton</span> and <span class="code">LoginModal</span> to control which node URLs are offered.</p>
+<div class="fr"><div class="fp">ConnectionType.Remote</div><div class="fd">Only remote/cloud nodes. Users enter a node URL.</div></div>
+<div class="fr"><div class="fp">ConnectionType.Local</div><div class="fd">Only localhost nodes.</div></div>
+<div class="fr"><div class="fp">ConnectionType.RemoteAndLocal</div><div class="fd">Both remote and local options available.</div></div>
+<div class="fr"><div class="fp">ConnectionType.Custom</div><div class="fd">Custom connection — pass a <span class="code">CustomConnectionConfig</span> object instead.</div></div>
+<div class="typedef" style="margin-top:12px;">
+<span class="kw">import</span> &#123; <span class="ty">ConnectionType</span> &#125; <span class="kw">from</span> <span class="comment">'@calimero-network/mero-react'</span>;<br><br>
+<span class="comment">// Use with ConnectButton:</span><br>
+&lt;<span class="ty">ConnectButton</span> <span class="field">connectionType</span>=&#123;<span class="ty">ConnectionType</span>.<span class="field">Remote</span>&#125; /&gt;
+</div>
+</div>
+
+<div class="card ge">
+<h2>MeroContextValue — useMero() return type</h2>
+<div class="typedef">
+<span class="kw">interface</span> <span class="ty">MeroContextValue</span> &#123;<br>
+&nbsp;&nbsp;<span class="field">mero</span>: <span class="ty">MeroJs</span> | <span class="ty">null</span>;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">// SDK instance (null before connected)</span><br>
+&nbsp;&nbsp;<span class="field">isAuthenticated</span>: <span class="ty">boolean</span>;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">// true when tokens are present</span><br>
+&nbsp;&nbsp;<span class="field">isOnline</span>: <span class="ty">boolean</span>;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">// true when node is reachable</span><br>
+&nbsp;&nbsp;<span class="field">isLoading</span>: <span class="ty">boolean</span>;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">// true during initialisation</span><br>
+&nbsp;&nbsp;<span class="field">nodeUrl</span>: <span class="ty">string</span> | <span class="ty">null</span>;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">// current node URL</span><br>
+&nbsp;&nbsp;<span class="field">applicationId</span>: <span class="ty">string</span> | <span class="ty">null</span>;&nbsp;&nbsp;&nbsp;<span class="comment">// current application ID</span><br>
+&nbsp;&nbsp;<span class="field">contextId</span>: <span class="ty">string</span> | <span class="ty">null</span>;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">// active context ID</span><br>
+&nbsp;&nbsp;<span class="field">contextIdentity</span>: <span class="ty">string</span> | <span class="ty">null</span>;<span class="comment">// context identity (executor public key)</span><br>
+&nbsp;&nbsp;<span class="field">connectToNode</span>: (<span class="field">url</span>: <span class="ty">string</span>) =&gt; <span class="ty">void</span>;&nbsp;<span class="comment">// set node URL and init</span><br>
+&nbsp;&nbsp;<span class="field">logout</span>: () =&gt; <span class="ty">void</span>;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">// clear tokens and disconnect</span><br>
+&#125;
+</div>
+</div>
+
+<div class="card gf">
+<h2>SSO — Tokens from URL Hash</h2>
+<p style="margin-bottom:12px;">When your app is opened from Calimero Desktop, the provider automatically reads tokens from the URL hash via <span class="code">parseAuthCallback(window.location.href)</span> and stores them in the internal token store. You don't need to do anything extra — the provider handles it.</p>
+<div class="typedef">
+<span class="comment">// Desktop opens app at:</span><br>
+<span class="comment">// https://app.example.com/#access_token=...&amp;node_url=...&amp;context_id=...&amp;context_identity=...</span><br><br>
+<span class="comment">// MeroProvider reads these automatically on mount.</span><br>
+<span class="comment">// useMero().isAuthenticated will be true immediately.</span>
+</div>
+</div>
+
+<div class="card gg">
+<h2>ConnectButton</h2>
+<p style="margin-bottom:12px;">Drop-in button that shows connection status and handles the full connect/disconnect flow. Uses <span class="code">ConnectionType</span> to decide whether to show the <span class="code">LoginModal</span> or connect directly.</p>
+<div class="typedef">
+<span class="kw">import</span> &#123; <span class="ty">ConnectButton</span>, <span class="ty">ConnectionType</span> &#125; <span class="kw">from</span> <span class="comment">'@calimero-network/mero-react'</span>;<br><br>
+<span class="comment">// Show modal with local + remote options (default)</span><br>
+&lt;<span class="ty">ConnectButton</span> /&gt;<br><br>
+<span class="comment">// Remote-only</span><br>
+&lt;<span class="ty">ConnectButton</span> <span class="field">connectionType</span>=&#123;<span class="ty">ConnectionType</span>.<span class="field">Remote</span>&#125; /&gt;<br><br>
+<span class="comment">// Skip modal — connect directly to a URL</span><br>
+&lt;<span class="ty">ConnectButton</span> <span class="field">connectionType</span>=&#123;&#123; <span class="field">type</span>: <span class="ty">ConnectionType</span>.<span class="field">Custom</span>, <span class="field">url</span>: <span class="comment">'http://localhost:4001'</span> &#125;&#125; /&gt;
+</div>
+<div class="fr" style="margin-top:12px;"><div class="fp">connectionType?</div><div class="fd"><span class="ty">ConnectionType</span> | <span class="ty">CustomConnectionConfig</span>. Default: <span class="code">RemoteAndLocal</span>.</div></div>
+<div class="fr"><div class="fp">className?</div><div class="fd">CSS class applied to the button element.</div></div>
+<div class="fr"><div class="fp">style?</div><div class="fd"><span class="ty">React.CSSProperties</span> — inline style override.</div></div>
+<p style="margin-top:10px;">States: <em>Disconnected</em> — shows Connect button and opens LoginModal. <em>Connected</em> — shows Connected + dropdown (node URL, Dashboard link, Log out). <em>Reconnecting</em> — disabled button while SSE reconnects.</p>
+</div>
+
+<div class="card gh">
+<h2>LoginModal</h2>
+<p style="margin-bottom:12px;">Modal dialog for node URL selection. Used internally by <span class="code">ConnectButton</span> but also available standalone for custom connect flows.</p>
+<div class="typedef">
+<span class="kw">import</span> &#123; <span class="ty">LoginModal</span> &#125; <span class="kw">from</span> <span class="comment">'@calimero-network/mero-react'</span>;<br><br>
+&lt;<span class="ty">LoginModal</span><br>
+&nbsp;&nbsp;<span class="field">isOpen</span>=&#123;<span class="field">showModal</span>&#125;<br>
+&nbsp;&nbsp;<span class="field">onConnect</span>=&#123;(<span class="field">url</span>) =&gt; &#123; connectToNode(<span class="field">url</span>); <span class="field">setShowModal</span>(<span class="kw">false</span>); &#125;&#125;<br>
+&nbsp;&nbsp;<span class="field">onClose</span>=&#123;() =&gt; <span class="field">setShowModal</span>(<span class="kw">false</span>)&#125;<br>
+&nbsp;&nbsp;<span class="field">connectionType</span>=&#123;<span class="ty">ConnectionType</span>.<span class="field">RemoteAndLocal</span>&#125;<br>
+/&gt;
+</div>
+<div class="fr" style="margin-top:12px;"><div class="fp">isOpen</div><div class="fd"><strong>Required.</strong> <span class="ty">boolean</span> — controls modal visibility.</div></div>
+<div class="fr"><div class="fp">onConnect</div><div class="fd"><strong>Required.</strong> <code>(url: string) =&gt; void</code> — called with the resolved node URL.</div></div>
+<div class="fr"><div class="fp">onClose</div><div class="fd"><strong>Required.</strong> <code>() =&gt; void</code> — called when the modal is dismissed.</div></div>
+<div class="fr"><div class="fp">connectionType</div><div class="fd"><strong>Required.</strong> <span class="ty">ConnectionType</span> | <span class="ty">CustomConnectionConfig</span> — controls which options are shown.</div></div>
+<p style="margin-top:10px;">Rendered via <span class="code">createPortal</span> at <span class="code">document.body</span> — unaffected by parent overflow or z-index. Uses inline styles, no external CSS dependency.</p>
+</div>
+
+</div>
+</div>
+<script src="nav.js"></script>
+</body>
+</html>

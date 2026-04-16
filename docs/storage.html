@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calimero | mero-react — Storage</title>
+<link rel="stylesheet" href="styles.css">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<meta name="description" content="localStorage utilities for node URL, application ID, context ID, and auth tokens.">
+<meta name="theme-color" content="#0d1117">
+</head>
+<body>
+<div class="main">
+<div class="content">
+<div class="breadcrumb"><a href="index.html">Home</a><span class="sep">/</span><span>Storage</span></div>
+
+<h1>Storage</h1>
+<p class="page-subtitle">localStorage helpers for persisting connection state across page loads</p>
+
+<div class="card ga">
+<h2>Overview</h2>
+<p style="margin-bottom:12px;">The storage module provides typed <span class="code">localStorage</span> accessors for the values the provider uses to restore state on page load. You generally do not call these directly — <span class="code">MeroProvider</span> reads and writes them automatically. They are useful when you need to pre-populate state or implement custom connection UI.</p>
+<div class="typedef">
+<span class="kw">import</span> &#123;<br>
+&nbsp;&nbsp;<span class="ty">getNodeUrl</span>, <span class="ty">setNodeUrl</span>, <span class="ty">clearNodeUrl</span>,<br>
+&nbsp;&nbsp;<span class="ty">getApplicationId</span>, <span class="ty">setApplicationId</span>, <span class="ty">clearApplicationId</span>,<br>
+&nbsp;&nbsp;<span class="ty">getContextId</span>, <span class="ty">setContextId</span>, <span class="ty">clearContextId</span>,<br>
+&nbsp;&nbsp;<span class="ty">getContextIdentity</span>, <span class="ty">setContextIdentity</span>, <span class="ty">clearContextIdentity</span>,<br>
+&nbsp;&nbsp;<span class="ty">clearAllStorage</span>,<br>
+&nbsp;&nbsp;<span class="ty">localStorageTokenStorage</span>,<br>
+&#125; <span class="kw">from</span> <span class="comment">'@calimero-network/mero-react'</span>;
+</div>
+</div>
+
+<div class="card gb">
+<h2>String Key Helpers</h2>
+<p style="margin-bottom:12px;">Each value has a <span class="code">get</span>, <span class="code">set</span>, and <span class="code">clear</span> function. All values are stored as plain strings.</p>
+<div class="fr"><div class="fp">getNodeUrl() → string | null</div><div class="fd">Read the persisted node URL. Returns <span class="code">null</span> if not set.</div></div>
+<div class="fr"><div class="fp">setNodeUrl(url)</div><div class="fd">Persist the node URL.</div></div>
+<div class="fr"><div class="fp">clearNodeUrl()</div><div class="fd">Remove the node URL from storage.</div></div>
+<div class="fr" style="margin-top:8px;"><div class="fp">getApplicationId() → string | null</div><div class="fd">Read the persisted application ID.</div></div>
+<div class="fr"><div class="fp">setApplicationId(id)</div><div class="fd">Persist the application ID.</div></div>
+<div class="fr"><div class="fp">clearApplicationId()</div><div class="fd">Remove the application ID.</div></div>
+<div class="fr" style="margin-top:8px;"><div class="fp">getContextId() → string | null</div><div class="fd">Read the persisted context ID.</div></div>
+<div class="fr"><div class="fp">setContextId(id)</div><div class="fd">Persist the context ID. Provider reads this on mount.</div></div>
+<div class="fr"><div class="fp">clearContextId()</div><div class="fd">Remove the context ID.</div></div>
+<div class="fr" style="margin-top:8px;"><div class="fp">getContextIdentity() → string | null</div><div class="fd">Read the persisted context identity (executor public key).</div></div>
+<div class="fr"><div class="fp">setContextIdentity(id)</div><div class="fd">Persist the context identity.</div></div>
+<div class="fr"><div class="fp">clearContextIdentity()</div><div class="fd">Remove the context identity.</div></div>
+<div class="fr" style="margin-top:8px;"><div class="fp">clearAllStorage()</div><div class="fd">Remove all mero-react keys from localStorage — equivalent to logout cleanup.</div></div>
+</div>
+
+<div class="card gc">
+<h2>localStorageTokenStorage</h2>
+<p style="margin-bottom:12px;">An async token storage adapter compatible with the <span class="code">TokenStore</span> interface from mero-js.</p>
+<div class="typedef">
+<span class="kw">const</span> <span class="ty">localStorageTokenStorage</span>: &#123;<br>
+&nbsp;&nbsp;<span class="field">get</span>(): <span class="ty">Promise</span>&lt;<span class="ty">TokenData</span> | <span class="ty">null</span>&gt;;<br>
+&nbsp;&nbsp;<span class="field">set</span>(<span class="field">token</span>: <span class="ty">TokenData</span>): <span class="ty">Promise</span>&lt;<span class="ty">void</span>&gt;;<br>
+&nbsp;&nbsp;<span class="field">clear</span>(): <span class="ty">Promise</span>&lt;<span class="ty">void</span>&gt;;<br>
+&#125;
+</div>
+<p style="margin-top:10px;">This is what <span class="code">MeroProvider</span> uses internally. You can use it directly if you need to read or clear tokens outside of a React component.</p>
+</div>
+
+<div class="card gd">
+<h2>Logout Pattern</h2>
+<div class="typedef">
+<span class="kw">import</span> &#123; <span class="ty">useMero</span> &#125; <span class="kw">from</span> <span class="comment">'@calimero-network/mero-react'</span>;<br><br>
+<span class="kw">function</span> <span class="ty">LogoutButton</span>() &#123;<br>
+&nbsp;&nbsp;<span class="kw">const</span> &#123; <span class="field">logout</span> &#125; = <span class="ty">useMero</span>();<br><br>
+&nbsp;&nbsp;<span class="comment">// logout() clears tokens and storage keys automatically</span><br>
+&nbsp;&nbsp;<span class="kw">return</span> &lt;<span class="ty">button</span> <span class="field">onClick</span>=&#123;<span class="field">logout</span>&#125;&gt;Log out&lt;/<span class="ty">button</span>&gt;;<br>
+&#125;
+</div>
+</div>
+
+</div>
+</div>
+<script src="nav.js"></script>
+</body>
+</html>

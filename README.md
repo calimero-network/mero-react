@@ -2,15 +2,15 @@
 
 React bindings for [@calimero-network/mero-js](../mero-js) — the Calimero Network SDK.
 
-No UI components. No styled-components. No axios. Just a provider, hooks, and storage helpers.
+No external UI framework. No styled-components. No axios. A provider, 44 hooks, storage helpers, and optional headless utility components (ConnectButton, LoginModal).
 
 ## Installation
 
 ```bash
-pnpm add @calimero-network/mero-react @calimero-network/mero-js
+pnpm add @calimero-network/mero-react
 ```
 
-Peer dependencies: `react` ^18 || ^19, `react-dom` ^18 || ^19.
+Peer dependencies: `react` ^18 || ^19, `react-dom` ^18 || ^19. `mero-js` is a bundled dependency — no separate install needed.
 
 ## Quick start
 
@@ -237,47 +237,71 @@ import {
 ## Enums
 
 ```tsx
-
 AppMode.SingleContext   // 'single-context'
 AppMode.MultiContext    // 'multi-context'
 AppMode.Admin           // 'admin'
 
-ConnectionType.Custom   // 'custom'
-ConnectionType.Local    // 'local'
-ConnectionType.Remote   // 'remote'
-
+ConnectionType.RemoteAndLocal  // 'remote-and-local'
+ConnectionType.Remote          // 'remote'
+ConnectionType.Local           // 'local'
+ConnectionType.Custom          // 'custom'
 ```
 
 ## Types
 
 ```tsx
 import type {
-  MeroContextValue,      // useMero() return type
-  MeroProviderConfig,    // MeroProvider props (without children)
-  MeroProviderProps,     // MeroProvider props (with children)
-  CustomConnectionConfig,// { type: ConnectionType.Custom, url: string }
-  AppContext,            // { contextId, executorId, applicationId }
-  ExecutionResult,       // { success, result?, error? }
+  MeroContextValue,        // useMero() return type
+  MeroProviderConfig,      // MeroProvider props (without children)
+  MeroProviderProps,       // MeroProvider props (with children)
+  CustomConnectionConfig,  // { type: ConnectionType.Custom, url: string }
+  AppContext,              // { contextId, executorId, applicationId }
+  ExecutionResult,         // { success, result?, error? }
+  ApplicationContextRecord,// { contextId, applicationId }
+  ContextDiscoveryOptions, // options for useContextDiscovery
+  ContextDiscoveryState,   // return type of useContextDiscovery
 } from '@calimero-network/mero-react';
 ```
 
 ## Full exports list
 
 ```
-// Provider & hooks (mero-react)
+// Provider & context (mero-react)
 MeroProvider, useMero, MeroContext
-useExecute, useSubscription, useContexts
+
+// Components (mero-react)
+ConnectButton, LoginModal
 
 // Enums (mero-react)
+AppMode, ConnectionType
+
+// Hooks (mero-react)
+useExecute, useSubscription
+useContexts, useApplicationContexts, useContextGroup, useContextDiscovery
+useCreateContext, useDeleteContext, useJoinContext
+useGroupInfo, useGroupMembers, useGroupContexts, useGroupInvitations, useGroupCapabilities
+useJoinGroup, useDeleteGroup, useAddGroupMembers, useRemoveGroupMembers
+useSyncGroup, useNestGroup, useUnnestGroup, useSubgroups
+useUpgradeGroup, useGroupUpgradeStatus, useRetryGroupUpgrade
+useRegisterGroupSigningKey, useUpdateGroupSettings
+useSetGroupAlias, useSetMemberAlias, useUpdateMemberRole
+useSetDefaultCapabilities, useSetDefaultVisibility, useSetTeeAdmissionPolicy
+useDetachContextFromGroup
+useNamespaces, useNamespace, useNamespaceGroups, useNamespaceIdentity
+useNamespacesForApplication, useCreateNamespace, useDeleteNamespace
+useJoinNamespace, useCreateNamespaceInvitation, useCreateGroupInNamespace
 
 // Types (mero-react)
 MeroContextValue, MeroProviderConfig, MeroProviderProps
 CustomConnectionConfig, AppContext, ExecutionResult
+ApplicationContextRecord, ContextDiscoveryOptions, ContextDiscoveryState
 
 // Storage (mero-react)
 localStorageTokenStorage
 getNodeUrl, setNodeUrl, clearNodeUrl
 getApplicationId, setApplicationId, clearApplicationId
+getContextId, setContextId, clearContextId
+getContextIdentity, setContextIdentity, clearContextIdentity
 clearAllStorage
 
 // Everything from @calimero-network/mero-js (auto re-exported)

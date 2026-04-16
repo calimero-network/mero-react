@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calimero | mero-react — React SDK Bindings</title>
+<link rel="stylesheet" href="styles.css">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<meta name="description" content="mero-react — React provider, hooks, and storage helpers for the Calimero SDK.">
+<meta property="og:title" content="Calimero | mero-react — React SDK Bindings">
+<meta property="og:description" content="Minimal React bindings for mero-js — a provider, hooks, and storage utilities.">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#0d1117">
+</head>
+<body>
+<div class="main">
+<div class="content">
+
+<div class="hero">
+  <h1>Calimero <em>mero-react</em></h1>
+  <p class="tagline">React bindings for <span class="code">@calimero-network/mero-js</span> — a context provider, hooks for every admin operation, storage helpers, and headless utility components. No external UI framework, no styled-components.</p>
+
+  <div class="g4" style="margin-bottom:36px;">
+    <div class="stat"><div class="v">2</div><div class="l">components</div></div>
+    <div class="stat"><div class="v">44</div><div class="l">hooks</div></div>
+    <div class="stat"><div class="v">React</div><div class="l">^18 | ^19</div></div>
+    <div class="stat"><div class="v">v1.1</div><div class="l">current</div></div>
+  </div>
+</div>
+
+<div class="card ga">
+<h2>Quick Start</h2>
+<div class="g3">
+  <div class="step"><div class="n">1</div><h4>Install</h4>
+    <div class="typedef" style="margin-top:6px;"><span class="field">pnpm add</span> @calimero-network/mero-react</div>
+    <p style="margin-top:6px;font-size:13px;color:var(--text-dim);">Includes mero-js as a dependency — one install for everything.</p>
+  </div>
+  <div class="step"><div class="n">2</div><h4>Wrap your app</h4>
+    <div class="typedef" style="margin-top:6px;"><span class="kw">import</span> &#123; <span class="ty">MeroProvider</span>, <span class="ty">AppMode</span> &#125;<br><span class="kw">from</span> <span class="comment">'@calimero-network/mero-react'</span>;<br><br><span class="kw">function</span> <span class="ty">App</span>() &#123;<br>&nbsp;&nbsp;<span class="kw">return</span> (<br>&nbsp;&nbsp;&nbsp;&nbsp;&lt;<span class="ty">MeroProvider</span> <span class="field">mode</span>=&#123;<span class="ty">AppMode</span>.<span class="field">SingleContext</span>&#125;&gt;<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&lt;<span class="ty">MyApp</span> /&gt;<br>&nbsp;&nbsp;&nbsp;&nbsp;&lt;/<span class="ty">MeroProvider</span>&gt;<br>&nbsp;&nbsp;);<br>&#125;</div>
+  </div>
+  <div class="step"><div class="n">3</div><h4>Use hooks</h4>
+    <div class="typedef" style="margin-top:6px;"><span class="kw">const</span> &#123; <span class="field">isAuthenticated</span>, <span class="field">contextId</span> &#125; = <span class="ty">useMero</span>();<br><span class="kw">const</span> &#123; <span class="field">execute</span> &#125; = <span class="ty">useExecute</span>(<span class="field">contextId</span>, <span class="field">executorId</span>);<br><span class="ty">useSubscription</span>([<span class="field">contextId</span>], handleEvent);</div>
+  </div>
+</div>
+</div>
+
+<div class="card gb">
+<h2>Architecture</h2>
+<svg viewBox="0 0 820 220" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <filter id="gr"><feDropShadow dx="0" dy="0" stdDeviation="3" flood-color="#a5ff11" flood-opacity="0.25"/></filter>
+    <filter id="gb2"><feDropShadow dx="0" dy="0" stdDeviation="3" flood-color="#58a6ff" flood-opacity="0.25"/></filter>
+    <filter id="gp2"><feDropShadow dx="0" dy="0" stdDeviation="3" flood-color="#f778ba" flood-opacity="0.2"/></filter>
+    <marker id="arr2" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L6,3 z" fill="#444c56"/>
+    </marker>
+  </defs>
+  <!-- MeroProvider outer box -->
+  <rect x="10" y="20" width="780" height="185" rx="14" fill="#a5ff1105" stroke="#a5ff11" stroke-width="1.6" filter="url(#gr)"/>
+  <text x="30" y="46" fill="#a5ff11" font-family="JetBrains Mono" font-size="13" font-weight="700">MeroProvider</text>
+  <text x="30" y="62" fill="#6b6b80" font-family="DM Sans" font-size="10">Creates MeroJs instance, manages auth state, exposes context via useMero()</text>
+  <!-- useMero box -->
+  <rect x="30" y="75" width="180" height="115" rx="10" fill="#58a6ff08" stroke="#58a6ff" stroke-width="1.4" filter="url(#gb2)"/>
+  <text x="120" y="100" text-anchor="middle" fill="#58a6ff" font-family="JetBrains Mono" font-size="12" font-weight="700">useMero()</text>
+  <text x="120" y="118" text-anchor="middle" fill="#6b6b80" font-family="DM Sans" font-size="9">mero · isAuthenticated</text>
+  <text x="120" y="133" text-anchor="middle" fill="#6b6b80" font-family="DM Sans" font-size="9">isOnline · nodeUrl</text>
+  <text x="120" y="148" text-anchor="middle" fill="#6b6b80" font-family="DM Sans" font-size="9">contextId · contextIdentity</text>
+  <text x="120" y="163" text-anchor="middle" fill="#6b6b80" font-family="DM Sans" font-size="9">connectToNode · logout</text>
+  <text x="120" y="181" text-anchor="middle" fill="#58a6ff80" font-family="JetBrains Mono" font-size="7">base hook</text>
+  <!-- Hooks box -->
+  <rect x="240" y="75" width="200" height="115" rx="10" fill="#f778ba08" stroke="#f778ba" stroke-width="1.4" filter="url(#gp2)"/>
+  <text x="340" y="100" text-anchor="middle" fill="#f778ba" font-family="JetBrains Mono" font-size="12" font-weight="700">44 Hooks</text>
+  <text x="340" y="118" text-anchor="middle" fill="#6b6b80" font-family="DM Sans" font-size="9">useExecute · useSubscription</text>
+  <text x="340" y="133" text-anchor="middle" fill="#6b6b80" font-family="DM Sans" font-size="9">useContexts · useCreateContext</text>
+  <text x="340" y="148" text-anchor="middle" fill="#6b6b80" font-family="DM Sans" font-size="9">useGroupInfo · useGroupMembers</text>
+  <text x="340" y="163" text-anchor="middle" fill="#6b6b80" font-family="DM Sans" font-size="9">useNamespaces · useJoinGroup</text>
+  <text x="340" y="181" text-anchor="middle" fill="#f778ba80" font-family="JetBrains Mono" font-size="7">all call useMero() internally</text>
+  <!-- Storage box -->
+  <rect x="460" y="75" width="160" height="115" rx="10" fill="#a371f708" stroke="#a371f7" stroke-width="1.4"/>
+  <text x="540" y="100" text-anchor="middle" fill="#a371f7" font-family="JetBrains Mono" font-size="12" font-weight="700">Storage</text>
+  <text x="540" y="118" text-anchor="middle" fill="#6b6b80" font-family="DM Sans" font-size="9">getNodeUrl / setNodeUrl</text>
+  <text x="540" y="133" text-anchor="middle" fill="#6b6b80" font-family="DM Sans" font-size="9">getApplicationId</text>
+  <text x="540" y="148" text-anchor="middle" fill="#6b6b80" font-family="DM Sans" font-size="9">getContextId</text>
+  <text x="540" y="163" text-anchor="middle" fill="#6b6b80" font-family="DM Sans" font-size="9">getContextIdentity</text>
+  <text x="540" y="181" text-anchor="middle" fill="#a371f780" font-family="JetBrains Mono" font-size="7">localStorage helpers</text>
+  <!-- Components box -->
+  <rect x="640" y="75" width="140" height="115" rx="10" fill="#e3b34108" stroke="#e3b341" stroke-width="1.4"/>
+  <text x="710" y="100" text-anchor="middle" fill="#e3b341" font-family="JetBrains Mono" font-size="12" font-weight="700">Components</text>
+  <text x="710" y="118" text-anchor="middle" fill="#6b6b80" font-family="DM Sans" font-size="9">ConnectButton</text>
+  <text x="710" y="133" text-anchor="middle" fill="#6b6b80" font-family="DM Sans" font-size="9">LoginModal</text>
+  <text x="710" y="148" text-anchor="middle" fill="#6b6b80" font-family="DM Sans" font-size="9">unstyled utility</text>
+  <text x="710" y="163" text-anchor="middle" fill="#6b6b80" font-family="DM Sans" font-size="9">components</text>
+  <text x="710" y="181" text-anchor="middle" fill="#e3b34180" font-family="JetBrains Mono" font-size="7">headless / BYO styles</text>
+</svg>
+</div>
+
+<div class="card gc">
+<h2>What's exported</h2>
+<div class="g2">
+  <div>
+    <h4 style="color:#a5ff11;margin-bottom:10px;">Provider &amp; Context</h4>
+    <div class="fr"><div class="fp">MeroProvider</div><div class="fd">Wrap your app — creates the SDK instance and auth context</div></div>
+    <div class="fr"><div class="fp">useMero</div><div class="fd">Primary hook — SDK instance, auth state, connection controls</div></div>
+    <div class="fr"><div class="fp">AppMode</div><div class="fd">Enum: <span class="code">SingleContext</span>, <span class="code">MultiContext</span>, <span class="code">Admin</span></div></div>
+    <div class="fr"><div class="fp">ConnectionType</div><div class="fd">Enum: <span class="code">Remote</span>, <span class="code">Local</span>, <span class="code">RemoteAndLocal</span>, <span class="code">Custom</span></div></div>
+  </div>
+  <div>
+    <h4 style="color:#f778ba;margin-bottom:10px;">Key Hooks</h4>
+    <div class="fr"><div class="fp">useExecute</div><div class="fd">Execute WASM methods with loading/error state</div></div>
+    <div class="fr"><div class="fp">useSubscription</div><div class="fd">Subscribe to SSE events with lifecycle management</div></div>
+    <div class="fr"><div class="fp">useContexts</div><div class="fd">List contexts for an application</div></div>
+    <div class="fr"><div class="fp">useGroupInfo</div><div class="fd">Fetch group metadata</div></div>
+    <div class="fr"><div class="fp">useNamespaces</div><div class="fd">List all namespaces</div></div>
+  </div>
+</div>
+<p style="margin-top:14px;"><a href="hooks.html">See all 44 hooks &rarr;</a></p>
+</div>
+
+</div>
+</div>
+<script src="nav.js"></script>
+</body>
+</html>

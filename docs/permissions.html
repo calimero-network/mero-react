@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calimero | mero-react — Permissions</title>
+<link rel="stylesheet" href="styles.css">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<meta name="description" content="AppMode and permissions in mero-react — choosing the right mode and what each requests from the node.">
+<meta name="theme-color" content="#0d1117">
+</head>
+<body>
+<div class="main">
+<div class="content">
+<div class="breadcrumb"><a href="index.html">Home</a><span class="sep">/</span><span>Permissions</span></div>
+
+<h1>Permissions</h1>
+<p class="page-subtitle">AppMode controls which permissions are requested during the auth flow</p>
+
+<div class="card ga">
+<h2>How permissions work</h2>
+<p style="margin-bottom:12px;">When <span class="code">connectToNode(url)</span> is called, the provider builds an auth URL that includes a <span class="code">permissions</span> list. The node's auth page shows the user exactly what your app is requesting. The mode you pass to <span class="code">MeroProvider</span> determines this list.</p>
+<div class="typedef">
+<span class="kw">import</span> &#123; <span class="ty">MeroProvider</span>, <span class="ty">AppMode</span> &#125; <span class="kw">from</span> <span class="comment">'@calimero-network/mero-react'</span>;<br><br>
+&lt;<span class="ty">MeroProvider</span> <span class="field">mode</span>=&#123;<span class="ty">AppMode</span>.<span class="field">SingleContext</span>&#125;&gt;<br>
+&nbsp;&nbsp;&lt;<span class="ty">App</span> /&gt;<br>
+&lt;/<span class="ty">MeroProvider</span>&gt;
+</div>
+</div>
+
+<div class="card gb">
+<h2>AppMode.SingleContext</h2>
+<p style="margin-bottom:8px;"><strong>Permissions requested:</strong> <span class="code">context:execute</span></p>
+<p style="margin-bottom:12px;">The app works within one specific context. The node selects and assigns the context during login. Use this for most apps — games, collaborative tools, any app where the context is fixed per install.</p>
+<div class="fr"><div class="fp">context:execute</div><div class="fd">Call contract methods (RPC) in the assigned context.</div></div>
+<div class="typedef" style="margin-top:10px;">
+<span class="comment">// After login, contextId and contextIdentity are set automatically.</span><br>
+<span class="comment">// Just read them from useMero() and pass to useExecute().</span><br>
+<span class="kw">const</span> &#123; <span class="field">contextId</span>, <span class="field">contextIdentity</span> &#125; = <span class="ty">useMero</span>();<br>
+<span class="kw">const</span> &#123; <span class="field">execute</span> &#125; = <span class="ty">useExecute</span>(<span class="field">contextId</span>, <span class="field">contextIdentity</span>);
+</div>
+</div>
+
+<div class="card gc">
+<h2>AppMode.MultiContext</h2>
+<p style="margin-bottom:8px;"><strong>Permissions requested:</strong> <span class="code">context:create</span>, <span class="code">context:list</span>, <span class="code">context:execute</span></p>
+<p style="margin-bottom:12px;">The app manages multiple contexts. The user can create new contexts and switch between them. Use this for dashboards, admin tools, or apps where users operate across different groups or projects.</p>
+<div class="fr"><div class="fp">context:create</div><div class="fd">Create new contexts via <span class="code">useCreateContext()</span>.</div></div>
+<div class="fr"><div class="fp">context:list</div><div class="fd">List existing contexts via <span class="code">useContexts()</span>.</div></div>
+<div class="fr"><div class="fp">context:execute</div><div class="fd">Call contract methods in any listed context.</div></div>
+<div class="typedef" style="margin-top:10px;">
+<span class="comment">// User picks a context from a list:</span><br>
+<span class="kw">const</span> &#123; <span class="field">contexts</span> &#125; = <span class="ty">useContexts</span>(<span class="field">applicationId</span>);<br>
+<span class="kw">const</span> [<span class="field">activeCtx</span>, <span class="field">setActiveCtx</span>] = useState(<span class="kw">null</span>);<br>
+<span class="kw">const</span> &#123; <span class="field">execute</span> &#125; = <span class="ty">useExecute</span>(<span class="field">activeCtx</span>?.<span class="field">contextId</span>, <span class="field">contextIdentity</span>);
+</div>
+</div>
+
+<div class="card gd">
+<h2>AppMode.Admin</h2>
+<p style="margin-bottom:8px;"><strong>Permissions requested:</strong> <span class="code">admin</span></p>
+<p style="margin-bottom:12px;">Full administrative access to the node. Use for internal tooling, developer dashboards, and management apps. Not intended for end-user applications.</p>
+<div class="fr"><div class="fp">admin</div><div class="fd">Access all admin API endpoints — install applications, manage contexts, view node health, manage peers.</div></div>
+<div class="typedef" style="margin-top:10px;">
+<span class="comment">// With admin mode you can access mero.admin directly:</span><br>
+<span class="kw">const</span> &#123; <span class="field">mero</span> &#125; = <span class="ty">useMero</span>();<br>
+<span class="kw">await</span> <span class="field">mero</span>.<span class="field">admin</span>.<span class="ty">listApplications</span>();<br>
+<span class="kw">await</span> <span class="field">mero</span>.<span class="field">admin</span>.<span class="ty">installApplication</span>(<span class="field">req</span>);<br>
+<span class="kw">await</span> <span class="field">mero</span>.<span class="field">admin</span>.<span class="ty">healthCheck</span>();
+</div>
+</div>
+
+<div class="card ge">
+<h2>Choosing a mode</h2>
+<div class="fr"><div class="fp">Building an app installed via Desktop?</div><div class="fd">Use <span class="code">SingleContext</span>. Desktop provides the context — your app just executes within it.</div></div>
+<div class="fr"><div class="fp">Building a multi-tenant or collaborative tool?</div><div class="fd">Use <span class="code">MultiContext</span>. Let users create and switch between contexts.</div></div>
+<div class="fr"><div class="fp">Building a node management dashboard?</div><div class="fd">Use <span class="code">Admin</span>. Gives full API access.</div></div>
+<p style="margin-top:12px;">The mode is set once at the provider level. If your app needs to change mode, re-mount the provider with a different value and trigger a fresh <span class="code">connectToNode()</span> call so the node issues new tokens with the updated permissions.</p>
+</div>
+
+</div>
+</div>
+<script src="nav.js"></script>
+</body>
+</html>
