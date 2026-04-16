@@ -40,7 +40,7 @@
 <div class="fr"><div class="fp">packageName</div><div class="fd">Optional. Your app's package identifier, e.g. <span class="code">'com.example.myapp'</span>. Used during auth flow.</div></div>
 <div class="fr"><div class="fp">packageVersion</div><div class="fd">Optional. Version string for your package. Used during application installation.</div></div>
 <div class="fr"><div class="fp">registryUrl</div><div class="fd">Optional. Custom registry URL for package discovery.</div></div>
-<div class="fr"><div class="fp">timeoutMs</div><div class="fd">Optional. HTTP request timeout in ms. Passed to the underlying <span class="code">MeroJs</span> instance. Default: 10 000.</div></div>
+<div class="fr"><div class="fp">timeoutMs</div><div class="fd">Optional. HTTP request timeout in ms. Passed to the underlying <span class="code">MeroJs</span> instance. Default: 30 000.</div></div>
 <div class="fr"><div class="fp">children</div><div class="fd">React children — your application tree.</div></div>
 </div>
 
@@ -92,13 +92,52 @@
 
 <div class="card gf">
 <h2>SSO — Tokens from URL Hash</h2>
-<p style="margin-bottom:12px;">When your app is opened from Calimero Desktop, the provider automatically reads tokens from <span class="code">window.location.hash</span> and calls <span class="code">sdk.setTokenData()</span>. You don't need to do anything extra — the provider handles it.</p>
+<p style="margin-bottom:12px;">When your app is opened from Calimero Desktop, the provider automatically reads tokens from the URL hash via <span class="code">parseAuthCallback(window.location.href)</span> and stores them in the internal token store. You don't need to do anything extra — the provider handles it.</p>
 <div class="typedef">
 <span class="comment">// Desktop opens app at:</span><br>
 <span class="comment">// https://app.example.com/#access_token=...&amp;node_url=...&amp;context_id=...&amp;context_identity=...</span><br><br>
 <span class="comment">// MeroProvider reads these automatically on mount.</span><br>
 <span class="comment">// useMero().isAuthenticated will be true immediately.</span>
 </div>
+</div>
+
+</div>
+
+<div class="card gg">
+<h2>ConnectButton</h2>
+<p style="margin-bottom:12px;">Drop-in button that shows connection status and handles the full connect/disconnect flow. Uses <span class="code">ConnectionType</span> to decide whether to show the <span class="code">LoginModal</span> or connect directly.</p>
+<div class="typedef">
+<span class="kw">import</span> &#123; <span class="ty">ConnectButton</span>, <span class="ty">ConnectionType</span> &#125; <span class="kw">from</span> <span class="comment">'@calimero-network/mero-react'</span>;<br><br>
+<span class="comment">// Show modal with local + remote options (default)</span><br>
+&lt;<span class="ty">ConnectButton</span> /&gt;<br><br>
+<span class="comment">// Remote-only</span><br>
+&lt;<span class="ty">ConnectButton</span> <span class="field">connectionType</span>=&#123;<span class="ty">ConnectionType</span>.<span class="field">Remote</span>&#125; /&gt;<br><br>
+<span class="comment">// Skip modal — connect directly to a URL</span><br>
+&lt;<span class="ty">ConnectButton</span> <span class="field">connectionType</span>=&#123;&#123; <span class="field">type</span>: <span class="ty">ConnectionType</span>.<span class="field">Custom</span>, <span class="field">url</span>: <span class="comment">'http://localhost:4001'</span> &#125;&#125; /&gt;
+</div>
+<div class="fr" style="margin-top:12px;"><div class="fp">connectionType?</div><div class="fd"><span class="ty">ConnectionType</span> | <span class="ty">CustomConnectionConfig</span>. Default: <span class="code">RemoteAndLocal</span>.</div></div>
+<div class="fr"><div class="fp">className?</div><div class="fd">CSS class applied to the button element.</div></div>
+<div class="fr"><div class="fp">style?</div><div class="fd"><span class="ty">React.CSSProperties</span> — inline style override.</div></div>
+<p style="margin-top:10px;">States: <em>Disconnected</em> — shows Connect button and opens LoginModal. <em>Connected</em> — shows Connected + dropdown (node URL, Dashboard link, Log out). <em>Reconnecting</em> — disabled button while SSE reconnects.</p>
+</div>
+
+<div class="card gh">
+<h2>LoginModal</h2>
+<p style="margin-bottom:12px;">Modal dialog for node URL selection. Used internally by <span class="code">ConnectButton</span> but also available standalone for custom connect flows.</p>
+<div class="typedef">
+<span class="kw">import</span> &#123; <span class="ty">LoginModal</span> &#125; <span class="kw">from</span> <span class="comment">'@calimero-network/mero-react'</span>;<br><br>
+&lt;<span class="ty">LoginModal</span><br>
+&nbsp;&nbsp;<span class="field">isOpen</span>=&#123;<span class="field">showModal</span>&#125;<br>
+&nbsp;&nbsp;<span class="field">onConnect</span>=&#123;(<span class="field">url</span>) =&gt; &#123; connectToNode(<span class="field">url</span>); <span class="field">setShowModal</span>(<span class="kw">false</span>); &#125;&#125;<br>
+&nbsp;&nbsp;<span class="field">onClose</span>=&#123;() =&gt; <span class="field">setShowModal</span>(<span class="kw">false</span>)&#125;<br>
+&nbsp;&nbsp;<span class="field">connectionType</span>=&#123;<span class="ty">ConnectionType</span>.<span class="field">RemoteAndLocal</span>&#125;<br>
+/&gt;
+</div>
+<div class="fr" style="margin-top:12px;"><div class="fp">isOpen</div><div class="fd"><strong>Required.</strong> <span class="ty">boolean</span> — controls modal visibility.</div></div>
+<div class="fr"><div class="fp">onConnect</div><div class="fd"><strong>Required.</strong> <code>(url: string) =&gt; void</code> — called with the resolved node URL.</div></div>
+<div class="fr"><div class="fp">onClose</div><div class="fd"><strong>Required.</strong> <code>() =&gt; void</code> — called when the modal is dismissed.</div></div>
+<div class="fr"><div class="fp">connectionType</div><div class="fd"><strong>Required.</strong> <span class="ty">ConnectionType</span> | <span class="ty">CustomConnectionConfig</span> — controls which options are shown.</div></div>
+<p style="margin-top:10px;">Rendered via <span class="code">createPortal</span> at <span class="code">document.body</span> — unaffected by parent overflow or z-index. Uses inline styles, no external CSS dependency.</p>
 </div>
 
 </div>

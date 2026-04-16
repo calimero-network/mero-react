@@ -28,7 +28,7 @@
 <p style="margin-bottom:14px;"><span class="code">MeroProvider</span> owns the <span class="code">MeroJs</span> SDK instance and the React context. On mount it runs the following initialisation sequence:</p>
 <div class="g3">
   <div class="step"><div class="n">1</div><h4>Read localStorage</h4><p>Reads <span class="code">nodeUrl</span>, <span class="code">contextId</span>, <span class="code">contextIdentity</span>, <span class="code">applicationId</span>, and saved tokens from localStorage.</p></div>
-  <div class="step"><div class="n">2</div><h4>Check URL hash</h4><p>If <span class="code">window.location.hash</span> contains auth tokens (SSO flow), reads them with <span class="code">parseAuthCallback()</span> and applies them via <span class="code">sdk.setTokenData()</span>. Clears the hash from the URL bar.</p></div>
+  <div class="step"><div class="n">2</div><h4>Check URL hash</h4><p>If the URL hash contains auth tokens (SSO flow), reads them with <span class="code">parseAuthCallback(window.location.href)</span> and stores them via the token store. Clears the hash from the URL bar while preserving the query string.</p></div>
   <div class="step"><div class="n">3</div><h4>Create MeroJs</h4><p>Creates a <span class="code">MeroJs</span> instance with the node URL and tokens. Sets <span class="code">isLoading: false</span> when ready. Exposes the instance via context so all hooks can access it.</p></div>
 </div>
 </div>
@@ -55,13 +55,13 @@
 <span class="comment">//    https://your-app.com/#access_token=eyJ...&amp;refresh_token=eyJ...</span><br>
 <span class="comment">//    &amp;node_url=http://node:2428&amp;application_id=abc&amp;context_id=xyz&amp;context_identity=pub</span><br><br>
 <span class="comment">// 2. MeroProvider.useEffect on mount:</span><br>
-<span class="kw">const</span> <span class="field">auth</span> = <span class="ty">parseAuthCallback</span>(window.location.hash);<br>
+<span class="kw">const</span> <span class="field">auth</span> = <span class="ty">parseAuthCallback</span>(window.location.href);<br>
 <span class="kw">if</span> (<span class="field">auth</span>) &#123;<br>
-&nbsp;&nbsp;sdk.<span class="ty">setTokenData</span>(&#123; <span class="field">access_token</span>: <span class="field">auth</span>.<span class="field">accessToken</span>, ... &#125;);<br>
+&nbsp;&nbsp;tokenStore.<span class="ty">setTokens</span>(&#123; <span class="field">access_token</span>: <span class="field">auth</span>.<span class="field">accessToken</span>, ... &#125;);<br>
 &nbsp;&nbsp;<span class="ty">setNodeUrl</span>(<span class="field">auth</span>.<span class="field">nodeUrl</span>);<br>
 &nbsp;&nbsp;<span class="ty">setContextId</span>(<span class="field">auth</span>.<span class="field">contextId</span>);<br>
 &nbsp;&nbsp;<span class="ty">setContextIdentity</span>(<span class="field">auth</span>.<span class="field">contextIdentity</span>);<br>
-&nbsp;&nbsp;history.<span class="ty">replaceState</span>(null, <span class="comment">''</span>, location.pathname);<br>
+&nbsp;&nbsp;history.<span class="ty">replaceState</span>(null, <span class="comment">''</span>, location.pathname + location.search);<br>
 &#125;<br><br>
 <span class="comment">// 3. Component code just reads:</span><br>
 <span class="kw">const</span> &#123; <span class="field">isAuthenticated</span>, <span class="field">contextId</span> &#125; = <span class="ty">useMero</span>();<br>
