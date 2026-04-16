@@ -7,12 +7,17 @@
 
   const NAV = [
     { section: 'Overview' },
-    { label: 'Home',         href: 'index.html',       dot: '#e3b341' },
-    { label: 'Architecture', href: 'architecture.html',dot: '#a5ff11' },
+    { label: 'Home',           href: 'index.html',        dot: '#e3b341' },
+    { label: 'Architecture',   href: 'architecture.html', dot: '#a5ff11' },
+    { section: 'Guides' },
+    { label: 'Auth Flows',     href: 'flows.html',        dot: '#58a6ff' },
+    { label: 'Contexts',       href: 'contexts.html',     dot: '#f778ba' },
+    { label: 'Permissions',    href: 'permissions.html',  dot: '#39d0d8' },
+    { label: 'SSO Integration',href: 'sso.html',          dot: '#a371f7' },
     { section: 'Reference' },
-    { label: 'MeroProvider', href: 'provider.html',    dot: '#58a6ff' },
-    { label: 'Hooks',        href: 'hooks.html',       dot: '#f778ba' },
-    { label: 'Storage',      href: 'storage.html',     dot: '#39d0d8' },
+    { label: 'MeroProvider',   href: 'provider.html',     dot: '#58a6ff' },
+    { label: 'Hooks',          href: 'hooks.html',        dot: '#f778ba' },
+    { label: 'Storage',        href: 'storage.html',      dot: '#39d0d8' },
   ];
 
   function currentPage() {

@@ -260,6 +260,10 @@ strong { color: var(--text); font-weight: 500; }
 .card.gb::before { background: linear-gradient(90deg, var(--violet), var(--pink), var(--orange)); }
 .card.gc::before { background: linear-gradient(90deg, var(--cyan), var(--green), var(--accent)); }
 .card.gd::before { background: linear-gradient(90deg, var(--red), var(--accent), var(--violet)); }
+.card.ge::before { background: linear-gradient(90deg, var(--accent), var(--violet), var(--cyan)); }
+.card.gf::before { background: linear-gradient(90deg, var(--blue), var(--cyan), var(--green)); }
+.card.gg::before { background: linear-gradient(90deg, var(--pink), var(--amber), var(--orange)); }
+.card.gh::before { background: linear-gradient(90deg, var(--violet), var(--amber), var(--red)); }
 
 svg { width: 100%; height: auto; display: block; }
 /* UI icon SVGs must not stretch to 100% width */
