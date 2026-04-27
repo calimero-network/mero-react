@@ -33,7 +33,7 @@ import {
   useRegisterGroupSigningKey,
   useRetryGroupUpgrade,
   useSetDefaultCapabilities,
-  useSetDefaultVisibility,
+  useSetSubgroupVisibility,
   useSetGroupAlias,
   useSetMemberAlias,
   useSetTeeAdmissionPolicy,
@@ -74,7 +74,7 @@ function createMero(adminOverrides: Record<string, unknown> = {}) {
         memberCount: 2,
         contextCount: 1,
         defaultCapabilities: 7,
-        defaultVisibility: 'open',
+        subgroupVisibility: 'open',
       }),
       syncGroup: vi.fn().mockResolvedValue({
         groupId: 'group-1',
@@ -100,7 +100,7 @@ function createMero(adminOverrides: Record<string, unknown> = {}) {
       setMemberCapabilities: vi.fn().mockResolvedValue(undefined),
       updateMemberRole: vi.fn().mockResolvedValue(undefined),
       setDefaultCapabilities: vi.fn().mockResolvedValue(undefined),
-      setDefaultVisibility: vi.fn().mockResolvedValue(undefined),
+      setSubgroupVisibility: vi.fn().mockResolvedValue(undefined),
       setTeeAdmissionPolicy: vi.fn().mockResolvedValue(undefined),
       updateGroupSettings: vi.fn().mockResolvedValue(undefined),
       setGroupAlias: vi.fn().mockResolvedValue(undefined),
@@ -457,7 +457,7 @@ describe('group and context hooks', () => {
         memberCount: 5,
         contextCount: 2,
         defaultCapabilities: 7,
-        defaultVisibility: 'open',
+        subgroupVisibility: 'open',
       }),
     });
     mockUseMero.mockReturnValue({ mero } as never);
@@ -899,18 +899,18 @@ describe('group and context hooks', () => {
     expect(setDefaultCapabilities).toHaveBeenCalledWith('group-1', { defaultCapabilities: 15 });
   });
 
-  it('useSetDefaultVisibility sets default visibility for a group', async () => {
-    const setDefaultVisibility = vi.fn().mockResolvedValue(undefined);
-    const mero = createMero({ setDefaultVisibility });
+  it('useSetSubgroupVisibility sets subgroup visibility for a group', async () => {
+    const setSubgroupVisibility = vi.fn().mockResolvedValue(undefined);
+    const mero = createMero({ setSubgroupVisibility });
     mockUseMero.mockReturnValue({ mero } as never);
 
-    const { result } = renderHook(() => useSetDefaultVisibility());
+    const { result } = renderHook(() => useSetSubgroupVisibility());
 
     await act(async () => {
-      await result.current.setDefaultVisibility('group-1', { defaultVisibility: 'private' });
+      await result.current.setSubgroupVisibility('group-1', { subgroupVisibility: 'restricted' });
     });
 
-    expect(setDefaultVisibility).toHaveBeenCalledWith('group-1', { defaultVisibility: 'private' });
+    expect(setSubgroupVisibility).toHaveBeenCalledWith('group-1', { subgroupVisibility: 'restricted' });
   });
 
   it('useSetTeeAdmissionPolicy sets TEE policy for a group', async () => {

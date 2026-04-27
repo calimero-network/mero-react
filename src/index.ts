@@ -47,7 +47,7 @@ export {
   useRegisterGroupSigningKey,
   useRetryGroupUpgrade,
   useSetDefaultCapabilities,
-  useSetDefaultVisibility,
+  useSetSubgroupVisibility,
   useSetGroupAlias,
   useSetMemberAlias,
   useSetTeeAdmissionPolicy,
