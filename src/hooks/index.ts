@@ -27,7 +27,7 @@ import type {
   RemoveGroupMembersRequest,
   RetryGroupUpgradeRequest,
   SetDefaultCapabilitiesRequest,
-  SetDefaultVisibilityRequest,
+  SetSubgroupVisibilityRequest,
   SetGroupAliasRequest,
   SetMemberAliasRequest,
   SetTeeAdmissionPolicyRequest,
@@ -1117,19 +1117,19 @@ export function useSetDefaultCapabilities() {
   return { setDefaultCapabilities, loading, error };
 }
 
-export function useSetDefaultVisibility() {
+export function useSetSubgroupVisibility() {
   const { mero } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
-  const setDefaultVisibility = useCallback(
-    async (groupId: string, request: SetDefaultVisibilityRequest) => {
+  const setSubgroupVisibility = useCallback(
+    async (groupId: string, request: SetSubgroupVisibilityRequest) => {
       if (!mero) return null;
-      return run(() => mero.admin.setDefaultVisibility(groupId, request));
+      return run(() => mero.admin.setSubgroupVisibility(groupId, request));
     },
     [mero, run],
   );
 
-  return { setDefaultVisibility, loading, error };
+  return { setSubgroupVisibility, loading, error };
 }
 
 export function useSetTeeAdmissionPolicy() {
