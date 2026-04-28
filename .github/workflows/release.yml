@@ -25,10 +25,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          # semantic-release 25 requires ^22.14.0 || >= 24.10.0. Node 20
-          # silently skipped the release on commit 78aaa3a — caught by
-          # `|| true`, which is now removed below.
-          node-version: '22'
+          node-version: '24'
           registry-url: 'https://registry.npmjs.org'
           scope: '@calimero-network'
           token: false

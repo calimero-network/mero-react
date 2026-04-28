@@ -907,10 +907,10 @@ describe('group and context hooks', () => {
     const { result } = renderHook(() => useSetSubgroupVisibility());
 
     await act(async () => {
-      await result.current.setSubgroupVisibility('group-1', { subgroupVisibility: 'restricted' });
+      await result.current.setSubgroupVisibility('group-1', { subgroupVisibility: 'Restricted' });
     });
 
-    expect(setSubgroupVisibility).toHaveBeenCalledWith('group-1', { subgroupVisibility: 'restricted' });
+    expect(setSubgroupVisibility).toHaveBeenCalledWith('group-1', { subgroupVisibility: 'Restricted' });
   });
 
   it('useSetTeeAdmissionPolicy sets TEE policy for a group', async () => {
