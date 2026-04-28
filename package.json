@@ -65,7 +65,7 @@
   "author": "Calimero Ltd",
   "repository": {
     "type": "git",
-    "url": "https://github.com/calimero-network/mero-react"
+    "url": "git+https://github.com/calimero-network/mero-react.git"
   },
   "publishConfig": {
     "access": "public",
