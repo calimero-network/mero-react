@@ -1,3 +1,30 @@
+## [2.0.0](https://github.com/calimero-network/mero-react/compare/mero-react-v1.1.0...mero-react-v2.0.0) (2026-04-28)
+
+### ⚠ BREAKING CHANGES
+
+* **hooks:** useSetDefaultVisibility renamed to
+useSetSubgroupVisibility. The returned callback is renamed from
+setDefaultVisibility to setSubgroupVisibility, and its request body
+field is now subgroupVisibility instead of defaultVisibility.
+GroupInfo.defaultVisibility (read via useGroupInfo and other group-info
+hooks) is now subgroupVisibility. Requires
+@calimero-network/mero-js@^2.0.0.
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+
+### Features
+
+* add docs ([d6751f1](https://github.com/calimero-network/mero-react/commit/d6751f13bd122209c53ee85b0b82bb811836b24c))
+* **hooks:** rename useSetDefaultVisibility → useSetSubgroupVisibility ([c888d42](https://github.com/calimero-network/mero-react/commit/c888d42aaf4a00ce3cc215829fd438c015e91a8f)), closes [calimero-network/mero-js#33](https://github.com/calimero-network/mero-js/issues/33) [calimero-network/core#2261](https://github.com/calimero-network/core/issues/2261) [calimero-network/mero-js#33](https://github.com/calimero-network/mero-js/issues/33)
+
+### Bug Fixes
+
+* **ci:** bump release workflow to Node 22 + surface semantic-release failures ([9f1779d](https://github.com/calimero-network/mero-react/commit/9f1779dae32143882e19d9638b14c521aa36e499)), closes [#12](https://github.com/calimero-network/mero-react/issues/12)
+* **ci:** make breaking-change marker bump major in releaseRules ([84f394e](https://github.com/calimero-network/mero-react/commit/84f394e1c705b6289d3ce1f38be5b8234b2309e1))
+* cleanup ([04672e1](https://github.com/calimero-network/mero-react/commit/04672e1b7f979ef7002ee3a3952477052cd1d969))
+* cleanup ([986cb4a](https://github.com/calimero-network/mero-react/commit/986cb4a892330b34283f2d0d0f0562955e3657ee))
+* comments ([ff45cca](https://github.com/calimero-network/mero-react/commit/ff45ccaf6ceea9d360d36d65ddf4125eec940004))
+
 ## [1.1.0](https://github.com/calimero-network/mero-react/compare/mero-react-v1.0.2...mero-react-v1.1.0) (2026-04-08)
 
 ### Features
