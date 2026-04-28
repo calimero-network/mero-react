@@ -25,7 +25,10 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          # semantic-release 25 requires ^22.14.0 || >= 24.10.0. Node 20
+          # silently skipped the release on commit 78aaa3a — caught by
+          # `|| true`, which is now removed below.
+          node-version: '22'
           registry-url: 'https://registry.npmjs.org'
           scope: '@calimero-network'
           token: false
@@ -50,8 +53,17 @@ jobs:
       - name: Run semantic-release
         id: semantic
         run: |
-          OUTPUT=$(pnpm exec semantic-release 2>&1) || true
+          # semantic-release exits 0 both when it releases AND when it
+          # decides nothing is releasable. Non-zero is a real failure
+          # (bad config, plugin crash, Node-version mismatch, …) — let
+          # it propagate instead of swallowing with `|| true`.
+          OUTPUT=$(pnpm exec semantic-release 2>&1)
+          STATUS=$?
           echo "$OUTPUT"
+          if [ $STATUS -ne 0 ]; then
+            echo "::error::semantic-release failed with exit code $STATUS"
+            exit $STATUS
+          fi
           if echo "$OUTPUT" | grep -qE "Published release|Created tag|next release version"; then
             echo "new_release=true" >> $GITHUB_OUTPUT
           else
