@@ -1,3 +1,9 @@
+## [2.0.1](https://github.com/calimero-network/mero-react/compare/mero-react-v2.0.0...mero-react-v2.0.1) (2026-04-28)
+
+### Bug Fixes
+
+* **ci:** use Node 24 for npm trusted publishing ([a92649d](https://github.com/calimero-network/mero-react/commit/a92649d82e372bded0090f18ccb48a358d0da8ac))
+
 ## [2.0.0](https://github.com/calimero-network/mero-react/compare/mero-react-v1.1.0...mero-react-v2.0.0) (2026-04-28)
 
 ### ⚠ BREAKING CHANGES
