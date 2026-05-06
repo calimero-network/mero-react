@@ -85,13 +85,26 @@ function tint(color: string, percent: number): string {
 }
 
 /**
- * Build the inline-style map from a resolved theme. Returns fresh objects so
- * React doesn't share references across renders.
+ * Build the inline-style map from a resolved theme. Each value is emitted as
+ * `var(--mero-*, fallback)` so a global `:root { --mero-* }` rule reaches the
+ * portal-rendered modal; the fallback ensures the modal still renders correctly
+ * if the consumer hasn't imported `styles.css`.
  */
 function buildStyles(t: ResolvedMeroTheme) {
-  const errorBg = tint(t.error, 10);
-  const errorBorder = tint(t.error, 30);
-  const accentGlow = tint(t.primary, 15);
+  const bg = `var(--mero-bg, ${t.background})`;
+  const bgSecondary = `var(--mero-bg-secondary, ${t.backgroundSecondary})`;
+  const text = `var(--mero-text, ${t.text})`;
+  const textSecondary = `var(--mero-text-secondary, ${t.textSecondary})`;
+  const accent = `var(--mero-accent, ${t.primary})`;
+  const onPrimary = `var(--mero-on-primary, ${t.primaryText})`;
+  const border = `var(--mero-border, ${t.border})`;
+  const error = `var(--mero-error, ${t.error})`;
+  const overlay = `var(--mero-overlay, ${t.overlay})`;
+  const radius = `var(--mero-radius, ${t.radius})`;
+
+  const errorBg = tint(error, 10);
+  const errorBorder = tint(error, 30);
+  const accentGlow = tint(accent, 15);
 
   return {
     overlay: {
@@ -100,7 +113,7 @@ function buildStyles(t: ResolvedMeroTheme) {
       left: 0,
       right: 0,
       bottom: 0,
-      backgroundColor: t.overlay,
+      backgroundColor: overlay,
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
@@ -109,16 +122,16 @@ function buildStyles(t: ResolvedMeroTheme) {
       animation: 'meroFadeIn 0.2s ease-out',
     },
     content: {
-      backgroundColor: t.background,
-      borderRadius: t.radius,
+      backgroundColor: bg,
+      borderRadius: radius,
       padding: '2rem',
       maxWidth: '420px',
       width: '100%',
       position: 'relative' as const,
-      border: `1px solid ${t.border}`,
+      border: `1px solid ${border}`,
       boxShadow: `0 25px 50px -12px rgba(0, 0, 0, 0.6), 0 0 0 1px ${accentGlow}`,
       animation: 'meroSlideIn 0.25s ease-out',
-      color: t.text,
+      color: text,
     },
     closeButton: {
       position: 'absolute' as const,
@@ -127,7 +140,7 @@ function buildStyles(t: ResolvedMeroTheme) {
       background: 'none',
       border: 'none',
       fontSize: '1.5rem',
-      color: t.textSecondary,
+      color: textSecondary,
       cursor: 'pointer',
       padding: '0.25rem',
       lineHeight: 1,
@@ -142,20 +155,20 @@ function buildStyles(t: ResolvedMeroTheme) {
     title: {
       fontSize: '1.25rem',
       fontWeight: 600,
-      color: t.text,
+      color: text,
       margin: 0,
     },
     info: {
-      color: t.textSecondary,
+      color: textSecondary,
       textAlign: 'center' as const,
       marginBottom: '1.5rem',
       fontSize: '0.875rem',
     },
     error: {
-      color: t.error,
+      color: error,
       backgroundColor: errorBg,
       border: `1px solid ${errorBorder}`,
-      borderRadius: t.radius,
+      borderRadius: radius,
       padding: '0.75rem',
       marginBottom: '1rem',
       fontSize: '0.875rem',
@@ -171,43 +184,43 @@ function buildStyles(t: ResolvedMeroTheme) {
       display: 'flex',
       alignItems: 'center',
       gap: '0.5rem',
-      color: t.text,
+      color: text,
       cursor: 'pointer',
       padding: '0.5rem 1rem',
-      borderRadius: t.radius,
-      border: `1px solid ${t.border}`,
-      backgroundColor: t.backgroundSecondary,
+      borderRadius: radius,
+      border: `1px solid ${border}`,
+      backgroundColor: bgSecondary,
       transition: 'all 0.15s ease',
     },
     radioLabelActive: {
-      borderColor: t.primary,
+      borderColor: accent,
       backgroundColor: accentGlow,
-      color: t.text,
+      color: text,
     },
     input: {
       width: '100%',
       padding: '0.75rem 1rem',
-      borderRadius: t.radius,
-      border: `1px solid ${t.border}`,
-      backgroundColor: t.backgroundSecondary,
-      color: t.text,
+      borderRadius: radius,
+      border: `1px solid ${border}`,
+      backgroundColor: bgSecondary,
+      color: text,
       fontSize: '0.875rem',
       outline: 'none',
       marginBottom: '1rem',
       boxSizing: 'border-box' as const,
     },
     localInfo: {
-      color: t.textSecondary,
+      color: textSecondary,
       fontSize: '0.875rem',
       textAlign: 'center' as const,
       padding: '0.75rem',
-      backgroundColor: t.backgroundSecondary,
-      borderRadius: t.radius,
+      backgroundColor: bgSecondary,
+      borderRadius: radius,
       marginBottom: '1rem',
-      border: `1px solid ${t.border}`,
+      border: `1px solid ${border}`,
     },
     localInfoCode: {
-      color: t.primary,
+      color: accent,
     },
     buttonGroup: {
       display: 'flex',
@@ -215,13 +228,13 @@ function buildStyles(t: ResolvedMeroTheme) {
     },
     button: {
       padding: '0.75rem 2rem',
-      borderRadius: t.radius,
+      borderRadius: radius,
       border: 'none',
       fontSize: '0.875rem',
       fontWeight: 600,
       cursor: 'pointer',
-      backgroundColor: t.primary,
-      color: t.primaryText,
+      backgroundColor: accent,
+      color: onPrimary,
       transition: 'all 0.15s ease',
     },
     buttonDisabled: {
@@ -234,13 +247,13 @@ function buildStyles(t: ResolvedMeroTheme) {
       alignItems: 'center',
       gap: '1rem',
       padding: '2rem',
-      color: t.textSecondary,
+      color: textSecondary,
     },
     spinner: {
       width: '2rem',
       height: '2rem',
-      border: `3px solid ${t.border}`,
-      borderTopColor: t.primary,
+      border: `3px solid ${border}`,
+      borderTopColor: accent,
       borderRadius: '50%',
       animation: 'meroSpin 1s linear infinite',
     },
@@ -265,7 +278,14 @@ export function LoginModal({
 
   const resolved = useMemo(() => resolveMeroTheme(theme), [theme]);
   const styles = useMemo(() => buildStyles(resolved), [resolved]);
-  const themeVars = useMemo(() => themeToCssVars(resolved), [resolved]);
+  // Only emit inline `--mero-*` variables when a `theme` prop was actually
+  // provided. Without a prop, we let global `:root { --mero-* }` rules cascade
+  // through to the portal-rendered modal (with `var()` fallbacks in buildStyles
+  // covering the case where no global rules are loaded).
+  const themeVars = useMemo(
+    () => (theme ? themeToCssVars(resolved) : undefined),
+    [theme, resolved],
+  );
 
   // Determine what to show
   const shouldShowLocal =
@@ -348,7 +368,7 @@ export function LoginModal({
           </button>
 
           <div style={styles.header}>
-            <MeroLogo color={resolved.primary} />
+            <MeroLogo color={`var(--mero-accent, ${resolved.primary})`} />
             <h1 style={styles.title}>Connect to Calimero</h1>
           </div>
 

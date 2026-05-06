@@ -52,13 +52,11 @@ export const defaultMeroTheme: Readonly<ResolvedMeroTheme> = Object.freeze({
 
 export function resolveMeroTheme(theme?: MeroTheme): ResolvedMeroTheme {
   if (!theme) return { ...defaultMeroTheme };
-  // Drop null / undefined / empty-string overrides so they don't shadow defaults
-  // and produce invisible elements. Note: we don't validate CSS syntax — any
+  // Drop undefined / empty-string overrides so they don't shadow defaults and
+  // produce invisible elements. CSS syntax itself is not validated — any
   // non-empty string is forwarded as-is.
   const filtered = Object.fromEntries(
-    Object.entries(theme).filter(
-      ([, v]) => v !== undefined && v !== null && v !== '',
-    ),
+    Object.entries(theme).filter(([, v]) => v !== undefined && v !== ''),
   ) as Partial<MeroTheme>;
   return { ...defaultMeroTheme, ...filtered };
 }
@@ -68,20 +66,21 @@ export function resolveMeroTheme(theme?: MeroTheme): ResolvedMeroTheme {
  * descendant CSS rules (e.g. those in `styles.css`) pick up the overrides.
  */
 export function themeToCssVars(theme: ResolvedMeroTheme): React.CSSProperties {
-  return {
-    ['--mero-bg' as string]: theme.background,
-    ['--mero-bg-secondary' as string]: theme.backgroundSecondary,
-    ['--mero-bg-tertiary' as string]: theme.backgroundTertiary,
-    ['--mero-text' as string]: theme.text,
-    ['--mero-text-secondary' as string]: theme.textSecondary,
-    ['--mero-accent' as string]: theme.primary,
-    ['--mero-accent-hover' as string]: theme.primaryHover,
-    ['--mero-on-primary' as string]: theme.primaryText,
-    ['--mero-border' as string]: theme.border,
-    ['--mero-input-bg' as string]: theme.backgroundSecondary,
-    ['--mero-input-text' as string]: theme.text,
-    ['--mero-error' as string]: theme.error,
-    ['--mero-overlay' as string]: theme.overlay,
-    ['--mero-radius' as string]: theme.radius,
-  } as React.CSSProperties;
+  const vars: Record<string, string> = {
+    '--mero-bg': theme.background,
+    '--mero-bg-secondary': theme.backgroundSecondary,
+    '--mero-bg-tertiary': theme.backgroundTertiary,
+    '--mero-text': theme.text,
+    '--mero-text-secondary': theme.textSecondary,
+    '--mero-accent': theme.primary,
+    '--mero-accent-hover': theme.primaryHover,
+    '--mero-on-primary': theme.primaryText,
+    '--mero-border': theme.border,
+    '--mero-input-bg': theme.backgroundSecondary,
+    '--mero-input-text': theme.text,
+    '--mero-error': theme.error,
+    '--mero-overlay': theme.overlay,
+    '--mero-radius': theme.radius,
+  };
+  return vars as React.CSSProperties;
 }
