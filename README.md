@@ -269,6 +269,33 @@ Helpers: `defaultMeroTheme` (the full default palette), `resolveMeroTheme(partia
 
 **Browser support**: hover-state and modal tints use CSS [`color-mix()`](https://developer.mozilla.org/en-US/docs/Web/CSS/color_value/color-mix), which requires Chrome 111+, Safari 16.2+, or Firefox 113+ (all 2023). On older browsers the bundled `styles.css` falls back to the default green `rgba()` for the button hover; the modal renders without subtle tints but is otherwise fully functional.
 
+### `<ConnectButton>` props
+
+```tsx
+// Square 40×40 icon button — logo only, no text
+<ConnectButton logoOnly />
+
+// Custom label (shorthand: bare string overrides the disconnected label)
+<ConnectButton label="Sign in with Calimero" />
+
+// Per-state label overrides
+<ConnectButton
+  label={{
+    connect: 'Sign in',
+    connected: 'Signed in',
+    reconnecting: 'Reconnecting…',
+  }}
+/>
+```
+
+| Prop | Type | Default | Notes |
+|------|------|---------|-------|
+| `connectionType` | `ConnectionType \| CustomConnectionConfig` | `RemoteAndLocal` | Which options the embedded LoginModal shows. `Custom` skips the modal. |
+| `theme` | `MeroTheme` | — | Partial token override. |
+| `logoOnly` | `boolean` | `false` | Render only the Calimero logo (square button). The label is still announced via `aria-label`. |
+| `label` | `string \| { connect?, connected?, reconnecting? }` | — | Override default labels. Bare string targets the disconnected state. |
+| `className` / `style` | — | — | Forwarded to the inner `<button>`. |
+
 ## Enums
 
 ```tsx

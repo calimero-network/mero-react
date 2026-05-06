@@ -22,6 +22,20 @@ export interface ConnectButtonProps {
   style?: React.CSSProperties;
   /** Theme overrides — accepts any subset of `MeroTheme` tokens */
   theme?: MeroTheme;
+  /**
+   * Render only the Calimero logo, no text. Produces a square 40×40 icon
+   * button. The label is still announced to screen readers via `aria-label`.
+   * Default: false.
+   */
+  logoOnly?: boolean;
+  /**
+   * Override the default labels per state. A bare string is shorthand for
+   * `{ connect: '<string>' }`. The connected and reconnecting states keep
+   * their defaults unless explicitly overridden.
+   */
+  label?:
+    | string
+    | { connect?: string; connected?: string; reconnecting?: string };
 }
 
 /**
@@ -32,6 +46,8 @@ export function ConnectButton({
   className,
   style,
   theme,
+  logoOnly = false,
+  label,
 }: ConnectButtonProps) {
   const { isAuthenticated, connectToNode, logout, nodeUrl, isOnline } = useMero();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -69,6 +85,17 @@ export function ConnectButton({
     return new URL('admin-dashboard/', nodeUrl).toString();
   }, [isAuthenticated, nodeUrl]);
 
+  const labels = useMemo(() => {
+    const overrides = typeof label === 'string' ? { connect: label } : label;
+    return {
+      connect: overrides?.connect ?? 'Connect',
+      connected: overrides?.connected ?? 'Connected',
+      reconnecting: overrides?.reconnecting ?? 'Reconnecting...',
+    };
+  }, [label]);
+
+  const buttonClassName = logoOnly ? 'mero-logo-only' : '';
+
   const handleConnect = () => {
     // If Custom type with URL, connect directly
     if (
@@ -96,12 +123,14 @@ export function ConnectButton({
         style={{ ...themeVars, display: 'inline-block' }}
       >
         <button
-          className={`mero-connect-button mero-reconnecting ${className || ''}`}
+          className={`mero-connect-button mero-reconnecting ${buttonClassName} ${className || ''}`.trim()}
           style={style}
           disabled
+          aria-label={labels.reconnecting}
+          title={logoOnly ? labels.reconnecting : undefined}
         >
           <CalimeroLogo size={18} className="mero-logo" />
-          Reconnecting...
+          {!logoOnly && labels.reconnecting}
         </button>
       </div>
     );
@@ -116,12 +145,14 @@ export function ConnectButton({
         style={{ ...themeVars, position: 'relative', display: 'inline-block' }}
       >
         <button
-          className={`mero-connect-button mero-connected ${className || ''}`}
+          className={`mero-connect-button mero-connected ${buttonClassName} ${className || ''}`.trim()}
           style={style}
           onClick={() => setIsDropdownOpen((prev) => !prev)}
+          aria-label={labels.connected}
+          title={logoOnly ? labels.connected : undefined}
         >
           <CalimeroLogo size={18} className="mero-logo" />
-          Connected
+          {!logoOnly && labels.connected}
         </button>
         {isDropdownOpen && (
           <div className="mero-dropdown">
@@ -158,12 +189,14 @@ export function ConnectButton({
       style={{ ...themeVars, display: 'inline-block' }}
     >
       <button
-        className={`mero-connect-button ${className || ''}`}
+        className={`mero-connect-button ${buttonClassName} ${className || ''}`.trim()}
         style={style}
         onClick={handleConnect}
+        aria-label={labels.connect}
+        title={logoOnly ? labels.connect : undefined}
       >
         <CalimeroLogo size={18} className="mero-logo" />
-        Connect
+        {!logoOnly && labels.connect}
       </button>
       <LoginModal
         isOpen={isModalOpen}

@@ -11,6 +11,8 @@ interface ThemeVariant {
   label: string;
   description: string;
   theme?: MeroTheme;
+  logoOnly?: boolean;
+  buttonLabel?: string;
 }
 
 const variants: ThemeVariant[] = [
@@ -72,6 +74,16 @@ const variants: ThemeVariant[] = [
     label: 'Square',
     description: 'No rounding — `radius: "0"`',
     theme: { radius: '0' },
+  },
+  {
+    label: 'Logo only',
+    description: '`logoOnly` — square 40×40 icon button',
+    logoOnly: true,
+  },
+  {
+    label: 'Custom label',
+    description: '`label="Sign in with Calimero"`',
+    buttonLabel: 'Sign in with Calimero',
   },
 ];
 
@@ -204,7 +216,11 @@ export default function Authenticate() {
                   e.currentTarget.style.transform = 'translateY(0)';
                 }}
               >
-                <ConnectButton theme={v.theme} />
+                <ConnectButton
+                  theme={v.theme}
+                  logoOnly={v.logoOnly}
+                  label={v.buttonLabel}
+                />
                 <div
                   style={{
                     marginTop: '0.5rem',

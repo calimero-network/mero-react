@@ -28,36 +28,38 @@
 .mero-connect-button {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  padding: 10px 18px;
-  background-color: var(--mero-bg);
+  padding: 10px 20px;
+  /* Disconnected default: filled with the accent color so the theme reads
+     loud at a glance. Override per-button via `theme={{ primary }}` or
+     globally via `:root { --mero-accent }`. */
+  background-color: var(--mero-accent);
   border: 1px solid var(--mero-accent);
   border-radius: var(--mero-radius);
   cursor: pointer;
   font-size: 14px;
   font-weight: 600;
   letter-spacing: 0.01em;
-  color: var(--mero-text);
+  color: var(--mero-on-primary);
   transition: background-color 0.15s ease, border-color 0.15s ease,
     box-shadow 0.15s ease, transform 0.1s ease;
   min-width: 140px;
-  justify-content: center;
   box-sizing: border-box;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
     Oxygen, Ubuntu, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  line-height: 1;
 }
 
 .mero-connect-button:hover:not(.mero-connected):not(.mero-reconnecting) {
-  /* rgba fallback for browsers without color-mix() support
-     (Safari < 16.2, Firefox < 113, Chrome < 111). The fallback uses the
-     default green; older browsers ignore --mero-accent overrides for tints. */
-  background-color: rgba(165, 255, 17, 0.08);
-  background-color: color-mix(in srgb, var(--mero-accent) 8%, transparent);
+  background-color: var(--mero-accent-hover);
   border-color: var(--mero-accent-hover);
-  box-shadow: 0 0 0 3px rgba(165, 255, 17, 0.12);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mero-accent) 12%, transparent);
+  /* Subtle glow on hover. rgba fallback for browsers without color-mix()
+     (Safari < 16.2, Firefox < 113, Chrome < 111). */
+  box-shadow: 0 0 0 4px rgba(165, 255, 17, 0.18);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--mero-accent) 18%, transparent);
 }
 
 .mero-connect-button:active:not(.mero-connected):not(.mero-reconnecting) {
@@ -66,18 +68,27 @@
 
 .mero-connect-button:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(165, 255, 17, 0.4);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mero-accent) 40%, transparent);
+  box-shadow: 0 0 0 3px rgba(165, 255, 17, 0.45);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mero-accent) 45%, transparent);
+}
+
+/* logoOnly variant: square button, single SVG, no text */
+.mero-connect-button.mero-logo-only {
+  min-width: 0;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  gap: 0;
 }
 
 .mero-connect-button.mero-connected {
-  background-color: var(--mero-accent);
-  color: var(--mero-on-primary);
+  background-color: var(--mero-bg);
+  color: var(--mero-text);
   border-color: var(--mero-accent);
 }
 
 .mero-connect-button.mero-connected:hover {
-  background-color: var(--mero-accent-hover);
+  background-color: var(--mero-bg-secondary);
   border-color: var(--mero-accent-hover);
 }
 
