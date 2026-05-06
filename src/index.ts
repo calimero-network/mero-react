@@ -13,6 +13,8 @@ export { ConnectButton } from './components';
 export type { ConnectButtonProps } from './components';
 export { LoginModal } from './components';
 export type { LoginModalProps } from './components';
+export { CalimeroLogo } from './components';
+export type { CalimeroLogoProps } from './components';
 
 // Theme
 export {

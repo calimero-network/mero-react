@@ -26,21 +26,27 @@
 
 /* Connect Button */
 .mero-connect-button {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 20px;
+  gap: 8px;
+  padding: 10px 18px;
   background-color: var(--mero-bg);
   border: 1px solid var(--mero-accent);
   border-radius: var(--mero-radius);
   cursor: pointer;
-  font-size: 16px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
   color: var(--mero-text);
-  transition: all 0.2s ease;
-  width: 180px;
+  transition: background-color 0.15s ease, border-color 0.15s ease,
+    box-shadow 0.15s ease, transform 0.1s ease;
+  min-width: 140px;
   justify-content: center;
   box-sizing: border-box;
-  font-family: inherit;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    Oxygen, Ubuntu, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .mero-connect-button:hover:not(.mero-connected):not(.mero-reconnecting) {
@@ -52,6 +58,16 @@
   border-color: var(--mero-accent-hover);
   box-shadow: 0 0 0 3px rgba(165, 255, 17, 0.12);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--mero-accent) 12%, transparent);
+}
+
+.mero-connect-button:active:not(.mero-connected):not(.mero-reconnecting) {
+  transform: translateY(1px);
+}
+
+.mero-connect-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(165, 255, 17, 0.4);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mero-accent) 40%, transparent);
 }
 
 .mero-connect-button.mero-connected {
