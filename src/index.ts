@@ -15,7 +15,13 @@ export { LoginModal } from './components';
 export type { LoginModalProps } from './components';
 
 // Theme
-export { defaultMeroTheme, resolveMeroTheme, themeToCssVars } from './theme';
+export {
+  MERO_CSS_VARS,
+  cssVar,
+  defaultMeroTheme,
+  resolveMeroTheme,
+  themeToCssVars,
+} from './theme';
 export type { MeroTheme, ResolvedMeroTheme } from './theme';
 
 // Hooks

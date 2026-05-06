@@ -64,23 +64,46 @@ export function resolveMeroTheme(theme?: MeroTheme): ResolvedMeroTheme {
 }
 
 /**
+ * Single source of truth mapping each `MeroTheme` token name to the CSS
+ * custom-property name it surfaces as. Used by `themeToCssVars` to emit the
+ * inline-style map and by component code (e.g. `LoginModal`) to read the
+ * variable in inline styles via `var(--mero-*, fallback)`.
+ *
+ * Adding a new token? Add it here, in `MeroTheme`, and in `defaultMeroTheme`,
+ * and the rest of the system picks it up automatically.
+ */
+export const MERO_CSS_VARS: Record<keyof MeroTheme, string> = {
+  background: '--mero-bg',
+  backgroundSecondary: '--mero-bg-secondary',
+  backgroundTertiary: '--mero-bg-tertiary',
+  text: '--mero-text',
+  textSecondary: '--mero-text-secondary',
+  primary: '--mero-accent',
+  primaryHover: '--mero-accent-hover',
+  primaryText: '--mero-on-primary',
+  border: '--mero-border',
+  error: '--mero-error',
+  overlay: '--mero-overlay',
+  radius: '--mero-radius',
+};
+
+/**
  * Build a `style` object that exposes a resolved theme as CSS variables, so
  * descendant CSS rules (e.g. those in `styles.css`) pick up the overrides.
  */
 export function themeToCssVars(theme: ResolvedMeroTheme): CSSProperties {
-  const vars: Record<string, string> = {
-    '--mero-bg': theme.background,
-    '--mero-bg-secondary': theme.backgroundSecondary,
-    '--mero-bg-tertiary': theme.backgroundTertiary,
-    '--mero-text': theme.text,
-    '--mero-text-secondary': theme.textSecondary,
-    '--mero-accent': theme.primary,
-    '--mero-accent-hover': theme.primaryHover,
-    '--mero-on-primary': theme.primaryText,
-    '--mero-border': theme.border,
-    '--mero-error': theme.error,
-    '--mero-overlay': theme.overlay,
-    '--mero-radius': theme.radius,
-  };
+  const vars: Record<string, string> = {};
+  for (const key of Object.keys(MERO_CSS_VARS) as Array<keyof MeroTheme>) {
+    vars[MERO_CSS_VARS[key]] = theme[key];
+  }
   return vars as CSSProperties;
+}
+
+/**
+ * Returns a `var(--mero-*, fallback)` reference for a theme token, suitable
+ * for inline styles in portal-rendered components where descendant CSS
+ * variables also need to support global `:root` overrides.
+ */
+export function cssVar(theme: ResolvedMeroTheme, key: keyof MeroTheme): string {
+  return `var(${MERO_CSS_VARS[key]}, ${theme[key]})`;
 }

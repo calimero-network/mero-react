@@ -9,6 +9,7 @@ import { createPortal } from 'react-dom';
 import type { ConnectionType, CustomConnectionConfig } from '../types';
 import { ConnectionType as ConnectionTypeEnum } from '../types';
 import {
+  cssVar,
   resolveMeroTheme,
   themeToCssVars,
   type MeroTheme,
@@ -91,16 +92,16 @@ function tint(color: string, percent: number): string {
  * if the consumer hasn't imported `styles.css`.
  */
 function buildStyles(t: ResolvedMeroTheme) {
-  const bg = `var(--mero-bg, ${t.background})`;
-  const bgSecondary = `var(--mero-bg-secondary, ${t.backgroundSecondary})`;
-  const text = `var(--mero-text, ${t.text})`;
-  const textSecondary = `var(--mero-text-secondary, ${t.textSecondary})`;
-  const accent = `var(--mero-accent, ${t.primary})`;
-  const onPrimary = `var(--mero-on-primary, ${t.primaryText})`;
-  const border = `var(--mero-border, ${t.border})`;
-  const error = `var(--mero-error, ${t.error})`;
-  const overlay = `var(--mero-overlay, ${t.overlay})`;
-  const radius = `var(--mero-radius, ${t.radius})`;
+  const bg = cssVar(t, 'background');
+  const bgSecondary = cssVar(t, 'backgroundSecondary');
+  const text = cssVar(t, 'text');
+  const textSecondary = cssVar(t, 'textSecondary');
+  const accent = cssVar(t, 'primary');
+  const onPrimary = cssVar(t, 'primaryText');
+  const border = cssVar(t, 'border');
+  const error = cssVar(t, 'error');
+  const overlay = cssVar(t, 'overlay');
+  const radius = cssVar(t, 'radius');
 
   const errorBg = tint(error, 10);
   const errorBorder = tint(error, 30);
@@ -368,7 +369,7 @@ export function LoginModal({
           </button>
 
           <div style={styles.header}>
-            <MeroLogo color={`var(--mero-accent, ${resolved.primary})`} />
+            <MeroLogo color={cssVar(resolved, 'primary')} />
             <h1 style={styles.title}>Connect to Calimero</h1>
           </div>
 
