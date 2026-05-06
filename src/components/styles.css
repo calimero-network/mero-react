@@ -81,14 +81,17 @@
   gap: 0;
 }
 
+/* Connected state: same filled-accent look as disconnected so the theme
+   colour stays visible. The button label and dropdown disambiguate the
+   state — visual styling stays consistent. */
 .mero-connect-button.mero-connected {
-  background-color: var(--mero-bg);
-  color: var(--mero-text);
+  background-color: var(--mero-accent);
+  color: var(--mero-on-primary);
   border-color: var(--mero-accent);
 }
 
 .mero-connect-button.mero-connected:hover {
-  background-color: var(--mero-bg-secondary);
+  background-color: var(--mero-accent-hover);
   border-color: var(--mero-accent-hover);
 }
 
