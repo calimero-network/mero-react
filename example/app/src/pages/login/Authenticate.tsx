@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React from 'react';
+import { Link } from 'react-router-dom';
 import {
   ConnectButton,
   CalimeroLogo,
@@ -88,21 +88,11 @@ const variants: ThemeVariant[] = [
 ];
 
 export default function Authenticate() {
-  const navigate = useNavigate();
   const { isAuthenticated } = useMero();
 
-  useEffect(() => {
-    if (isAuthenticated) {
-      const currentPath = window.location.pathname;
-      if (
-        currentPath === '/' ||
-        currentPath === '' ||
-        currentPath === '/index.html'
-      ) {
-        navigate('/home', { replace: true });
-      }
-    }
-  }, [isAuthenticated, navigate]);
+  // No auto-redirect: `/` is a permanent showcase. When the user is
+  // authenticated we surface a "Go to app →" link in the hero so they can
+  // jump to /home explicitly.
 
   return (
     <div
@@ -166,8 +156,22 @@ export default function Authenticate() {
             <code style={codeStyle}>theme</code> — each card below is a single
             prop change.
           </p>
-          <div style={{ marginTop: '0.5rem' }}>
+          <div
+            style={{
+              marginTop: '0.5rem',
+              display: 'flex',
+              gap: '1rem',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              justifyContent: 'center',
+            }}
+          >
             <ConnectButton />
+            {isAuthenticated && (
+              <Link to="/home" style={appLinkStyle}>
+                Go to app →
+              </Link>
+            )}
           </div>
         </header>
 
@@ -293,4 +297,15 @@ const linkStyle: React.CSSProperties = {
   textDecoration: 'none',
   borderBottom: '1px solid transparent',
   transition: 'color 0.15s ease, border-color 0.15s ease',
+};
+
+const appLinkStyle: React.CSSProperties = {
+  color: '#a5ff11',
+  textDecoration: 'none',
+  fontWeight: 600,
+  fontSize: '0.95rem',
+  padding: '0.5rem 1rem',
+  borderRadius: 8,
+  border: '1px solid rgba(165, 255, 17, 0.3)',
+  transition: 'background-color 0.15s ease, border-color 0.15s ease',
 };

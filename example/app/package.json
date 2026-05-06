@@ -43,7 +43,8 @@
     "vite-plugin-node-polyfills": "^0.24.0"
   },
   "scripts": {
-    "dev": "vite",
+    "dev": "concurrently --kill-others-on-fail --names lib,app -c green,blue \"pnpm --dir ../.. dev\" \"vite\"",
+    "dev:vite": "vite",
     "build": "vite build",
     "lint": "concurrently \"pnpm:lint:*(!fix)\"",
     "lint:src": "eslint . --ext .ts,.tsx src --report-unused-disable-directives --max-warnings 0",
