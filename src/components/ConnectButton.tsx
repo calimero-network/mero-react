@@ -123,7 +123,7 @@ export function ConnectButton({
         style={{ ...themeVars, display: 'inline-block' }}
       >
         <button
-          className={`mero-connect-button mero-reconnecting ${buttonClassName} ${className || ''}`.trim()}
+          className={['mero-connect-button', 'mero-reconnecting', buttonClassName, className].filter(Boolean).join(' ')}
           style={style}
           disabled
           aria-label={labels.reconnecting}
@@ -145,7 +145,7 @@ export function ConnectButton({
         style={{ ...themeVars, position: 'relative', display: 'inline-block' }}
       >
         <button
-          className={`mero-connect-button mero-connected ${buttonClassName} ${className || ''}`.trim()}
+          className={['mero-connect-button', 'mero-connected', buttonClassName, className].filter(Boolean).join(' ')}
           style={style}
           onClick={() => setIsDropdownOpen((prev) => !prev)}
           aria-label={labels.connected}
@@ -189,7 +189,7 @@ export function ConnectButton({
       style={{ ...themeVars, display: 'inline-block' }}
     >
       <button
-        className={`mero-connect-button ${buttonClassName} ${className || ''}`.trim()}
+        className={['mero-connect-button', buttonClassName, className].filter(Boolean).join(' ')}
         style={style}
         onClick={handleConnect}
         aria-label={labels.connect}

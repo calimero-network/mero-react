@@ -52,13 +52,28 @@ export const defaultMeroTheme: Readonly<ResolvedMeroTheme> = Object.freeze({
   radius: '8px',
 });
 
+/**
+ * Merge a partial theme with the defaults.
+ *
+ * Filtering rules — values that fall back to the default:
+ *   - `undefined` (the prop key wasn't set, or was set to `undefined`)
+ *   - empty string `''`
+ *   - whitespace-only strings (e.g. `'   '`)
+ *
+ * These are dropped because they're invalid CSS and would produce
+ * invisible elements (transparent backgrounds, missing borders, etc.).
+ * If you genuinely want the browser default for a token, omit the key
+ * from the theme prop rather than passing an empty string.
+ *
+ * Any other non-empty string is forwarded as-is — CSS syntax itself
+ * is NOT validated.
+ */
 export function resolveMeroTheme(theme?: MeroTheme): ResolvedMeroTheme {
   if (!theme) return { ...defaultMeroTheme };
-  // Drop undefined / empty-string overrides so they don't shadow defaults and
-  // produce invisible elements. CSS syntax itself is not validated — any
-  // non-empty string is forwarded as-is.
   const filtered = Object.fromEntries(
-    Object.entries(theme).filter(([, v]) => v !== undefined && v !== ''),
+    Object.entries(theme).filter(
+      ([, v]) => v !== undefined && typeof v === 'string' && v.trim() !== '',
+    ),
   ) as Partial<MeroTheme>;
   return { ...defaultMeroTheme, ...filtered };
 }
