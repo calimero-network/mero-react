@@ -51,7 +51,16 @@ export const defaultMeroTheme: Readonly<ResolvedMeroTheme> = Object.freeze({
 });
 
 export function resolveMeroTheme(theme?: MeroTheme): ResolvedMeroTheme {
-  return { ...defaultMeroTheme, ...(theme ?? {}) };
+  if (!theme) return { ...defaultMeroTheme };
+  // Drop null / undefined / empty-string overrides so they don't shadow defaults
+  // and produce invisible elements. Note: we don't validate CSS syntax — any
+  // non-empty string is forwarded as-is.
+  const filtered = Object.fromEntries(
+    Object.entries(theme).filter(
+      ([, v]) => v !== undefined && v !== null && v !== '',
+    ),
+  ) as Partial<MeroTheme>;
+  return { ...defaultMeroTheme, ...filtered };
 }
 
 /**
