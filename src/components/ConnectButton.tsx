@@ -37,9 +37,16 @@ export function ConnectButton({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const themeVars = useMemo(
-    () => themeToCssVars(resolveMeroTheme(theme)),
+  // Resolve once. Inline CSS variables are only emitted when a theme prop is
+  // provided — otherwise we leave the cascade alone so global `:root { --mero-* }`
+  // overrides take effect.
+  const resolvedTheme = useMemo(
+    () => (theme ? resolveMeroTheme(theme) : null),
     [theme],
+  );
+  const themeVars = useMemo(
+    () => (resolvedTheme ? themeToCssVars(resolvedTheme) : undefined),
+    [resolvedTheme],
   );
 
   // Close dropdown when clicking outside
@@ -162,7 +169,7 @@ export function ConnectButton({
         onConnect={handleModalConnect}
         onClose={() => setIsModalOpen(false)}
         connectionType={typeof connectionType === 'object' ? ConnectionTypeEnum.RemoteAndLocal : connectionType}
-        theme={theme}
+        theme={resolvedTheme ?? theme}
       />
     </div>
   );

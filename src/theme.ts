@@ -35,7 +35,7 @@ export interface MeroTheme {
 
 export type ResolvedMeroTheme = Required<MeroTheme>;
 
-export const defaultMeroTheme: ResolvedMeroTheme = {
+export const defaultMeroTheme: Readonly<ResolvedMeroTheme> = Object.freeze({
   primary: '#a5ff11',
   primaryHover: '#8ed40d',
   primaryText: '#0d1117',
@@ -48,7 +48,7 @@ export const defaultMeroTheme: ResolvedMeroTheme = {
   error: '#ff6b6b',
   overlay: 'rgba(0, 0, 0, 0.75)',
   radius: '8px',
-};
+});
 
 export function resolveMeroTheme(theme?: MeroTheme): ResolvedMeroTheme {
   return { ...defaultMeroTheme, ...(theme ?? {}) };
@@ -67,8 +67,6 @@ export function themeToCssVars(theme: ResolvedMeroTheme): React.CSSProperties {
     ['--mero-text-secondary' as string]: theme.textSecondary,
     ['--mero-accent' as string]: theme.primary,
     ['--mero-accent-hover' as string]: theme.primaryHover,
-    ['--mero-success' as string]: theme.primary,
-    ['--mero-success-hover' as string]: theme.primaryHover,
     ['--mero-on-primary' as string]: theme.primaryText,
     ['--mero-border' as string]: theme.border,
     ['--mero-input-bg' as string]: theme.backgroundSecondary,

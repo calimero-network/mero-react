@@ -15,8 +15,6 @@
   --mero-text-secondary: #8b949e;
   --mero-accent: #a5ff11;
   --mero-accent-hover: #8ed40d;
-  --mero-success: #a5ff11;
-  --mero-success-hover: #8ed40d;
   --mero-on-primary: #0d1117;
   --mero-error: #ff6b6b;
   --mero-border: #30363d;
@@ -48,9 +46,9 @@
 }
 
 .mero-connect-button:hover:not(.mero-connected):not(.mero-reconnecting) {
-  background-color: rgba(165, 255, 17, 0.08);
+  background-color: color-mix(in srgb, var(--mero-accent) 8%, transparent);
   border-color: var(--mero-accent-hover);
-  box-shadow: 0 0 0 3px rgba(165, 255, 17, 0.12);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mero-accent) 12%, transparent);
 }
 
 .mero-connect-button.mero-connected {

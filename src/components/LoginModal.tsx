@@ -76,13 +76,22 @@ function isValidUrl(urlString: string): boolean {
 }
 
 /**
+ * Mix a color with transparent using CSS `color-mix`. Works for any valid CSS
+ * color value (hex of any length, rgb(), hsl(), named colors, var(...)) — not
+ * just 6-digit hex.
+ */
+function tint(color: string, percent: number): string {
+  return `color-mix(in srgb, ${color} ${percent}%, transparent)`;
+}
+
+/**
  * Build the inline-style map from a resolved theme. Returns fresh objects so
  * React doesn't share references across renders.
  */
 function buildStyles(t: ResolvedMeroTheme) {
-  const errorBg = `${t.error}1a`; // ~10% alpha when t.error is a #rrggbb hex
-  const errorBorder = `${t.error}4d`; // ~30% alpha
-  const accentGlow = `${t.primary}26`; // ~15% alpha
+  const errorBg = tint(t.error, 10);
+  const errorBorder = tint(t.error, 30);
+  const accentGlow = tint(t.primary, 15);
 
   return {
     overlay: {
@@ -101,7 +110,7 @@ function buildStyles(t: ResolvedMeroTheme) {
     },
     content: {
       backgroundColor: t.background,
-      borderRadius: '12px',
+      borderRadius: t.radius,
       padding: '2rem',
       maxWidth: '420px',
       width: '100%',
@@ -146,7 +155,7 @@ function buildStyles(t: ResolvedMeroTheme) {
       color: t.error,
       backgroundColor: errorBg,
       border: `1px solid ${errorBorder}`,
-      borderRadius: '6px',
+      borderRadius: t.radius,
       padding: '0.75rem',
       marginBottom: '1rem',
       fontSize: '0.875rem',
@@ -165,7 +174,7 @@ function buildStyles(t: ResolvedMeroTheme) {
       color: t.text,
       cursor: 'pointer',
       padding: '0.5rem 1rem',
-      borderRadius: '6px',
+      borderRadius: t.radius,
       border: `1px solid ${t.border}`,
       backgroundColor: t.backgroundSecondary,
       transition: 'all 0.15s ease',
@@ -178,7 +187,7 @@ function buildStyles(t: ResolvedMeroTheme) {
     input: {
       width: '100%',
       padding: '0.75rem 1rem',
-      borderRadius: '6px',
+      borderRadius: t.radius,
       border: `1px solid ${t.border}`,
       backgroundColor: t.backgroundSecondary,
       color: t.text,
@@ -193,7 +202,7 @@ function buildStyles(t: ResolvedMeroTheme) {
       textAlign: 'center' as const,
       padding: '0.75rem',
       backgroundColor: t.backgroundSecondary,
-      borderRadius: '6px',
+      borderRadius: t.radius,
       marginBottom: '1rem',
       border: `1px solid ${t.border}`,
     },
@@ -206,7 +215,7 @@ function buildStyles(t: ResolvedMeroTheme) {
     },
     button: {
       padding: '0.75rem 2rem',
-      borderRadius: '6px',
+      borderRadius: t.radius,
       border: 'none',
       fontSize: '0.875rem',
       fontWeight: 600,
