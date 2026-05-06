@@ -41,3 +41,4 @@ example/logic/target/
 
 # pnpm
 .pnpm-store/
+storybook-static
