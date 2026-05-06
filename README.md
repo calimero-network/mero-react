@@ -267,6 +267,8 @@ The same theme is forwarded to the embedded `LoginModal` and is also exposed as 
 
 Helpers: `defaultMeroTheme` (the full default palette), `resolveMeroTheme(partial?)` (merges a partial with defaults), and `themeToCssVars(resolved)` (returns a `CSSProperties` map of `--mero-*` variables for applying to your own container) are exported for advanced use.
 
+**Browser support**: hover-state and modal tints use CSS [`color-mix()`](https://developer.mozilla.org/en-US/docs/Web/CSS/color_value/color-mix), which requires Chrome 111+, Safari 16.2+, or Firefox 113+ (all 2023). On older browsers the bundled `styles.css` falls back to the default green `rgba()` for the button hover; the modal renders without subtle tints but is otherwise fully functional.
+
 ## Enums
 
 ```tsx

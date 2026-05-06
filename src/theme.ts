@@ -78,8 +78,6 @@ export function themeToCssVars(theme: ResolvedMeroTheme): CSSProperties {
     '--mero-accent-hover': theme.primaryHover,
     '--mero-on-primary': theme.primaryText,
     '--mero-border': theme.border,
-    '--mero-input-bg': theme.backgroundSecondary,
-    '--mero-input-text': theme.text,
     '--mero-error': theme.error,
     '--mero-overlay': theme.overlay,
     '--mero-radius': theme.radius,

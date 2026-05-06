@@ -18,8 +18,6 @@
   --mero-on-primary: #0d1117;
   --mero-error: #ff6b6b;
   --mero-border: #30363d;
-  --mero-input-bg: #161b22;
-  --mero-input-text: #e6edf3;
   --mero-disabled: #555555;
   --mero-shadow: rgba(0, 0, 0, 0.5);
   --mero-overlay: rgba(0, 0, 0, 0.75);
@@ -46,8 +44,13 @@
 }
 
 .mero-connect-button:hover:not(.mero-connected):not(.mero-reconnecting) {
+  /* rgba fallback for browsers without color-mix() support
+     (Safari < 16.2, Firefox < 113, Chrome < 111). The fallback uses the
+     default green; older browsers ignore --mero-accent overrides for tints. */
+  background-color: rgba(165, 255, 17, 0.08);
   background-color: color-mix(in srgb, var(--mero-accent) 8%, transparent);
   border-color: var(--mero-accent-hover);
+  box-shadow: 0 0 0 3px rgba(165, 255, 17, 0.12);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--mero-accent) 12%, transparent);
 }
 
