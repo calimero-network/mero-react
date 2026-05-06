@@ -265,7 +265,7 @@ The same theme is forwarded to the embedded `LoginModal` and is also exposed as 
 
 `MeroTheme` keys (all optional): `primary`, `primaryHover`, `primaryText`, `background`, `backgroundSecondary`, `backgroundTertiary`, `border`, `text`, `textSecondary`, `error`, `overlay`, `radius`. Defaults: `#a5ff11` / `#8ed40d` / `#0d1117` / `#161b22` / `#1c2128` / `#30363d` / `#e6edf3` / `#8b949e` / `#ff6b6b` / `rgba(0,0,0,0.75)` / `8px`.
 
-Helpers: `defaultMeroTheme` (the full default palette) and `resolveMeroTheme(partial?)` (merges a partial with defaults) are exported for advanced use.
+Helpers: `defaultMeroTheme` (the full default palette), `resolveMeroTheme(partial?)` (merges a partial with defaults), and `themeToCssVars(resolved)` (returns a `CSSProperties` map of `--mero-*` variables for applying to your own container) are exported for advanced use.
 
 ## Enums
 
@@ -308,7 +308,7 @@ MeroProvider, useMero, MeroContext
 ConnectButton, LoginModal
 
 // Theming (mero-react)
-MeroTheme, ResolvedMeroTheme, defaultMeroTheme, resolveMeroTheme
+MeroTheme, ResolvedMeroTheme, defaultMeroTheme, resolveMeroTheme, themeToCssVars
 
 // Enums (mero-react)
 AppMode, ConnectionType

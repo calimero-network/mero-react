@@ -6,6 +6,8 @@
  * `LoginModal` to override any token.
  */
 
+import type { CSSProperties } from 'react';
+
 export interface MeroTheme {
   /** Primary accent / CTA color */
   primary?: string;
@@ -65,7 +67,7 @@ export function resolveMeroTheme(theme?: MeroTheme): ResolvedMeroTheme {
  * Build a `style` object that exposes a resolved theme as CSS variables, so
  * descendant CSS rules (e.g. those in `styles.css`) pick up the overrides.
  */
-export function themeToCssVars(theme: ResolvedMeroTheme): React.CSSProperties {
+export function themeToCssVars(theme: ResolvedMeroTheme): CSSProperties {
   const vars: Record<string, string> = {
     '--mero-bg': theme.background,
     '--mero-bg-secondary': theme.backgroundSecondary,
@@ -82,5 +84,5 @@ export function themeToCssVars(theme: ResolvedMeroTheme): React.CSSProperties {
     '--mero-overlay': theme.overlay,
     '--mero-radius': theme.radius,
   };
-  return vars as React.CSSProperties;
+  return vars as CSSProperties;
 }
