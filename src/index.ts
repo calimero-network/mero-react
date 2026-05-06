@@ -4,6 +4,11 @@
  * @packageDocumentation
  */
 
+// Component styles — bundled and injected as <style> at runtime by tsup
+// (see `injectStyle: true` in tsup.config.ts), so consumers don't need a
+// separate CSS import.
+import './components/styles.css';
+
 // Context & Provider
 export { MeroProvider, useMero, MeroContext } from './context';
 export type { MeroProviderProps } from './context';
