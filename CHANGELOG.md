@@ -1,3 +1,27 @@
+## [2.1.0](https://github.com/calimero-network/mero-react/compare/mero-react-v2.0.1...mero-react-v2.1.0) (2026-05-06)
+
+### Features
+
+* filled ConnectButton, logoOnly + label props ([ecd1105](https://github.com/calimero-network/mero-react/commit/ecd1105cf7a8edcaecce4ffb8516943224ac3440))
+* real Calimero logo + connect-button polish + theme showcase ([5291b3b](https://github.com/calimero-network/mero-react/commit/5291b3b38b43fe24651a6261b088646746a1dfe9))
+* Storybook 8 setup with rich controls + mocked context ([75995be](https://github.com/calimero-network/mero-react/commit/75995be4d731fdcf72c407b62b63da6aaa235b46))
+* update component theme ([42338f2](https://github.com/calimero-network/mero-react/commit/42338f2becd99fc81c542db25ca67de2236abebd))
+* update component theme + storybook ([ea36a1b](https://github.com/calimero-network/mero-react/commit/ea36a1bdc5045439c505e3611e96c8099f4f1053))
+* update name ([7719c6a](https://github.com/calimero-network/mero-react/commit/7719c6a89e289cc0aeb2125d51ac76088161feb9))
+
+### Bug Fixes
+
+* address PR [#17](https://github.com/calimero-network/mero-react/issues/17) fifth-round review ([97fa96b](https://github.com/calimero-network/mero-react/commit/97fa96be4ceb10a2c7e239bf1bf32cafe0c0215f))
+* address PR [#17](https://github.com/calimero-network/mero-react/issues/17) fourth-round review ([c3b470f](https://github.com/calimero-network/mero-react/commit/c3b470fb2b3ba2be7ed3cb717e3a8e380bd2a62a))
+* address PR [#17](https://github.com/calimero-network/mero-react/issues/17) review feedback on theming ([7de595c](https://github.com/calimero-network/mero-react/commit/7de595c9d69e89ae4b07fc53c33de5d7ba3ddca3))
+* address PR [#17](https://github.com/calimero-network/mero-react/issues/17) second-round review ([b8dc0c6](https://github.com/calimero-network/mero-react/commit/b8dc0c6104bfd3e816ede8c7bc02fe78da829d07))
+* address PR [#17](https://github.com/calimero-network/mero-react/issues/17) third-round review ([6004a06](https://github.com/calimero-network/mero-react/commit/6004a06100f4feba93955e3d7c0175209729af0b))
+* auto-inject component CSS so consumers don't need a CSS import ([3282efe](https://github.com/calimero-network/mero-react/commit/3282efe1865ce0522716274665234b1fbf85d967))
+* **ConnectButton:** connected state inherits theme colour ([203eab0](https://github.com/calimero-network/mero-react/commit/203eab0bd6179c12a115438e4d61181f33ecca99))
+* drop empty theme values in resolveMeroTheme ([66af71f](https://github.com/calimero-network/mero-react/commit/66af71f0239c8663941e7436acda55e966a325e9))
+* **example:** alias mero-react to source so styles never go missing ([ef0d083](https://github.com/calimero-network/mero-react/commit/ef0d083af75a7548b5d1264e3dbb9bb9980ee50e))
+* **example:** one-command dev loop + remove auth-redirect from / ([583b832](https://github.com/calimero-network/mero-react/commit/583b832a730e901e84d514dc68b9881f68a5ed83))
+
 ## [2.0.1](https://github.com/calimero-network/mero-react/compare/mero-react-v2.0.0...mero-react-v2.0.1) (2026-04-28)
 
 ### Bug Fixes
