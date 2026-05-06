@@ -116,6 +116,7 @@
 <div class="fr" style="margin-top:12px;"><div class="fp">connectionType?</div><div class="fd"><span class="ty">ConnectionType</span> | <span class="ty">CustomConnectionConfig</span>. Default: <span class="code">RemoteAndLocal</span>.</div></div>
 <div class="fr"><div class="fp">className?</div><div class="fd">CSS class applied to the button element.</div></div>
 <div class="fr"><div class="fp">style?</div><div class="fd"><span class="ty">React.CSSProperties</span> — inline style override.</div></div>
+<div class="fr"><div class="fp">theme?</div><div class="fd"><span class="ty">MeroTheme</span> — partial palette override. Forwarded to the embedded LoginModal. Defaults to the green Calimero palette when omitted. See <a href="#theming">Theming</a>.</div></div>
 <p style="margin-top:10px;">States: <em>Disconnected</em> — shows Connect button and opens LoginModal. <em>Connected</em> — shows Connected + dropdown (node URL, Dashboard link, Log out). <em>Reconnecting</em> — disabled button while SSE reconnects.</p>
 </div>
 
@@ -135,7 +136,57 @@
 <div class="fr"><div class="fp">onConnect</div><div class="fd"><strong>Required.</strong> <code>(url: string) =&gt; void</code> — called with the resolved node URL.</div></div>
 <div class="fr"><div class="fp">onClose</div><div class="fd"><strong>Required.</strong> <code>() =&gt; void</code> — called when the modal is dismissed.</div></div>
 <div class="fr"><div class="fp">connectionType</div><div class="fd"><strong>Required.</strong> <span class="ty">ConnectionType</span> | <span class="ty">CustomConnectionConfig</span> — controls which options are shown.</div></div>
+<div class="fr"><div class="fp">theme?</div><div class="fd"><span class="ty">MeroTheme</span> — partial palette override. Defaults to the green Calimero palette when omitted. See <a href="#theming">Theming</a>.</div></div>
 <p style="margin-top:10px;">Rendered via <span class="code">createPortal</span> at <span class="code">document.body</span> — unaffected by parent overflow or z-index. Uses inline styles, no external CSS dependency.</p>
+</div>
+
+<div class="card gi" id="theming">
+<h2>Theming</h2>
+<p style="margin-bottom:12px;">Both <span class="code">ConnectButton</span> and <span class="code">LoginModal</span> default to the green Calimero palette used in admin-dashboard, tauri-app, and app-registry. No theme prop is required — pass nothing and you get the default look. Provide a partial <span class="code">MeroTheme</span> to override any subset of tokens.</p>
+<div class="typedef">
+<span class="kw">interface</span> <span class="ty">MeroTheme</span> &#123;<br>
+&nbsp;&nbsp;<span class="field">primary</span>?: <span class="ty">string</span>;            <span class="comment">// CTA color — default '#a5ff11'</span><br>
+&nbsp;&nbsp;<span class="field">primaryHover</span>?: <span class="ty">string</span>;       <span class="comment">// default '#8ed40d'</span><br>
+&nbsp;&nbsp;<span class="field">primaryText</span>?: <span class="ty">string</span>;        <span class="comment">// text on top of primary — default '#0d1117'</span><br>
+&nbsp;&nbsp;<span class="field">background</span>?: <span class="ty">string</span>;         <span class="comment">// modal/button surface — default '#0d1117'</span><br>
+&nbsp;&nbsp;<span class="field">backgroundSecondary</span>?: <span class="ty">string</span>;<span class="comment">// inputs, info chips — default '#161b22'</span><br>
+&nbsp;&nbsp;<span class="field">backgroundTertiary</span>?: <span class="ty">string</span>; <span class="comment">// default '#1c2128'</span><br>
+&nbsp;&nbsp;<span class="field">border</span>?: <span class="ty">string</span>;             <span class="comment">// default '#30363d'</span><br>
+&nbsp;&nbsp;<span class="field">text</span>?: <span class="ty">string</span>;               <span class="comment">// default '#e6edf3'</span><br>
+&nbsp;&nbsp;<span class="field">textSecondary</span>?: <span class="ty">string</span>;      <span class="comment">// default '#8b949e'</span><br>
+&nbsp;&nbsp;<span class="field">error</span>?: <span class="ty">string</span>;              <span class="comment">// default '#ff6b6b'</span><br>
+&nbsp;&nbsp;<span class="field">overlay</span>?: <span class="ty">string</span>;            <span class="comment">// modal backdrop — default 'rgba(0, 0, 0, 0.75)'</span><br>
+&nbsp;&nbsp;<span class="field">radius</span>?: <span class="ty">string</span>;             <span class="comment">// default '8px'</span><br>
+&#125;
+</div>
+<p style="margin-top:14px;margin-bottom:8px;"><strong>Default usage</strong> — green Calimero palette:</p>
+<div class="typedef">
+&lt;<span class="ty">ConnectButton</span> /&gt;
+</div>
+<p style="margin-top:14px;margin-bottom:8px;"><strong>Override a few tokens</strong> — only the keys you provide are changed; the rest keep the defaults:</p>
+<div class="typedef">
+&lt;<span class="ty">ConnectButton</span><br>
+&nbsp;&nbsp;<span class="field">theme</span>=&#123;&#123;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="field">primary</span>: <span class="comment">'#ff4081'</span>,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="field">primaryHover</span>: <span class="comment">'#e91e63'</span>,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="field">primaryText</span>: <span class="comment">'#ffffff'</span>,<br>
+&nbsp;&nbsp;&#125;&#125;<br>
+/&gt;
+</div>
+<p style="margin-top:14px;margin-bottom:8px;"><strong>CSS variable override</strong> — same tokens are also exposed as CSS variables on the component root, so global stylesheets work too:</p>
+<div class="typedef">
+<span class="comment">/* anywhere in your app's CSS */</span><br>
+:root &#123;<br>
+&nbsp;&nbsp;--mero-accent: #ff4081;<br>
+&nbsp;&nbsp;--mero-accent-hover: #e91e63;<br>
+&#125;
+</div>
+<p style="margin-top:14px;margin-bottom:8px;"><strong>Helpers</strong> — exported alongside the type:</p>
+<div class="typedef">
+<span class="kw">import</span> &#123; <span class="ty">defaultMeroTheme</span>, <span class="ty">resolveMeroTheme</span> &#125; <span class="kw">from</span> <span class="comment">'@calimero-network/mero-react'</span>;<br><br>
+<span class="comment">// defaultMeroTheme: the full green palette as a frozen object</span><br>
+<span class="comment">// resolveMeroTheme(partial?): returns a fully populated ResolvedMeroTheme</span>
+</div>
 </div>
 
 </div>

@@ -1,6 +1,6 @@
 /**
  * ConnectButton - A button component for connecting to Calimero
- * 
+ *
  * Shows connection status and provides login/logout functionality.
  * Includes built-in LoginModal for node selection.
  */
@@ -10,6 +10,7 @@ import { useMero } from '../context';
 import { LoginModal } from './LoginModal';
 import type { ConnectionType, CustomConnectionConfig } from '../types';
 import { ConnectionType as ConnectionTypeEnum } from '../types';
+import { resolveMeroTheme, themeToCssVars, type MeroTheme } from '../theme';
 
 export interface ConnectButtonProps {
   /** Connection type for login modal */
@@ -18,6 +19,8 @@ export interface ConnectButtonProps {
   className?: string;
   /** Custom styles */
   style?: React.CSSProperties;
+  /** Theme overrides — accepts any subset of `MeroTheme` tokens */
+  theme?: MeroTheme;
 }
 
 /**
@@ -27,11 +30,17 @@ export function ConnectButton({
   connectionType = ConnectionTypeEnum.RemoteAndLocal,
   className,
   style,
+  theme,
 }: ConnectButtonProps) {
   const { isAuthenticated, connectToNode, logout, nodeUrl, isOnline } = useMero();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const themeVars = useMemo(
+    () => themeToCssVars(resolveMeroTheme(theme)),
+    [theme],
+  );
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -74,21 +83,30 @@ export function ConnectButton({
   // Reconnecting state
   if (isAuthenticated && !isOnline) {
     return (
-      <button
-        className={`mero-connect-button mero-reconnecting ${className || ''}`}
-        style={style}
-        disabled
+      <div
+        className="mero-connect-container"
+        style={{ ...themeVars, display: 'inline-block' }}
       >
-        <MeroLogo />
-        Reconnecting...
-      </button>
+        <button
+          className={`mero-connect-button mero-reconnecting ${className || ''}`}
+          style={style}
+          disabled
+        >
+          <MeroLogo />
+          Reconnecting...
+        </button>
+      </div>
     );
   }
 
   // Connected state
   if (isAuthenticated) {
     return (
-      <div ref={dropdownRef} className="mero-connect-container" style={{ position: 'relative', display: 'inline-block' }}>
+      <div
+        ref={dropdownRef}
+        className="mero-connect-container"
+        style={{ ...themeVars, position: 'relative', display: 'inline-block' }}
+      >
         <button
           className={`mero-connect-button mero-connected ${className || ''}`}
           style={style}
@@ -127,7 +145,10 @@ export function ConnectButton({
 
   // Disconnected state
   return (
-    <>
+    <div
+      className="mero-connect-container"
+      style={{ ...themeVars, display: 'inline-block' }}
+    >
       <button
         className={`mero-connect-button ${className || ''}`}
         style={style}
@@ -141,8 +162,9 @@ export function ConnectButton({
         onConnect={handleModalConnect}
         onClose={() => setIsModalOpen(false)}
         connectionType={typeof connectionType === 'object' ? ConnectionTypeEnum.RemoteAndLocal : connectionType}
+        theme={theme}
       />
-    </>
+    </div>
   );
 }
 

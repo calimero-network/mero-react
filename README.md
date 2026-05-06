@@ -234,6 +234,39 @@ import {
 } from '@calimero-network/mero-react';
 ```
 
+## Theming
+
+`ConnectButton` and `LoginModal` default to the green Calimero palette used in admin-dashboard, tauri-app, and app-registry. Pass nothing for the default — provide a partial `MeroTheme` to override any subset.
+
+```tsx
+import { ConnectButton } from '@calimero-network/mero-react';
+
+// Default green palette — no theme prop needed
+<ConnectButton />
+
+// Override only what you want; the rest stay default
+<ConnectButton
+  theme={{
+    primary: '#ff4081',
+    primaryHover: '#e91e63',
+    primaryText: '#ffffff',
+  }}
+/>
+```
+
+The same theme is forwarded to the embedded `LoginModal` and is also exposed as CSS variables on the component root, so a global stylesheet works too:
+
+```css
+:root {
+  --mero-accent: #ff4081;
+  --mero-accent-hover: #e91e63;
+}
+```
+
+`MeroTheme` keys (all optional): `primary`, `primaryHover`, `primaryText`, `background`, `backgroundSecondary`, `backgroundTertiary`, `border`, `text`, `textSecondary`, `error`, `overlay`, `radius`. Defaults: `#a5ff11` / `#8ed40d` / `#0d1117` / `#161b22` / `#1c2128` / `#30363d` / `#e6edf3` / `#8b949e` / `#ff6b6b` / `rgba(0,0,0,0.75)` / `8px`.
+
+Helpers: `defaultMeroTheme` (the full default palette) and `resolveMeroTheme(partial?)` (merges a partial with defaults) are exported for advanced use.
+
 ## Enums
 
 ```tsx
@@ -260,6 +293,8 @@ import type {
   ApplicationContextRecord,// { contextId, applicationId }
   ContextDiscoveryOptions, // options for useContextDiscovery
   ContextDiscoveryState,   // return type of useContextDiscovery
+  MeroTheme,               // partial theme override for ConnectButton / LoginModal
+  ResolvedMeroTheme,       // fully populated theme returned by resolveMeroTheme()
 } from '@calimero-network/mero-react';
 ```
 
@@ -271,6 +306,9 @@ MeroProvider, useMero, MeroContext
 
 // Components (mero-react)
 ConnectButton, LoginModal
+
+// Theming (mero-react)
+MeroTheme, ResolvedMeroTheme, defaultMeroTheme, resolveMeroTheme
 
 // Enums (mero-react)
 AppMode, ConnectionType
