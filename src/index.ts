@@ -4,6 +4,11 @@
  * @packageDocumentation
  */
 
+// Component styles — bundled and injected as <style> at runtime by tsup
+// (see `injectStyle: true` in tsup.config.ts), so consumers don't need a
+// separate CSS import.
+import './components/styles.css';
+
 // Context & Provider
 export { MeroProvider, useMero, MeroContext } from './context';
 export type { MeroProviderProps } from './context';
@@ -13,6 +18,18 @@ export { ConnectButton } from './components';
 export type { ConnectButtonProps } from './components';
 export { LoginModal } from './components';
 export type { LoginModalProps } from './components';
+export { CalimeroLogo } from './components';
+export type { CalimeroLogoProps } from './components';
+
+// Theme
+export {
+  MERO_CSS_VARS,
+  cssVar,
+  defaultMeroTheme,
+  resolveMeroTheme,
+  themeToCssVars,
+} from './theme';
+export type { MeroTheme, ResolvedMeroTheme } from './theme';
 
 // Hooks
 export {

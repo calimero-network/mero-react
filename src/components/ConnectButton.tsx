@@ -1,6 +1,6 @@
 /**
  * ConnectButton - A button component for connecting to Calimero
- * 
+ *
  * Shows connection status and provides login/logout functionality.
  * Includes built-in LoginModal for node selection.
  */
@@ -8,8 +8,10 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useMero } from '../context';
 import { LoginModal } from './LoginModal';
+import { CalimeroLogo } from './CalimeroLogo';
 import type { ConnectionType, CustomConnectionConfig } from '../types';
 import { ConnectionType as ConnectionTypeEnum } from '../types';
+import { resolveMeroTheme, themeToCssVars, type MeroTheme } from '../theme';
 
 export interface ConnectButtonProps {
   /** Connection type for login modal */
@@ -18,6 +20,22 @@ export interface ConnectButtonProps {
   className?: string;
   /** Custom styles */
   style?: React.CSSProperties;
+  /** Theme overrides — accepts any subset of `MeroTheme` tokens */
+  theme?: MeroTheme;
+  /**
+   * Render only the Calimero logo, no text. Produces a square 40×40 icon
+   * button. The label is still announced to screen readers via `aria-label`.
+   * Default: false.
+   */
+  logoOnly?: boolean;
+  /**
+   * Override the default labels per state. A bare string is shorthand for
+   * `{ connect: '<string>' }`. The connected and reconnecting states keep
+   * their defaults unless explicitly overridden.
+   */
+  label?:
+    | string
+    | { connect?: string; connected?: string; reconnecting?: string };
 }
 
 /**
@@ -27,11 +45,26 @@ export function ConnectButton({
   connectionType = ConnectionTypeEnum.RemoteAndLocal,
   className,
   style,
+  theme,
+  logoOnly = false,
+  label,
 }: ConnectButtonProps) {
   const { isAuthenticated, connectToNode, logout, nodeUrl, isOnline } = useMero();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Resolve once. Inline CSS variables are only emitted when a theme prop is
+  // provided — otherwise we leave the cascade alone so global `:root { --mero-* }`
+  // overrides take effect.
+  const resolvedTheme = useMemo(
+    () => (theme ? resolveMeroTheme(theme) : null),
+    [theme],
+  );
+  const themeVars = useMemo(
+    () => (resolvedTheme ? themeToCssVars(resolvedTheme) : undefined),
+    [resolvedTheme],
+  );
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -51,6 +84,17 @@ export function ConnectButton({
     if (!isAuthenticated || !nodeUrl) return '#';
     return new URL('admin-dashboard/', nodeUrl).toString();
   }, [isAuthenticated, nodeUrl]);
+
+  const labels = useMemo(() => {
+    const overrides = typeof label === 'string' ? { connect: label } : label;
+    return {
+      connect: overrides?.connect ?? 'Connect',
+      connected: overrides?.connected ?? 'Connected',
+      reconnecting: overrides?.reconnecting ?? 'Reconnecting...',
+    };
+  }, [label]);
+
+  const buttonClassName = logoOnly ? 'mero-logo-only' : '';
 
   const handleConnect = () => {
     // If Custom type with URL, connect directly
@@ -74,28 +118,41 @@ export function ConnectButton({
   // Reconnecting state
   if (isAuthenticated && !isOnline) {
     return (
-      <button
-        className={`mero-connect-button mero-reconnecting ${className || ''}`}
-        style={style}
-        disabled
+      <div
+        className="mero-connect-container"
+        style={{ ...themeVars, display: 'inline-block' }}
       >
-        <MeroLogo />
-        Reconnecting...
-      </button>
+        <button
+          className={['mero-connect-button', 'mero-reconnecting', buttonClassName, className].filter(Boolean).join(' ')}
+          style={style}
+          disabled
+          aria-label={labels.reconnecting}
+          title={logoOnly ? labels.reconnecting : undefined}
+        >
+          <CalimeroLogo size={18} className="mero-logo" />
+          {!logoOnly && labels.reconnecting}
+        </button>
+      </div>
     );
   }
 
   // Connected state
   if (isAuthenticated) {
     return (
-      <div ref={dropdownRef} className="mero-connect-container" style={{ position: 'relative', display: 'inline-block' }}>
+      <div
+        ref={dropdownRef}
+        className="mero-connect-container"
+        style={{ ...themeVars, position: 'relative', display: 'inline-block' }}
+      >
         <button
-          className={`mero-connect-button mero-connected ${className || ''}`}
+          className={['mero-connect-button', 'mero-connected', buttonClassName, className].filter(Boolean).join(' ')}
           style={style}
           onClick={() => setIsDropdownOpen((prev) => !prev)}
+          aria-label={labels.connected}
+          title={logoOnly ? labels.connected : undefined}
         >
-          <MeroLogo />
-          Connected
+          <CalimeroLogo size={18} className="mero-logo" />
+          {!logoOnly && labels.connected}
         </button>
         {isDropdownOpen && (
           <div className="mero-dropdown">
@@ -127,40 +184,28 @@ export function ConnectButton({
 
   // Disconnected state
   return (
-    <>
+    <div
+      className="mero-connect-container"
+      style={{ ...themeVars, display: 'inline-block' }}
+    >
       <button
-        className={`mero-connect-button ${className || ''}`}
+        className={['mero-connect-button', buttonClassName, className].filter(Boolean).join(' ')}
         style={style}
         onClick={handleConnect}
+        aria-label={labels.connect}
+        title={logoOnly ? labels.connect : undefined}
       >
-        <MeroLogo />
-        Connect
+        <CalimeroLogo size={18} className="mero-logo" />
+        {!logoOnly && labels.connect}
       </button>
       <LoginModal
         isOpen={isModalOpen}
         onConnect={handleModalConnect}
         onClose={() => setIsModalOpen(false)}
         connectionType={typeof connectionType === 'object' ? ConnectionTypeEnum.RemoteAndLocal : connectionType}
+        theme={resolvedTheme ?? theme}
       />
-    </>
-  );
-}
-
-/**
- * Simple Calimero logo component
- */
-function MeroLogo() {
-  return (
-    <svg
-      className="mero-logo"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z" />
-    </svg>
+    </div>
   );
 }
 

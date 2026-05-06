@@ -12,8 +12,8 @@ importers:
         specifier: ^0.0.4
         version: 0.0.4(react@19.2.0)
       '@calimero-network/mero-js':
-        specifier: file:../../..
-        version: calimero@file:../../..
+        specifier: ^1.4.1
+        version: 1.4.1
       '@calimero-network/mero-react':
         specifier: file:../..
         version: file:../..(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
@@ -782,8 +782,12 @@ packages:
     peerDependencies:
       react: ^18.3.1
 
-  '@calimero-network/mero-js@file:../../../mero-js':
-    resolution: {directory: ../../../mero-js, type: directory}
+  '@calimero-network/mero-js@1.4.1':
+    resolution: {integrity: sha512-dP3cQa++f6GNEUrzUlMcrerIFbBNQPokbOTAs0EwUI13RCOFTuO37LxeGbLemVdcTqoEhKSBwn/rJkpP083x9Q==}
+    engines: {node: '>=18.0.0'}
+
+  '@calimero-network/mero-js@2.0.0':
+    resolution: {integrity: sha512-XcwaMa6nli6xqOuK29UKiIPHy0I81woqEb0ugd/uaEBARsoBsM9+q6MCho7oUs5EleC4J/woXkJJun3dZbsnWw==}
     engines: {node: '>=18.0.0'}
 
   '@calimero-network/mero-react@file:../..':
@@ -1729,9 +1733,6 @@ packages:
 
   builtin-status-codes@3.0.0:
     resolution: {integrity: sha512-HpGFw18DgFWlncDfjTa2rcQ4W88O1mC8e8yZ2AvQY5KDaktSTwo+KRf6nHK6FRI5FyRyb/5T6+TSxfP7QyGsmQ==}
-
-  calimero@file:../../..:
-    resolution: {directory: ../../.., type: directory}
 
   call-bind-apply-helpers@1.0.2:
     resolution: {integrity: sha512-Sp1ablJ0ivDkSzjcaJdxEunN5/XvksFJ2sMBFfq6x0ryhQV/2b/KwFe21cMpmHtPOSij8K99/wSfoEuTObmuMQ==}
@@ -4318,11 +4319,13 @@ snapshots:
     dependencies:
       react: 19.2.0
 
-  '@calimero-network/mero-js@file:../../../mero-js': {}
+  '@calimero-network/mero-js@1.4.1': {}
+
+  '@calimero-network/mero-js@2.0.0': {}
 
   '@calimero-network/mero-react@file:../..(react-dom@19.2.0(react@19.2.0))(react@19.2.0)':
     dependencies:
-      '@calimero-network/mero-js': file:../../../mero-js
+      '@calimero-network/mero-js': 2.0.0
       react: 19.2.0
       react-dom: 19.2.0(react@19.2.0)
 
@@ -5326,8 +5329,6 @@ snapshots:
       ieee754: 1.2.1
 
   builtin-status-codes@3.0.0: {}
-
-  calimero@file:../../..: {}
 
   call-bind-apply-helpers@1.0.2:
     dependencies:

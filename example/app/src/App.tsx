@@ -9,7 +9,7 @@ import Authenticate from './pages/login/Authenticate';
 export default function App() {
   return (
     <MeroProvider
-      packageName="com.calimero.kvstore"
+      packageName="com.calimero.kv-store"
       registryUrl="https://apps.calimero.network"
       mode={AppMode.SingleContext}
     >

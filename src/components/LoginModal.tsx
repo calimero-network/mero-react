@@ -1,13 +1,21 @@
 /**
  * LoginModal - Modal for connecting to a Calimero node
- * 
+ *
  * Allows users to select local or remote node connection.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useMemo, useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { CalimeroLogo } from './CalimeroLogo';
 import type { ConnectionType, CustomConnectionConfig } from '../types';
 import { ConnectionType as ConnectionTypeEnum } from '../types';
+import {
+  cssVar,
+  resolveMeroTheme,
+  themeToCssVars,
+  type MeroTheme,
+  type ResolvedMeroTheme,
+} from '../theme';
 
 export interface LoginModalProps {
   /** Callback when user connects */
@@ -18,6 +26,8 @@ export interface LoginModalProps {
   connectionType: ConnectionType | CustomConnectionConfig;
   /** Whether the modal is open */
   isOpen: boolean;
+  /** Theme overrides — accepts any subset of `MeroTheme` tokens */
+  theme?: MeroTheme;
 }
 
 /**
@@ -67,151 +77,190 @@ function isValidUrl(urlString: string): boolean {
   }
 }
 
-// Inline styles for the modal
-const styles = {
-  overlay: {
-    position: 'fixed' as const,
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 10000,
-    padding: '1rem',
-  },
-  content: {
-    backgroundColor: '#1f2937',
-    borderRadius: '12px',
-    padding: '2rem',
-    maxWidth: '400px',
-    width: '100%',
-    position: 'relative' as const,
-    border: '1px solid #374151',
-    boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
-  },
-  closeButton: {
-    position: 'absolute' as const,
-    top: '1rem',
-    right: '1rem',
-    background: 'none',
-    border: 'none',
-    fontSize: '1.5rem',
-    color: '#9ca3af',
-    cursor: 'pointer',
-    padding: '0.25rem',
-    lineHeight: 1,
-  },
-  header: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    alignItems: 'center',
-    gap: '0.75rem',
-    marginBottom: '1.5rem',
-  },
-  title: {
-    fontSize: '1.25rem',
-    fontWeight: 600,
-    color: '#f3f4f6',
-    margin: 0,
-  },
-  info: {
-    color: '#9ca3af',
-    textAlign: 'center' as const,
-    marginBottom: '1.5rem',
-    fontSize: '0.875rem',
-  },
-  error: {
-    color: '#ef4444',
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-    border: '1px solid rgba(239, 68, 68, 0.3)',
-    borderRadius: '6px',
-    padding: '0.75rem',
-    marginBottom: '1rem',
-    fontSize: '0.875rem',
-    textAlign: 'center' as const,
-  },
-  radioGroup: {
-    display: 'flex',
-    gap: '1rem',
-    marginBottom: '1rem',
-    justifyContent: 'center',
-  },
-  radioLabel: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.5rem',
-    color: '#e5e7eb',
-    cursor: 'pointer',
-    padding: '0.5rem 1rem',
-    borderRadius: '6px',
-    border: '1px solid #374151',
-    backgroundColor: '#111827',
-    transition: 'all 0.2s',
-  },
-  radioLabelActive: {
-    borderColor: '#3b82f6',
-    backgroundColor: 'rgba(59, 130, 246, 0.1)',
-  },
-  input: {
-    width: '100%',
-    padding: '0.75rem 1rem',
-    borderRadius: '6px',
-    border: '1px solid #374151',
-    backgroundColor: '#111827',
-    color: '#f3f4f6',
-    fontSize: '0.875rem',
-    outline: 'none',
-    marginBottom: '1rem',
-    boxSizing: 'border-box' as const,
-  },
-  localInfo: {
-    color: '#9ca3af',
-    fontSize: '0.875rem',
-    textAlign: 'center' as const,
-    padding: '0.75rem',
-    backgroundColor: '#111827',
-    borderRadius: '6px',
-    marginBottom: '1rem',
-  },
-  buttonGroup: {
-    display: 'flex',
-    justifyContent: 'center',
-  },
-  button: {
-    padding: '0.75rem 2rem',
-    borderRadius: '6px',
-    border: 'none',
-    fontSize: '0.875rem',
-    fontWeight: 600,
-    cursor: 'pointer',
-    backgroundColor: '#3b82f6',
-    color: 'white',
-    transition: 'all 0.2s',
-  },
-  buttonDisabled: {
-    opacity: 0.5,
-    cursor: 'not-allowed',
-  },
-  loading: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    alignItems: 'center',
-    gap: '1rem',
-    padding: '2rem',
-    color: '#9ca3af',
-  },
-  spinner: {
-    width: '2rem',
-    height: '2rem',
-    border: '3px solid #374151',
-    borderTopColor: '#3b82f6',
-    borderRadius: '50%',
-    animation: 'spin 1s linear infinite',
-  },
-};
+/**
+ * Mix a color with transparent using CSS `color-mix`. Works for any valid CSS
+ * color value (hex of any length, rgb(), hsl(), named colors, var(...)) — not
+ * just 6-digit hex.
+ */
+function tint(color: string, percent: number): string {
+  return `color-mix(in srgb, ${color} ${percent}%, transparent)`;
+}
+
+/**
+ * Build the inline-style map from a resolved theme. Each value is emitted as
+ * `var(--mero-*, fallback)` so a global `:root { --mero-* }` rule reaches the
+ * portal-rendered modal; the fallback ensures the modal still renders correctly
+ * if the consumer hasn't imported `styles.css`.
+ */
+function buildStyles(t: ResolvedMeroTheme) {
+  const bg = cssVar(t, 'background');
+  const bgSecondary = cssVar(t, 'backgroundSecondary');
+  const text = cssVar(t, 'text');
+  const textSecondary = cssVar(t, 'textSecondary');
+  const accent = cssVar(t, 'primary');
+  const onPrimary = cssVar(t, 'primaryText');
+  const border = cssVar(t, 'border');
+  const error = cssVar(t, 'error');
+  const overlay = cssVar(t, 'overlay');
+  const radius = cssVar(t, 'radius');
+
+  const errorBg = tint(error, 10);
+  const errorBorder = tint(error, 30);
+  const accentGlow = tint(accent, 15);
+
+  return {
+    overlay: {
+      position: 'fixed' as const,
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: overlay,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 10000,
+      padding: '1rem',
+      animation: 'meroFadeIn 0.2s ease-out',
+    },
+    content: {
+      backgroundColor: bg,
+      borderRadius: radius,
+      padding: '2rem',
+      maxWidth: '420px',
+      width: '100%',
+      position: 'relative' as const,
+      border: `1px solid ${border}`,
+      boxShadow: `0 25px 50px -12px rgba(0, 0, 0, 0.6), 0 0 0 1px ${accentGlow}`,
+      animation: 'meroSlideIn 0.25s ease-out',
+      color: text,
+    },
+    closeButton: {
+      position: 'absolute' as const,
+      top: '0.75rem',
+      right: '0.75rem',
+      background: 'none',
+      border: 'none',
+      fontSize: '1.5rem',
+      color: textSecondary,
+      cursor: 'pointer',
+      padding: '0.25rem',
+      lineHeight: 1,
+    },
+    header: {
+      display: 'flex',
+      flexDirection: 'column' as const,
+      alignItems: 'center',
+      gap: '0.75rem',
+      marginBottom: '1.5rem',
+    },
+    title: {
+      fontSize: '1.25rem',
+      fontWeight: 600,
+      color: text,
+      margin: 0,
+    },
+    info: {
+      color: textSecondary,
+      textAlign: 'center' as const,
+      marginBottom: '1.5rem',
+      fontSize: '0.875rem',
+    },
+    error: {
+      color: error,
+      backgroundColor: errorBg,
+      border: `1px solid ${errorBorder}`,
+      borderRadius: radius,
+      padding: '0.75rem',
+      marginBottom: '1rem',
+      fontSize: '0.875rem',
+      textAlign: 'center' as const,
+    },
+    radioGroup: {
+      display: 'flex',
+      gap: '0.75rem',
+      marginBottom: '1rem',
+      justifyContent: 'center',
+    },
+    radioLabel: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '0.5rem',
+      color: text,
+      cursor: 'pointer',
+      padding: '0.5rem 1rem',
+      borderRadius: radius,
+      border: `1px solid ${border}`,
+      backgroundColor: bgSecondary,
+      transition: 'all 0.15s ease',
+    },
+    radioLabelActive: {
+      borderColor: accent,
+      backgroundColor: accentGlow,
+      color: text,
+    },
+    input: {
+      width: '100%',
+      padding: '0.75rem 1rem',
+      borderRadius: radius,
+      border: `1px solid ${border}`,
+      backgroundColor: bgSecondary,
+      color: text,
+      fontSize: '0.875rem',
+      outline: 'none',
+      marginBottom: '1rem',
+      boxSizing: 'border-box' as const,
+    },
+    localInfo: {
+      color: textSecondary,
+      fontSize: '0.875rem',
+      textAlign: 'center' as const,
+      padding: '0.75rem',
+      backgroundColor: bgSecondary,
+      borderRadius: radius,
+      marginBottom: '1rem',
+      border: `1px solid ${border}`,
+    },
+    localInfoCode: {
+      color: accent,
+    },
+    buttonGroup: {
+      display: 'flex',
+      justifyContent: 'center',
+    },
+    button: {
+      padding: '0.75rem 2rem',
+      borderRadius: radius,
+      border: 'none',
+      fontSize: '0.875rem',
+      fontWeight: 600,
+      cursor: 'pointer',
+      backgroundColor: accent,
+      color: onPrimary,
+      transition: 'all 0.15s ease',
+    },
+    buttonDisabled: {
+      opacity: 0.5,
+      cursor: 'not-allowed',
+    },
+    loading: {
+      display: 'flex',
+      flexDirection: 'column' as const,
+      alignItems: 'center',
+      gap: '1rem',
+      padding: '2rem',
+      color: textSecondary,
+    },
+    spinner: {
+      width: '2rem',
+      height: '2rem',
+      border: `3px solid ${border}`,
+      borderTopColor: accent,
+      borderRadius: '50%',
+      animation: 'meroSpin 1s linear infinite',
+    },
+  };
+}
 
 /**
  * LoginModal - Connection modal component
@@ -221,12 +270,24 @@ export function LoginModal({
   onClose,
   connectionType,
   isOpen,
+  theme,
 }: LoginModalProps) {
   const [nodeType, setNodeType] = useState<'local' | 'remote'>('local');
   const [nodeUrl, setNodeUrl] = useState<string>('');
   const [isValid, setIsValid] = useState<boolean>(true);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+
+  const resolved = useMemo(() => resolveMeroTheme(theme), [theme]);
+  const styles = useMemo(() => buildStyles(resolved), [resolved]);
+  // Only emit inline `--mero-*` variables when a `theme` prop was actually
+  // provided. Without a prop, we let global `:root { --mero-* }` rules cascade
+  // through to the portal-rendered modal (with `var()` fallbacks in buildStyles
+  // covering the case where no global rules are loaded).
+  const themeVars = useMemo(
+    () => (theme ? themeToCssVars(resolved) : undefined),
+    [theme, resolved],
+  );
 
   // Determine what to show
   const shouldShowLocal =
@@ -273,7 +334,6 @@ export function LoginModal({
       nodeType === 'local' ? 'http://node1.127.0.0.1.nip.io' : nodeUrl;
 
     try {
-      // Test connection
       const response = await fetch(
         new URL('admin-api/is-authed', baseUrl).toString()
       );
@@ -298,20 +358,19 @@ export function LoginModal({
 
   const modalContent = (
     <>
-      {/* Inject keyframes for spinner */}
       <style>{`
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
+        @keyframes meroSpin { to { transform: rotate(360deg); } }
+        @keyframes meroFadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes meroSlideIn { from { transform: translateY(-12px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
       `}</style>
-      <div style={styles.overlay} onClick={onClose}>
+      <div style={{ ...themeVars, ...styles.overlay }} onClick={onClose}>
         <div style={styles.content} onClick={(e) => e.stopPropagation()}>
           <button style={styles.closeButton} onClick={onClose}>
             &times;
           </button>
 
           <div style={styles.header}>
-            <MeroLogo />
+            <CalimeroLogo size={44} color={cssVar(resolved, 'primary')} />
             <h1 style={styles.title}>Connect to Calimero</h1>
           </div>
 
@@ -348,7 +407,7 @@ export function LoginModal({
                       onChange={() => setNodeType('local')}
                       style={{ display: 'none' }}
                     />
-                    🏠 Local
+                    Local
                   </label>
                   <label
                     style={{
@@ -364,7 +423,7 @@ export function LoginModal({
                       onChange={() => setNodeType('remote')}
                       style={{ display: 'none' }}
                     />
-                    🌐 Remote
+                    Remote
                   </label>
                 </div>
               )}
@@ -386,7 +445,7 @@ export function LoginModal({
                 ) : shouldShowLocal ? (
                   <p style={styles.localInfo}>
                     Using default local node: <br />
-                    <code style={{ color: '#60a5fa' }}>http://node1.127.0.0.1.nip.io</code>
+                    <code style={styles.localInfoCode}>http://node1.127.0.0.1.nip.io</code>
                   </p>
                 ) : null}
               </div>
@@ -410,25 +469,7 @@ export function LoginModal({
     </>
   );
 
-  // Use portal to render at document root, outside any container styling
   return createPortal(modalContent, document.body);
-}
-
-/**
- * Simple Calimero logo
- */
-function MeroLogo() {
-  return (
-    <svg
-      width="40"
-      height="40"
-      viewBox="0 0 24 24"
-      fill="#3b82f6"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z" />
-    </svg>
-  );
 }
 
 export default LoginModal;
