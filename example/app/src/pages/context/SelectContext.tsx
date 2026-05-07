@@ -60,10 +60,21 @@ export default function SelectContext() {
   const { namespaces, loading: namespacesLoading } =
     useNamespacesForApplication(applicationId);
 
-  const { createNamespace, loading: creatingNamespace } = useCreateNamespace();
-  const { createGroupInNamespace, loading: creatingGroup } =
-    useCreateGroupInNamespace();
-  const { createContext, loading: creatingContext } = useCreateContext();
+  const {
+    createNamespace,
+    loading: creatingNamespace,
+    error: namespaceError,
+  } = useCreateNamespace();
+  const {
+    createGroupInNamespace,
+    loading: creatingGroup,
+    error: groupError,
+  } = useCreateGroupInNamespace();
+  const {
+    createContext,
+    loading: creatingContext,
+    error: contextError,
+  } = useCreateContext();
 
   const [tab, setTab] = useState<'new' | 'existing'>('new');
 
@@ -145,12 +156,14 @@ export default function SelectContext() {
         upgradePolicy: UPGRADE_POLICY,
         ...(namespaceAlias && { alias: namespaceAlias }),
       });
-      if (!createdNs) throw new Error('Namespace creation failed');
+      if (!createdNs) {
+        throw namespaceError ?? new Error('Namespace creation failed');
+      }
 
       // Group request body defaults to {} — root group inside a fresh
       // namespace doesn't need its own alias.
       const group = await createGroupInNamespace(createdNs.namespaceId, {});
-      if (!group) throw new Error('Group creation failed');
+      if (!group) throw groupError ?? new Error('Group creation failed');
 
       const ctx = await createContext({
         applicationId,
@@ -158,7 +171,7 @@ export default function SelectContext() {
         initializationParams: EMPTY_INIT_PARAMS,
         ...(newCtxAlias && { alias: newCtxAlias }),
       });
-      if (!ctx) throw new Error('Context creation failed');
+      if (!ctx) throw contextError ?? new Error('Context creation failed');
 
       finalize(ctx.contextId);
     } catch (e) {
@@ -166,9 +179,16 @@ export default function SelectContext() {
       // Tell the user where the partial state landed so they can recover
       // via the "Existing namespace" tab instead of creating duplicates.
       const recovery = createdNs
-        ? ' Namespace was already created — switch to the "Existing namespace" tab to reuse it.'
+        ? ' Namespace was created — switched to "Existing namespace" tab so you can reuse it.'
         : '';
       show({ title: msg + recovery, variant: 'error' });
+      // Auto-switch to the existing tab and pre-select the orphaned
+      // namespace so the user can retry the group/context steps without
+      // creating another namespace.
+      if (createdNs) {
+        setSelectedNamespace(createdNs.namespaceId);
+        setTab('existing');
+      }
     } finally {
       submittingRef.current = false;
     }
@@ -192,7 +212,7 @@ export default function SelectContext() {
         selectedNamespace,
         groupAlias ? { alias: groupAlias } : {},
       );
-      if (!group) throw new Error('Group creation failed');
+      if (!group) throw groupError ?? new Error('Group creation failed');
 
       const ctx = await createContext({
         applicationId,
@@ -200,7 +220,7 @@ export default function SelectContext() {
         initializationParams: EMPTY_INIT_PARAMS,
         ...(groupCtxAlias && { alias: groupCtxAlias }),
       });
-      if (!ctx) throw new Error('Context creation failed');
+      if (!ctx) throw contextError ?? new Error('Context creation failed');
 
       finalize(ctx.contextId);
     } catch (e) {

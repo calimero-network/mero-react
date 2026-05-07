@@ -25,24 +25,19 @@ export async function createKvClient(
   mero: MeroJs,
   targetContextId: string,
 ): Promise<{ client: AbiClient; context: AppContext }> {
-  // Fetch contexts using mero-js admin API (v2 — flat methods on `admin`)
-  const contextsResponse = await mero.admin.getContexts();
-  const contexts = contextsResponse.contexts;
-
-  if (!contexts || contexts.length === 0) {
-    throw new Error('No contexts available. You may need to create a context first.');
-  }
-
-  const targetContext = contexts.find((c) => c.id === targetContextId);
-  if (!targetContext) {
+  // Fetch the target context directly by ID — avoids paging through the
+  // full `getContexts()` list when the user has many contexts.
+  let targetContext;
+  try {
+    targetContext = await mero.admin.getContext(targetContextId);
+  } catch (err) {
     throw new Error(
-      `Selected context ${targetContextId} not found on this node. ` +
-        'It may have been deleted — please pick another from /select-context.',
+      `Selected context ${targetContextId} could not be loaded — it may ` +
+        'have been deleted. Please pick another from /select-context. ' +
+        `(${err instanceof Error ? err.message : String(err)})`,
     );
   }
 
-  // `find` already guarantees `targetContext.id === targetContextId`, so we
-  // only need to defend against a missing `applicationId` on the response.
   const { id: contextId, applicationId } = targetContext;
   if (!applicationId) {
     throw new Error(
