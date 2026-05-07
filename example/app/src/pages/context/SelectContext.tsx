@@ -61,8 +61,11 @@ export default function SelectContext() {
   }, [isAuthenticated, contextId, navigate]);
 
   const { contexts, loading: contextsLoading } = useContexts(applicationId);
-  const { namespaces, loading: namespacesLoading } =
-    useNamespacesForApplication(applicationId);
+  const {
+    namespaces,
+    loading: namespacesLoading,
+    refetch: refetchNamespaces,
+  } = useNamespacesForApplication(applicationId);
 
   // Single shared `creating` flag — we call mero.admin.* directly rather
   // than via the useCreate* hooks because those swallow the underlying
@@ -125,7 +128,7 @@ export default function SelectContext() {
 
   const finalize = (chosenContextId: string) => {
     setContextId(chosenContextId);
-    show({ title: 'Context ready', variant: 'success' });
+    showRef.current({ title: 'Context ready', variant: 'success' });
     // MeroProvider reads contextId from storage on mount, so a hard reload is
     // the simplest way to propagate the new selection. (A live setter on
     // MeroProvider would be cleaner, but is out of scope for the example.)
@@ -137,13 +140,15 @@ export default function SelectContext() {
   // no rollback is performed. The user can recover by switching to the
   // "Existing namespace" tab and reusing what was created.
   const createInNewNamespace = async () => {
-    if (submittingRef.current || !mero) return;
-    submittingRef.current = true;
+    // Bail before latching the ref so an early no-op (mero/applicationId
+    // not ready yet) doesn't leave the guard stuck in the truthy state.
+    if (submittingRef.current) return;
+    if (!mero) return;
     if (!applicationId) {
       show({ title: 'No applicationId yet', variant: 'error' });
-      submittingRef.current = false;
       return;
     }
+    submittingRef.current = true;
     setCreating(true);
     let createdNs: { namespaceId: string } | null = null;
     try {
@@ -177,10 +182,16 @@ export default function SelectContext() {
         ? ' Namespace was created — switched to "Existing namespace" tab so you can reuse it.'
         : '';
       show({ title: msg + recovery, variant: 'error' });
-      // Auto-switch to the existing tab and pre-select the orphaned
-      // namespace so the user can retry the group/context steps without
-      // creating another namespace.
       if (createdNs) {
+        // Refresh the namespaces list FIRST so the sync effect sees the
+        // freshly-created namespace and doesn't immediately reset the
+        // selection (and toast "previously selected was removed") when
+        // we set selectedNamespace below.
+        try {
+          await refetchNamespaces();
+        } catch {
+          // Best-effort — recovery still works once namespaces refresh.
+        }
         setSelectedNamespace(createdNs.namespaceId);
         setTab('existing');
       }
@@ -191,18 +202,17 @@ export default function SelectContext() {
   };
 
   const createInExistingNamespace = async () => {
-    if (submittingRef.current || !mero) return;
-    submittingRef.current = true;
+    if (submittingRef.current) return;
+    if (!mero) return;
     if (!applicationId) {
       show({ title: 'No applicationId yet', variant: 'error' });
-      submittingRef.current = false;
       return;
     }
     if (!selectedNamespace) {
       show({ title: 'Pick a namespace first', variant: 'error' });
-      submittingRef.current = false;
       return;
     }
+    submittingRef.current = true;
     setCreating(true);
     try {
       const group = await mero.admin.createGroupInNamespace(
