@@ -1,3 +1,22 @@
+## [2.2.0](https://github.com/calimero-network/mero-react/compare/mero-react-v2.1.0...mero-react-v2.2.0) (2026-05-07)
+
+### Features
+
+* deprecate single context + update example ([ed9fe33](https://github.com/calimero-network/mero-react/commit/ed9fe33f665857ea004940b0cca316b794fd853e))
+
+### Bug Fixes
+
+* address PR [#19](https://github.com/calimero-network/mero-react/issues/19) eighth-round review ([d554f77](https://github.com/calimero-network/mero-react/commit/d554f773fee2dd977125828645beaacd251dd5ed))
+* address PR [#19](https://github.com/calimero-network/mero-react/issues/19) fifth-round review ([edc1ab7](https://github.com/calimero-network/mero-react/commit/edc1ab77f25b9e982acf1ec85fdf2c18a700717b))
+* address PR [#19](https://github.com/calimero-network/mero-react/issues/19) follow-up review ([3eac70e](https://github.com/calimero-network/mero-react/commit/3eac70e2f8cf207903d96eecc9a9df507b4b0cd3))
+* address PR [#19](https://github.com/calimero-network/mero-react/issues/19) fourth-round review ([083a9e2](https://github.com/calimero-network/mero-react/commit/083a9e2bc0ba5cee7637af444d29e8aa96201d9b))
+* address PR [#19](https://github.com/calimero-network/mero-react/issues/19) ninth-round review ([980c2c3](https://github.com/calimero-network/mero-react/commit/980c2c374411669e46e62743e5fbdc35c4a0446e))
+* address PR [#19](https://github.com/calimero-network/mero-react/issues/19) review ([597716b](https://github.com/calimero-network/mero-react/commit/597716b9fff55610d4c1d1e51e83d3e09ed63e17))
+* address PR [#19](https://github.com/calimero-network/mero-react/issues/19) seventh-round review ([e621d2b](https://github.com/calimero-network/mero-react/commit/e621d2b29af5bd09465eb9b19e72819b9a8dfd23))
+* address PR [#19](https://github.com/calimero-network/mero-react/issues/19) sixth-round review ([19d8e9c](https://github.com/calimero-network/mero-react/commit/19d8e9ce9aaf1d5133f0b5fb073d4cffacd1dab9))
+* address PR [#19](https://github.com/calimero-network/mero-react/issues/19) tenth-round review ([c07fdfc](https://github.com/calimero-network/mero-react/commit/c07fdfc718caf2f48f375161d7922bef48633443))
+* address PR [#19](https://github.com/calimero-network/mero-react/issues/19) third-round review ([e9cd54b](https://github.com/calimero-network/mero-react/commit/e9cd54b9535063f8346b33a4d2590725c85a4ef2))
+
 ## [2.1.0](https://github.com/calimero-network/mero-react/compare/mero-react-v2.0.1...mero-react-v2.1.0) (2026-05-06)
 
 ### Features
