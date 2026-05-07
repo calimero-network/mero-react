@@ -17,9 +17,12 @@ export enum AppMode {
    * context selection itself.
    *
    * Migration: see `example/app/src/pages/context/SelectContext.tsx` for a
-   * reference implementation that uses `useContexts`, `useCreateNamespace`,
-   * `useCreateGroupInNamespace`, and `useCreateContext` to let users pick or
-   * create a context post-login.
+   * reference implementation. It uses `useContexts` /
+   * `useNamespacesForApplication` for listing, then calls
+   * `mero.admin.createNamespace` / `createGroupInNamespace` /
+   * `createContext` directly (rather than the `useCreate*` hooks) so the
+   * underlying server error surfaces to the user instead of being
+   * swallowed by `useAsyncMutation`.
    */
   SingleContext = 'single-context',
   /** Multi-context: user can manage multiple contexts */

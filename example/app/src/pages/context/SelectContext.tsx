@@ -129,9 +129,10 @@ export default function SelectContext() {
   const finalize = (chosenContextId: string) => {
     setContextId(chosenContextId);
     showRef.current({ title: 'Context ready', variant: 'success' });
-    // MeroProvider reads contextId from storage on mount, so a hard reload is
-    // the simplest way to propagate the new selection. (A live setter on
-    // MeroProvider would be cleaner, but is out of scope for the example.)
+    // TODO(mero-react): expose a live `setContextId` on MeroProvider so we
+    // can propagate the new selection without a full reload. Tracked
+    // alongside the broader provider-reactivity work; until then a hard
+    // reload is the simplest way to make the provider re-read storage.
     window.location.replace('/home');
   };
 
@@ -145,7 +146,7 @@ export default function SelectContext() {
     if (submittingRef.current) return;
     if (!mero) return;
     if (!applicationId) {
-      show({ title: 'No applicationId yet', variant: 'error' });
+      showRef.current({ title: 'No applicationId yet', variant: 'error' });
       return;
     }
     submittingRef.current = true;
@@ -181,7 +182,7 @@ export default function SelectContext() {
       const recovery = createdNs
         ? ' Namespace was created — switched to "Existing namespace" tab so you can reuse it.'
         : '';
-      show({ title: msg + recovery, variant: 'error' });
+      showRef.current({ title: msg + recovery, variant: 'error' });
       if (createdNs) {
         // Refresh the namespaces list FIRST so the sync effect sees the
         // freshly-created namespace and doesn't immediately reset the
@@ -205,11 +206,11 @@ export default function SelectContext() {
     if (submittingRef.current) return;
     if (!mero) return;
     if (!applicationId) {
-      show({ title: 'No applicationId yet', variant: 'error' });
+      showRef.current({ title: 'No applicationId yet', variant: 'error' });
       return;
     }
     if (!selectedNamespace) {
-      show({ title: 'Pick a namespace first', variant: 'error' });
+      showRef.current({ title: 'Pick a namespace first', variant: 'error' });
       return;
     }
     submittingRef.current = true;
@@ -230,7 +231,7 @@ export default function SelectContext() {
       finalize(ctx.contextId);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Failed to create context';
-      show({ title: msg, variant: 'error' });
+      showRef.current({ title: msg, variant: 'error' });
     } finally {
       submittingRef.current = false;
       setCreating(false);

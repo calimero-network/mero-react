@@ -41,6 +41,11 @@ export async function createKvClient(
   }
 
   const { id: contextId, applicationId } = targetContext;
+  if (!contextId) {
+    throw new Error(
+      'Context missing id — unexpected server response format',
+    );
+  }
   if (!applicationId) {
     throw new Error(
       'Context missing applicationId — unexpected server response format',
