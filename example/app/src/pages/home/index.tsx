@@ -55,13 +55,12 @@ export default function HomePage() {
 
   // Create API client when mero is available and authenticated
   useEffect(() => {
-    if (!mero || !isAuthenticated) return;
+    if (!mero || !isAuthenticated || !contextId) return;
     if (initializingRef.current) return; // Prevent double-init in Strict Mode
     initializingRef.current = true;
 
     const initializeApi = async () => {
       try {
-        // Pass the contextId from auth flow to use the correct context
         const { client, context } = await createKvClient(mero, contextId);
         setApi(client);
         setCurrentContext(context);

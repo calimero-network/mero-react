@@ -15,17 +15,18 @@ export function isOk<T>(
 }
 
 /**
- * Create a KV client from MeroJs instance
- * 
- * @param mero - MeroJs instance
- * @param targetContextId - Optional: specific context ID to use (from auth callback)
+ * Create a KV client from a MeroJs instance.
+ *
+ * `targetContextId` is required — it comes from `useMero().contextId`
+ * which the home page guarantees is set before calling. Falling back to
+ * `contexts[0]` would risk operating on the wrong context.
  */
 export async function createKvClient(
   mero: MeroJs,
-  targetContextId?: string | null,
+  targetContextId: string,
 ): Promise<{ client: AbiClient; context: AppContext }> {
   console.log('Creating KV client, target context:', targetContextId);
-  
+
   // Fetch contexts using mero-js admin API (v2 — flat methods on `admin`)
   const contextsResponse = await mero.admin.getContexts();
   console.log('Contexts response:', contextsResponse);
@@ -36,21 +37,14 @@ export async function createKvClient(
     throw new Error('No contexts available. You may need to create a context first.');
   }
 
-  // Pick the explicitly requested context. Fall back to the first only
-  // when no target was provided (e.g. legacy SingleContext flow). Silent
-  // fallback on a missing target would risk operating on the wrong context.
-  let targetContext;
-  if (targetContextId) {
-    const found = contexts.find((c: { id: string }) => c.id === targetContextId);
-    if (!found) {
-      throw new Error(
-        `Selected context ${targetContextId} not found on this node. ` +
-          'It may have been deleted — please pick another from /select-context.',
-      );
-    }
-    targetContext = found;
-  } else {
-    targetContext = contexts[0];
+  const targetContext = contexts.find(
+    (c: { id: string }) => c.id === targetContextId,
+  );
+  if (!targetContext) {
+    throw new Error(
+      `Selected context ${targetContextId} not found on this node. ` +
+        'It may have been deleted — please pick another from /select-context.',
+    );
   }
 
   console.log('Using context:', targetContext);
@@ -61,6 +55,10 @@ export async function createKvClient(
   if (!contextId) {
     console.error('Context object missing id:', targetContext);
     throw new Error('Context missing id - unexpected server response format');
+  }
+  if (!applicationId) {
+    console.error('Context object missing applicationId:', targetContext);
+    throw new Error('Context missing applicationId - unexpected server response format');
   }
 
   // mero-js v2 RPC no longer requires `executorPublicKey` — the server

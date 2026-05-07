@@ -77,8 +77,18 @@ export default function SelectContext() {
   const [groupCtxAlias, setGroupCtxAlias] = useState('');
 
   useEffect(() => {
+    // Sync `selectedNamespace` with the current list:
+    // - pick the first namespace when nothing is selected
+    // - clear the selection if the previously-chosen namespace is gone
+    //   (deleted on another client, refetched, etc.) so we don't try to
+    //   create a group inside a stale ID.
+    const stillExists = namespaces.some(
+      (n) => n.namespaceId === selectedNamespace,
+    );
     if (!selectedNamespace && namespaces.length > 0) {
       setSelectedNamespace(namespaces[0].namespaceId);
+    } else if (selectedNamespace && !stillExists) {
+      setSelectedNamespace(namespaces[0]?.namespaceId ?? '');
     }
   }, [namespaces, selectedNamespace]);
 
@@ -104,6 +114,10 @@ export default function SelectContext() {
     window.location.replace('/home');
   };
 
+  // Note: this flow makes three sequential calls (namespace → group →
+  // context). If a later call fails, earlier resources stay on the node —
+  // no rollback is performed. The user can recover by switching to the
+  // "Existing namespace" tab and reusing what was created.
   const createInNewNamespace = async () => {
     if (!applicationId) {
       show({ title: 'No applicationId yet', variant: 'error' });
