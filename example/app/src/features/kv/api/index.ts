@@ -26,22 +26,21 @@ export async function createKvClient(
 ): Promise<{ client: AbiClient; context: AppContext }> {
   console.log('Creating KV client, target context:', targetContextId);
   
-  // Fetch contexts using mero-js admin API
-  const contextsResponse = await mero.admin.contexts.listContexts();
+  // Fetch contexts using mero-js admin API (v2 — flat methods on `admin`)
+  const contextsResponse = await mero.admin.getContexts();
   console.log('Contexts response:', contextsResponse);
-  
+
   const contexts = contextsResponse.contexts;
-  
+
   if (!contexts || contexts.length === 0) {
     throw new Error('No contexts available. You may need to create a context first.');
   }
-  
+
   // Find the target context or use the first one
   let targetContext = contexts[0];
-  
+
   if (targetContextId) {
-    // Find context matching the one selected during auth
-    const found = contexts.find(c => c.id === targetContextId);
+    const found = contexts.find((c: { id: string }) => c.id === targetContextId);
     if (found) {
       targetContext = found;
       console.log('Found target context:', targetContext);
@@ -49,20 +48,19 @@ export async function createKvClient(
       console.warn('Target context not found in list, using first available:', targetContextId);
     }
   }
-  
+
   console.log('Using context:', targetContext);
-  
-  // Server returns 'id' for context ID
+
   const contextId = targetContext.id;
   const applicationId = targetContext.applicationId;
-  
+
   if (!contextId) {
     console.error('Context object missing id:', targetContext);
     throw new Error('Context missing id - unexpected server response format');
   }
-  
+
   // Get identities for this context
-  const identitiesResponse = await mero.admin.contexts.getContextIdentitiesOwned(contextId);
+  const identitiesResponse = await mero.admin.getContextIdentitiesOwned(contextId);
   console.log('Identities response:', identitiesResponse);
   
   const identities = identitiesResponse.identities;

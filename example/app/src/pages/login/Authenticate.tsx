@@ -88,11 +88,13 @@ const variants: ThemeVariant[] = [
 ];
 
 export default function Authenticate() {
-  const { isAuthenticated } = useMero();
+  const { isAuthenticated, contextId } = useMero();
 
   // No auto-redirect: `/` is a permanent showcase. When the user is
-  // authenticated we surface a "Go to app →" link in the hero so they can
-  // jump to /home explicitly.
+  // authenticated we surface a link in the hero so they can move forward
+  // explicitly — either to /select-context (no context yet) or /home.
+  const nextHref = contextId ? '/home' : '/select-context';
+  const nextLabel = contextId ? 'Go to app →' : 'Pick a context →';
 
   return (
     <div
@@ -168,8 +170,8 @@ export default function Authenticate() {
           >
             <ConnectButton />
             {isAuthenticated && (
-              <Link to="/home" style={appLinkStyle}>
-                Go to app →
+              <Link to={nextHref} style={appLinkStyle}>
+                {nextLabel}
               </Link>
             )}
           </div>

@@ -8,7 +8,11 @@ import type { MeroJs } from '@calimero-network/mero-js';
  * Application mode determines the permission scope
  */
 export enum AppMode {
-  /** Single-context: auth flow handles context selection */
+  /**
+   * @deprecated SingleContext is no longer supported. Auth-frontend does not
+   * handle context/namespace/group selection — use MultiContext instead and
+   * manage context selection in your application.
+   */
   SingleContext = 'single-context',
   /** Multi-context: user can manage multiple contexts */
   MultiContext = 'multi-context',

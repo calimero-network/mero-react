@@ -46,8 +46,12 @@ export default function HomePage() {
   useEffect(() => {
     if (!isAuthenticated) {
       navigate('/');
+      return;
     }
-  }, [isAuthenticated, navigate]);
+    if (!contextId) {
+      navigate('/select-context');
+    }
+  }, [isAuthenticated, contextId, navigate]);
 
   // Create API client when mero is available and authenticated
   useEffect(() => {
