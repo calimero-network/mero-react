@@ -36,8 +36,9 @@ const UPGRADE_POLICY: UpgradePolicy = 'LazyOnAccess';
 // Bytes for an empty JSON object `{}` — passed as the init payload when
 // the contract's `init` method takes no arguments. Despite the TS type
 // marking `initializationParams` optional, the server rejects requests
-// that omit the field.
-const EMPTY_INIT_PARAMS: number[] = [123, 125];
+// that omit the field. Derived rather than hardcoded so the source of
+// the bytes is self-evident.
+const EMPTY_INIT_PARAMS: number[] = Array.from(new TextEncoder().encode('{}'));
 
 export default function SelectContext() {
   const navigate = useNavigate();
@@ -102,10 +103,6 @@ export default function SelectContext() {
     // the simplest way to propagate the new selection. (A live setter on
     // MeroProvider would be cleaner, but is out of scope for the example.)
     window.location.replace('/home');
-  };
-
-  const selectExistingContext = (chosenContextId: string) => {
-    finalize(chosenContextId);
   };
 
   const createInNewNamespace = async () => {
@@ -252,7 +249,7 @@ export default function SelectContext() {
                     </Text>
                     <Button
                       variant="primary"
-                      onClick={() => selectExistingContext(c.contextId)}
+                      onClick={() => finalize(c.contextId)}
                       style={{
                         backgroundColor: '#A5FF11',
                         color: '#0A0E13',
