@@ -31,10 +31,12 @@ export async function createKvClient(
   try {
     targetContext = await mero.admin.getContext(targetContextId);
   } catch (err) {
+    // Preserve the underlying error via Error.cause so stack traces
+    // survive the rewrap.
     throw new Error(
       `Selected context ${targetContextId} could not be loaded — it may ` +
-        'have been deleted. Please pick another from /select-context. ' +
-        `(${err instanceof Error ? err.message : String(err)})`,
+        'have been deleted. Please pick another from /select-context.',
+      { cause: err },
     );
   }
 

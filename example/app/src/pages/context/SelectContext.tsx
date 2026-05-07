@@ -19,9 +19,6 @@ import {
 import {
   setContextId,
   useContexts,
-  useCreateContext,
-  useCreateGroupInNamespace,
-  useCreateNamespace,
   useMero,
   useNamespacesForApplication,
 } from '@calimero-network/mero-react';
@@ -42,8 +39,15 @@ const EMPTY_INIT_PARAMS: number[] = Array.from(new TextEncoder().encode('{}'));
 
 export default function SelectContext() {
   const navigate = useNavigate();
-  const { isAuthenticated, applicationId, contextId } = useMero();
+  const { mero, isAuthenticated, applicationId, contextId } = useMero();
   const { show } = useToast();
+  // `useToast().show` isn't documented as referentially stable, so latch
+  // it through a ref and reference the ref inside effects/handlers. This
+  // keeps `show` out of effect dep arrays without lint noise.
+  const showRef = useRef(show);
+  useEffect(() => {
+    showRef.current = show;
+  }, [show]);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -60,21 +64,11 @@ export default function SelectContext() {
   const { namespaces, loading: namespacesLoading } =
     useNamespacesForApplication(applicationId);
 
-  const {
-    createNamespace,
-    loading: creatingNamespace,
-    error: namespaceError,
-  } = useCreateNamespace();
-  const {
-    createGroupInNamespace,
-    loading: creatingGroup,
-    error: groupError,
-  } = useCreateGroupInNamespace();
-  const {
-    createContext,
-    loading: creatingContext,
-    error: contextError,
-  } = useCreateContext();
+  // Single shared `creating` flag — we call mero.admin.* directly rather
+  // than via the useCreate* hooks because those swallow the underlying
+  // server error and return null, which would force us to surface
+  // generic "X creation failed" messages.
+  const [creating, setCreating] = useState(false);
 
   const [tab, setTab] = useState<'new' | 'existing'>('new');
 
@@ -101,14 +95,16 @@ export default function SelectContext() {
     } else if (selectedNamespace && !stillExists) {
       const next = namespaces[0]?.namespaceId ?? '';
       setSelectedNamespace(next);
-      show({
+      showRef.current({
         title: next
           ? 'Previously selected namespace was removed; switched to another.'
           : 'Previously selected namespace was removed.',
         variant: 'info',
       });
     }
-  }, [namespaces, selectedNamespace, show]);
+    // `showRef.current` is read inline so we don't need `show` in deps;
+    // this effect should only re-fire on real list/selection changes.
+  }, [namespaces, selectedNamespace]);
 
   const namespaceOptions = useMemo(
     () =>
@@ -121,10 +117,10 @@ export default function SelectContext() {
     [namespaces],
   );
 
-  const busy = creatingNamespace || creatingGroup || creatingContext;
+  const busy = creating;
   // Guard against double-submit between click and the next React render
-  // disabling the button. Hook-level loading flags only flip after a
-  // microtask, so a fast double-click could otherwise fire two creations.
+  // disabling the button. State updates only flip after a microtask, so
+  // a fast double-click could otherwise fire two creations.
   const submittingRef = useRef(false);
 
   const finalize = (chosenContextId: string) => {
@@ -141,37 +137,36 @@ export default function SelectContext() {
   // no rollback is performed. The user can recover by switching to the
   // "Existing namespace" tab and reusing what was created.
   const createInNewNamespace = async () => {
-    if (submittingRef.current) return;
+    if (submittingRef.current || !mero) return;
     submittingRef.current = true;
     if (!applicationId) {
       show({ title: 'No applicationId yet', variant: 'error' });
       submittingRef.current = false;
       return;
     }
+    setCreating(true);
     let createdNs: { namespaceId: string } | null = null;
     try {
       // Required fields only; alias is omitted when blank (server defaults).
-      createdNs = await createNamespace({
+      createdNs = await mero.admin.createNamespace({
         applicationId,
         upgradePolicy: UPGRADE_POLICY,
         ...(namespaceAlias && { alias: namespaceAlias }),
       });
-      if (!createdNs) {
-        throw namespaceError ?? new Error('Namespace creation failed');
-      }
 
       // Group request body defaults to {} — root group inside a fresh
       // namespace doesn't need its own alias.
-      const group = await createGroupInNamespace(createdNs.namespaceId, {});
-      if (!group) throw groupError ?? new Error('Group creation failed');
+      const group = await mero.admin.createGroupInNamespace(
+        createdNs.namespaceId,
+        {},
+      );
 
-      const ctx = await createContext({
+      const ctx = await mero.admin.createContext({
         applicationId,
         groupId: group.groupId,
         initializationParams: EMPTY_INIT_PARAMS,
         ...(newCtxAlias && { alias: newCtxAlias }),
       });
-      if (!ctx) throw contextError ?? new Error('Context creation failed');
 
       finalize(ctx.contextId);
     } catch (e) {
@@ -191,11 +186,12 @@ export default function SelectContext() {
       }
     } finally {
       submittingRef.current = false;
+      setCreating(false);
     }
   };
 
   const createInExistingNamespace = async () => {
-    if (submittingRef.current) return;
+    if (submittingRef.current || !mero) return;
     submittingRef.current = true;
     if (!applicationId) {
       show({ title: 'No applicationId yet', variant: 'error' });
@@ -207,20 +203,19 @@ export default function SelectContext() {
       submittingRef.current = false;
       return;
     }
+    setCreating(true);
     try {
-      const group = await createGroupInNamespace(
+      const group = await mero.admin.createGroupInNamespace(
         selectedNamespace,
         groupAlias ? { alias: groupAlias } : {},
       );
-      if (!group) throw groupError ?? new Error('Group creation failed');
 
-      const ctx = await createContext({
+      const ctx = await mero.admin.createContext({
         applicationId,
         groupId: group.groupId,
         initializationParams: EMPTY_INIT_PARAMS,
         ...(groupCtxAlias && { alias: groupCtxAlias }),
       });
-      if (!ctx) throw contextError ?? new Error('Context creation failed');
 
       finalize(ctx.contextId);
     } catch (e) {
@@ -228,6 +223,7 @@ export default function SelectContext() {
       show({ title: msg, variant: 'error' });
     } finally {
       submittingRef.current = false;
+      setCreating(false);
     }
   };
 
