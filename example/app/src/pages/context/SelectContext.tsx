@@ -56,9 +56,8 @@ export default function SelectContext() {
     if (contextId) navigate('/home');
   }, [isAuthenticated, contextId, navigate]);
 
-  const { contexts, loading: contextsLoading, refetch: refetchContexts } =
-    useContexts(applicationId);
-  const { namespaces, loading: namespacesLoading, refetch: refetchNamespaces } =
+  const { contexts, loading: contextsLoading } = useContexts(applicationId);
+  const { namespaces, loading: namespacesLoading } =
     useNamespacesForApplication(applicationId);
 
   const { createNamespace, loading: creatingNamespace } = useCreateNamespace();
@@ -119,11 +118,9 @@ export default function SelectContext() {
       });
       if (!ns) throw new Error('Namespace creation failed');
 
-      // Group request body defaults to {} when no alias is given.
-      const group = await createGroupInNamespace(
-        ns.namespaceId,
-        namespaceAlias ? { alias: `${namespaceAlias}-root` } : {},
-      );
+      // Group request body defaults to {} — root group inside a fresh
+      // namespace doesn't need its own alias.
+      const group = await createGroupInNamespace(ns.namespaceId, {});
       if (!group) throw new Error('Group creation failed');
 
       const ctx = await createContext({
@@ -134,8 +131,6 @@ export default function SelectContext() {
       });
       if (!ctx) throw new Error('Context creation failed');
 
-      await refetchNamespaces();
-      await refetchContexts();
       finalize(ctx.contextId);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Failed to create context';
@@ -167,7 +162,6 @@ export default function SelectContext() {
       });
       if (!ctx) throw new Error('Context creation failed');
 
-      await refetchContexts();
       finalize(ctx.contextId);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Failed to create context';

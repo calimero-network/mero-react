@@ -9,11 +9,12 @@ import type { MeroJs } from '@calimero-network/mero-js';
  */
 export enum AppMode {
   /**
-   * @deprecated since 2.1.0 — SingleContext is no longer supported.
-   * Auth-frontend no longer drives context/namespace/group selection; the
-   * auth callback returns only `access_token`, `refresh_token`,
-   * `application_id`, and `node_url`. Switch to {@link AppMode.MultiContext}
-   * and have your app manage context selection itself.
+   * @deprecated since 2.1.0 — SingleContext is no longer supported and will
+   * be removed in 3.0.0. Auth-frontend no longer drives
+   * context/namespace/group selection; the auth callback returns only
+   * `access_token`, `refresh_token`, `application_id`, and `node_url`.
+   * Switch to {@link AppMode.MultiContext} and have your app manage
+   * context selection itself.
    *
    * Migration: see `example/app/src/pages/context/SelectContext.tsx` for a
    * reference implementation that uses `useContexts`, `useCreateNamespace`,

@@ -36,17 +36,21 @@ export async function createKvClient(
     throw new Error('No contexts available. You may need to create a context first.');
   }
 
-  // Find the target context or use the first one
-  let targetContext = contexts[0];
-
+  // Pick the explicitly requested context. Fall back to the first only
+  // when no target was provided (e.g. legacy SingleContext flow). Silent
+  // fallback on a missing target would risk operating on the wrong context.
+  let targetContext;
   if (targetContextId) {
     const found = contexts.find((c: { id: string }) => c.id === targetContextId);
-    if (found) {
-      targetContext = found;
-      console.log('Found target context:', targetContext);
-    } else {
-      console.warn('Target context not found in list, using first available:', targetContextId);
+    if (!found) {
+      throw new Error(
+        `Selected context ${targetContextId} not found on this node. ` +
+          'It may have been deleted — please pick another from /select-context.',
+      );
     }
+    targetContext = found;
+  } else {
+    targetContext = contexts[0];
   }
 
   console.log('Using context:', targetContext);
