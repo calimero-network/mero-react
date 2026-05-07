@@ -59,24 +59,16 @@ export async function createKvClient(
     throw new Error('Context missing id - unexpected server response format');
   }
 
-  // Get identities for this context
-  const identitiesResponse = await mero.admin.getContextIdentitiesOwned(contextId);
-  console.log('Identities response:', identitiesResponse);
-  
-  const identities = identitiesResponse.identities;
-  
-  if (!identities || identities.length === 0) {
-    throw new Error('No identities available for context. You may need to join or create the context.');
-  }
-  
+  // mero-js v2 RPC no longer requires `executorPublicKey` — the server
+  // resolves the identity from the access token. We skip the
+  // `getContextIdentitiesOwned` round-trip entirely.
   const appContext: AppContext = {
     contextId,
-    executorPublicKey: identities[0],
     applicationId,
   };
-  
+
   console.log('App context created:', appContext);
-  
+
   return {
     client: new AbiClient(mero, appContext),
     context: appContext,

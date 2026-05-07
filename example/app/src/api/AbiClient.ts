@@ -15,7 +15,6 @@ export type AbiEvent =
  */
 export interface AppContext {
   contextId: string;
-  executorPublicKey: string;
   applicationId: string;
 }
 

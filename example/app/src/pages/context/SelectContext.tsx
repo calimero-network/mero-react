@@ -18,7 +18,6 @@ import {
 } from '@calimero-network/mero-ui';
 import {
   setContextId,
-  setContextIdentity,
   useContexts,
   useCreateContext,
   useCreateGroupInNamespace,
@@ -27,9 +26,12 @@ import {
   useNamespacesForApplication,
 } from '@calimero-network/mero-react';
 
-// Server accepts: 'Automatic' | 'LazyOnAccess' | 'Coordinated'.
+// Server accepts one of these values for upgradePolicy. Using a union type
+// (rather than a bare string) catches typos at compile time.
+type UpgradePolicy = 'Automatic' | 'LazyOnAccess' | 'Coordinated';
+
 // LazyOnAccess is the least disruptive default — upgrades only when accessed.
-const UPGRADE_POLICY = 'LazyOnAccess';
+const UPGRADE_POLICY: UpgradePolicy = 'LazyOnAccess';
 
 // Bytes for an empty JSON object `{}` — passed as the init payload when
 // the contract's `init` method takes no arguments. Despite the TS type
@@ -39,12 +41,19 @@ const EMPTY_INIT_PARAMS: number[] = [123, 125];
 
 export default function SelectContext() {
   const navigate = useNavigate();
-  const { mero, isAuthenticated, applicationId } = useMero();
+  const { isAuthenticated, applicationId, contextId } = useMero();
   const { show } = useToast();
 
   useEffect(() => {
-    if (!isAuthenticated) navigate('/');
-  }, [isAuthenticated, navigate]);
+    if (!isAuthenticated) {
+      navigate('/');
+      return;
+    }
+    // If a context is already chosen, don't show this screen again — bounce
+    // straight to /home so users can't accidentally create duplicates by
+    // hitting Back.
+    if (contextId) navigate('/home');
+  }, [isAuthenticated, contextId, navigate]);
 
   const { contexts, loading: contextsLoading, refetch: refetchContexts } =
     useContexts(applicationId);
@@ -86,24 +95,17 @@ export default function SelectContext() {
 
   const busy = creatingNamespace || creatingGroup || creatingContext;
 
-  const finalize = async (contextId: string, memberPublicKey?: string) => {
-    setContextId(contextId);
-    if (memberPublicKey) setContextIdentity(memberPublicKey);
+  const finalize = (chosenContextId: string) => {
+    setContextId(chosenContextId);
     show({ title: 'Context ready', variant: 'success' });
-    // Hard reload so MeroProvider re-reads contextId from storage on mount.
+    // MeroProvider reads contextId from storage on mount, so a hard reload is
+    // the simplest way to propagate the new selection. (A live setter on
+    // MeroProvider would be cleaner, but is out of scope for the example.)
     window.location.replace('/home');
   };
 
-  const useExistingContext = async (contextId: string) => {
-    if (!mero) return;
-    try {
-      const res = await mero.admin.getContextIdentitiesOwned(contextId);
-      const identity = res.identities?.[0];
-      await finalize(contextId, identity);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Failed to load identity';
-      show({ title: msg, variant: 'error' });
-    }
+  const selectExistingContext = (chosenContextId: string) => {
+    finalize(chosenContextId);
   };
 
   const createInNewNamespace = async () => {
@@ -137,7 +139,7 @@ export default function SelectContext() {
 
       await refetchNamespaces();
       await refetchContexts();
-      await finalize(ctx.contextId, ctx.memberPublicKey);
+      finalize(ctx.contextId);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Failed to create context';
       show({ title: msg, variant: 'error' });
@@ -169,12 +171,15 @@ export default function SelectContext() {
       if (!ctx) throw new Error('Context creation failed');
 
       await refetchContexts();
-      await finalize(ctx.contextId, ctx.memberPublicKey);
+      finalize(ctx.contextId);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Failed to create context';
       show({ title: msg, variant: 'error' });
     }
   };
+
+  // Don't flash protected UI before the redirect effect fires.
+  if (!isAuthenticated || contextId) return null;
 
   return (
     <div
@@ -247,7 +252,7 @@ export default function SelectContext() {
                     </Text>
                     <Button
                       variant="primary"
-                      onClick={() => useExistingContext(c.contextId)}
+                      onClick={() => selectExistingContext(c.contextId)}
                       style={{
                         backgroundColor: '#A5FF11',
                         color: '#0A0E13',
