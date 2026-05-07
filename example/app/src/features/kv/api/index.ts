@@ -1,5 +1,5 @@
 import { AbiClient, AppContext, AbiEvent } from '../../../api/AbiClient';
-import type { MeroJs } from '@calimero-network/mero-js';
+import type { Context, MeroJs } from '@calimero-network/mero-js';
 
 export { AbiClient };
 export type { AbiEvent, AppContext };
@@ -15,72 +15,48 @@ export function isOk<T>(
 }
 
 /**
- * Create a KV client from MeroJs instance
- * 
- * @param mero - MeroJs instance
- * @param targetContextId - Optional: specific context ID to use (from auth callback)
+ * Create a KV client from a MeroJs instance.
+ *
+ * `targetContextId` is required — it comes from `useMero().contextId`
+ * which the home page guarantees is set before calling. Falling back to
+ * `contexts[0]` would risk operating on the wrong context.
  */
 export async function createKvClient(
   mero: MeroJs,
-  targetContextId?: string | null,
+  targetContextId: string,
 ): Promise<{ client: AbiClient; context: AppContext }> {
-  console.log('Creating KV client, target context:', targetContextId);
-  
-  // Fetch contexts using mero-js admin API
-  const contextsResponse = await mero.admin.contexts.listContexts();
-  console.log('Contexts response:', contextsResponse);
-  
-  const contexts = contextsResponse.contexts;
-  
-  if (!contexts || contexts.length === 0) {
-    throw new Error('No contexts available. You may need to create a context first.');
+  // Fetch the target context directly by ID — avoids paging through the
+  // full `getContexts()` list when the user has many contexts.
+  let targetContext: Context;
+  try {
+    targetContext = await mero.admin.getContext(targetContextId);
+  } catch (err) {
+    // Preserve the underlying error via Error.cause so stack traces
+    // survive the rewrap.
+    throw new Error(
+      `Selected context ${targetContextId} could not be loaded — it may ` +
+        'have been deleted. Please pick another from /select-context.',
+      { cause: err },
+    );
   }
-  
-  // Find the target context or use the first one
-  let targetContext = contexts[0];
-  
-  if (targetContextId) {
-    // Find context matching the one selected during auth
-    const found = contexts.find(c => c.id === targetContextId);
-    if (found) {
-      targetContext = found;
-      console.log('Found target context:', targetContext);
-    } else {
-      console.warn('Target context not found in list, using first available:', targetContextId);
-    }
-  }
-  
-  console.log('Using context:', targetContext);
-  
-  // Server returns 'id' for context ID
-  const contextId = targetContext.id;
-  const applicationId = targetContext.applicationId;
-  
+
+  const { id: contextId, applicationId } = targetContext;
   if (!contextId) {
-    console.error('Context object missing id:', targetContext);
-    throw new Error('Context missing id - unexpected server response format');
+    throw new Error(
+      'Context missing id — unexpected server response format',
+    );
   }
-  
-  // Get identities for this context
-  const identitiesResponse = await mero.admin.contexts.getContextIdentitiesOwned(contextId);
-  console.log('Identities response:', identitiesResponse);
-  
-  const identities = identitiesResponse.identities;
-  
-  if (!identities || identities.length === 0) {
-    throw new Error('No identities available for context. You may need to join or create the context.');
+  if (!applicationId) {
+    throw new Error(
+      'Context missing applicationId — unexpected server response format',
+    );
   }
-  
-  const appContext: AppContext = {
-    contextId,
-    executorPublicKey: identities[0],
-    applicationId,
-  };
-  
-  console.log('App context created:', appContext);
-  
+
+  // mero-js v2 RPC no longer requires `executorPublicKey` — the server
+  // resolves the identity from the access token. We skip the
+  // `getContextIdentitiesOwned` round-trip entirely.
   return {
-    client: new AbiClient(mero, appContext),
-    context: appContext,
+    client: new AbiClient(mero, { contextId, applicationId }),
+    context: { contextId, applicationId },
   };
 }

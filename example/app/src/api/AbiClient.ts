@@ -15,7 +15,6 @@ export type AbiEvent =
  */
 export interface AppContext {
   contextId: string;
-  executorPublicKey: string;
   applicationId: string;
 }
 
@@ -74,13 +73,11 @@ export class AbiClient {
    * Execute an RPC method
    */
   private async execute<T>(method: string, args: Record<string, unknown> = {}): Promise<T> {
-    const result = await this.mero.rpc.execute({
+    return this.mero.rpc.execute<T>({
       contextId: this.context.contextId,
       method,
-      args,
-      executorPublicKey: this.context.executorPublicKey,
+      argsJson: args,
     });
-    return result.output as T;
   }
 
   /**
