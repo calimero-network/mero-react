@@ -25,21 +25,15 @@ export async function createKvClient(
   mero: MeroJs,
   targetContextId: string,
 ): Promise<{ client: AbiClient; context: AppContext }> {
-  console.log('Creating KV client, target context:', targetContextId);
-
   // Fetch contexts using mero-js admin API (v2 — flat methods on `admin`)
   const contextsResponse = await mero.admin.getContexts();
-  console.log('Contexts response:', contextsResponse);
-
   const contexts = contextsResponse.contexts;
 
   if (!contexts || contexts.length === 0) {
     throw new Error('No contexts available. You may need to create a context first.');
   }
 
-  const targetContext = contexts.find(
-    (c: { id: string }) => c.id === targetContextId,
-  );
+  const targetContext = contexts.find((c) => c.id === targetContextId);
   if (!targetContext) {
     throw new Error(
       `Selected context ${targetContextId} not found on this node. ` +
@@ -47,32 +41,20 @@ export async function createKvClient(
     );
   }
 
-  console.log('Using context:', targetContext);
-
-  const contextId = targetContext.id;
-  const applicationId = targetContext.applicationId;
-
-  if (!contextId) {
-    console.error('Context object missing id:', targetContext);
-    throw new Error('Context missing id - unexpected server response format');
-  }
+  // `find` already guarantees `targetContext.id === targetContextId`, so we
+  // only need to defend against a missing `applicationId` on the response.
+  const { id: contextId, applicationId } = targetContext;
   if (!applicationId) {
-    console.error('Context object missing applicationId:', targetContext);
-    throw new Error('Context missing applicationId - unexpected server response format');
+    throw new Error(
+      'Context missing applicationId — unexpected server response format',
+    );
   }
 
   // mero-js v2 RPC no longer requires `executorPublicKey` — the server
   // resolves the identity from the access token. We skip the
   // `getContextIdentitiesOwned` round-trip entirely.
-  const appContext: AppContext = {
-    contextId,
-    applicationId,
-  };
-
-  console.log('App context created:', appContext);
-
   return {
-    client: new AbiClient(mero, appContext),
-    context: appContext,
+    client: new AbiClient(mero, { contextId, applicationId }),
+    context: { contextId, applicationId },
   };
 }

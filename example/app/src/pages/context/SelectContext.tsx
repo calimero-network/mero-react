@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Button,
@@ -88,9 +88,16 @@ export default function SelectContext() {
     if (!selectedNamespace && namespaces.length > 0) {
       setSelectedNamespace(namespaces[0].namespaceId);
     } else if (selectedNamespace && !stillExists) {
-      setSelectedNamespace(namespaces[0]?.namespaceId ?? '');
+      const next = namespaces[0]?.namespaceId ?? '';
+      setSelectedNamespace(next);
+      show({
+        title: next
+          ? 'Previously selected namespace was removed; switched to another.'
+          : 'Previously selected namespace was removed.',
+        variant: 'info',
+      });
     }
-  }, [namespaces, selectedNamespace]);
+  }, [namespaces, selectedNamespace, show]);
 
   const namespaceOptions = useMemo(
     () =>
@@ -104,6 +111,10 @@ export default function SelectContext() {
   );
 
   const busy = creatingNamespace || creatingGroup || creatingContext;
+  // Guard against double-submit between click and the next React render
+  // disabling the button. Hook-level loading flags only flip after a
+  // microtask, so a fast double-click could otherwise fire two creations.
+  const submittingRef = useRef(false);
 
   const finalize = (chosenContextId: string) => {
     setContextId(chosenContextId);
@@ -119,22 +130,26 @@ export default function SelectContext() {
   // no rollback is performed. The user can recover by switching to the
   // "Existing namespace" tab and reusing what was created.
   const createInNewNamespace = async () => {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     if (!applicationId) {
       show({ title: 'No applicationId yet', variant: 'error' });
+      submittingRef.current = false;
       return;
     }
+    let createdNs: { namespaceId: string } | null = null;
     try {
       // Required fields only; alias is omitted when blank (server defaults).
-      const ns = await createNamespace({
+      createdNs = await createNamespace({
         applicationId,
         upgradePolicy: UPGRADE_POLICY,
         ...(namespaceAlias && { alias: namespaceAlias }),
       });
-      if (!ns) throw new Error('Namespace creation failed');
+      if (!createdNs) throw new Error('Namespace creation failed');
 
       // Group request body defaults to {} — root group inside a fresh
       // namespace doesn't need its own alias.
-      const group = await createGroupInNamespace(ns.namespaceId, {});
+      const group = await createGroupInNamespace(createdNs.namespaceId, {});
       if (!group) throw new Error('Group creation failed');
 
       const ctx = await createContext({
@@ -148,17 +163,28 @@ export default function SelectContext() {
       finalize(ctx.contextId);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Failed to create context';
-      show({ title: msg, variant: 'error' });
+      // Tell the user where the partial state landed so they can recover
+      // via the "Existing namespace" tab instead of creating duplicates.
+      const recovery = createdNs
+        ? ' Namespace was already created — switch to the "Existing namespace" tab to reuse it.'
+        : '';
+      show({ title: msg + recovery, variant: 'error' });
+    } finally {
+      submittingRef.current = false;
     }
   };
 
   const createInExistingNamespace = async () => {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     if (!applicationId) {
       show({ title: 'No applicationId yet', variant: 'error' });
+      submittingRef.current = false;
       return;
     }
     if (!selectedNamespace) {
       show({ title: 'Pick a namespace first', variant: 'error' });
+      submittingRef.current = false;
       return;
     }
     try {
@@ -180,6 +206,8 @@ export default function SelectContext() {
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Failed to create context';
       show({ title: msg, variant: 'error' });
+    } finally {
+      submittingRef.current = false;
     }
   };
 
