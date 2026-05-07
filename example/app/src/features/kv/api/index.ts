@@ -1,5 +1,5 @@
 import { AbiClient, AppContext, AbiEvent } from '../../../api/AbiClient';
-import type { MeroJs } from '@calimero-network/mero-js';
+import type { Context, MeroJs } from '@calimero-network/mero-js';
 
 export { AbiClient };
 export type { AbiEvent, AppContext };
@@ -27,7 +27,7 @@ export async function createKvClient(
 ): Promise<{ client: AbiClient; context: AppContext }> {
   // Fetch the target context directly by ID — avoids paging through the
   // full `getContexts()` list when the user has many contexts.
-  let targetContext;
+  let targetContext: Context;
   try {
     targetContext = await mero.admin.getContext(targetContextId);
   } catch (err) {
