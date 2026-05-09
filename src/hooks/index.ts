@@ -285,10 +285,22 @@ export function useGroupMembers(groupId?: string | null) {
     }
 
     try {
-      const response: ListGroupMembersResponseData = await mero.admin.listGroupMembers(groupId);
+      const response = await mero.admin.listGroupMembers(groupId);
       if (mountedRef.current) {
-        setMembers(response.data ?? []);
-        setSelfIdentity(response.selfIdentity ?? null);
+        // merod's wire shape is `{ members: [...], selfIdentity }` (see
+        // core/crates/server/src/admin/handlers/groups/list_group_members.rs).
+        // Older mero-js builds typed and exposed the array under `data`;
+        // the field was renamed to `members` in calimero-network/mero-js#34
+        // to match the wire contract. Read defensively across both shapes
+        // so this hook works against either SDK version — once the lockfile
+        // is bumped to a build that contains the rename, the `data`
+        // fallback becomes dead and can be deleted.
+        const raw = response as ListGroupMembersResponseData & {
+          data?: GroupMember[];
+          members?: GroupMember[];
+        };
+        setMembers(raw.members ?? raw.data ?? []);
+        setSelfIdentity(raw.selfIdentity ?? null);
       }
     } catch (err) {
       const errorValue = toError(err);

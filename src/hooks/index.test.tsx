@@ -63,7 +63,7 @@ function createMero(adminOverrides: Record<string, unknown> = {}) {
       deleteContext: vi.fn().mockResolvedValue({ isDeleted: true }),
       joinContext: vi.fn().mockResolvedValue({ contextId: 'ctx-1', memberPublicKey: 'pk-1' }),
       getContextGroup: vi.fn().mockResolvedValue('group-hex-id'),
-      listGroupMembers: vi.fn().mockResolvedValue({ data: [] }),
+      listGroupMembers: vi.fn().mockResolvedValue({ members: [] }),
       listGroupContexts: vi.fn().mockResolvedValue([]),
       deleteGroup: vi.fn().mockResolvedValue({ isDeleted: true }),
       getGroupInfo: vi.fn().mockResolvedValue({
@@ -187,7 +187,7 @@ describe('group and context hooks', () => {
   it('useGroupMembers loads members for a group', async () => {
     const mero = createMero({
       listGroupMembers: vi.fn().mockResolvedValue({
-        data: [{ identity: 'member-1', role: 'Admin' }],
+        members: [{ identity: 'member-1', role: 'Admin' }],
         selfIdentity: 'member-1',
       }),
     });
