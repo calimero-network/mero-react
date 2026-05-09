@@ -287,7 +287,10 @@ export function useGroupMembers(groupId?: string | null) {
     try {
       const response: ListGroupMembersResponseData = await mero.admin.listGroupMembers(groupId);
       if (mountedRef.current) {
-        setMembers(response.data ?? []);
+        // mero-js >=2.0.1 guarantees `members` as a non-optional array; `?? []`
+        // is a belt-and-suspenders against consumer overrides / test mocks /
+        // future contract drift.
+        setMembers(response.members ?? []);
         setSelfIdentity(response.selfIdentity ?? null);
       }
     } catch (err) {
