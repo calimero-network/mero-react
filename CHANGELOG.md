@@ -1,3 +1,9 @@
+## [2.2.1](https://github.com/calimero-network/mero-react/compare/mero-react-v2.2.0...mero-react-v2.2.1) (2026-05-09)
+
+### Bug Fixes
+
+* **hooks:** read members field correctly in useGroupMembers ([25274f5](https://github.com/calimero-network/mero-react/commit/25274f570bb364e38eba9e9fe788487d50a1d47c)), closes [calimero-network/mero-js#34](https://github.com/calimero-network/mero-js/issues/34) [post-mero-js#34](https://github.com/calimero-network/post-mero-js/issues/34)
+
 ## [2.2.0](https://github.com/calimero-network/mero-react/compare/mero-react-v2.1.0...mero-react-v2.2.0) (2026-05-07)
 
 ### Features
