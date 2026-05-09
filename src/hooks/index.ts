@@ -287,11 +287,10 @@ export function useGroupMembers(groupId?: string | null) {
     try {
       const response: ListGroupMembersResponseData = await mero.admin.listGroupMembers(groupId);
       if (mountedRef.current) {
-        // mero-js 2.0.1+ guarantees `members: GroupMember[]` (non-optional)
-        // and throws on a malformed response, so no defensive fallback is
-        // needed. The deprecated `data?` alias on the type isn't read here
-        // because the SDK never populates it.
-        setMembers(response.members);
+        // mero-js >=2.0.1 guarantees `members` as a non-optional array; `?? []`
+        // is a belt-and-suspenders against consumer overrides / test mocks /
+        // future contract drift.
+        setMembers(response.members ?? []);
         setSelfIdentity(response.selfIdentity ?? null);
       }
     } catch (err) {
