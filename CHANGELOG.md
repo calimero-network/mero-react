@@ -1,3 +1,9 @@
+## [2.3.0](https://github.com/calimero-network/mero-react/compare/mero-react-v2.2.1...mero-react-v2.3.0) (2026-05-12)
+
+### Features
+
+* metadata-record hooks + capability constant re-export ([08041c7](https://github.com/calimero-network/mero-react/commit/08041c702908e0d216fe3712e12c75cf702bd6bf)), closes [calimero-network/mero-js#35](https://github.com/calimero-network/mero-js/issues/35)
+
 ## [2.2.1](https://github.com/calimero-network/mero-react/compare/mero-react-v2.2.0...mero-react-v2.2.1) (2026-05-09)
 
 ### Bug Fixes
