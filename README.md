@@ -351,8 +351,10 @@ useJoinGroup, useDeleteGroup, useAddGroupMembers, useRemoveGroupMembers
 useSyncGroup, useNestGroup, useUnnestGroup, useSubgroups
 useUpgradeGroup, useGroupUpgradeStatus, useRetryGroupUpgrade
 useRegisterGroupSigningKey, useUpdateGroupSettings
-useSetGroupAlias, useSetMemberAlias, useUpdateMemberRole
-useSetDefaultCapabilities, useSetSubgroupVisibility, useSetTeeAdmissionPolicy
+useSetGroupMetadata, useSetMemberMetadata, useSetContextMetadata
+useGroupMetadata, useMemberMetadata, useUpdateMemberRole
+useSetDefaultCapabilities, useDefaultCapabilities
+useSetSubgroupVisibility, useSubgroupVisibility, useSetTeeAdmissionPolicy
 useDetachContextFromGroup
 useNamespaces, useNamespace, useNamespaceGroups, useNamespaceIdentity
 useNamespacesForApplication, useCreateNamespace, useDeleteNamespace
