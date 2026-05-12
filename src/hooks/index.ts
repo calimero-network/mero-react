@@ -16,6 +16,7 @@ import type {
   GroupInfo,
   GroupMember,
   GroupUpgradeStatusResponseData,
+  MetadataRecord,
   JoinGroupRequest,
   JoinNamespaceRequest,
   ListGroupMembersResponseData,
@@ -27,9 +28,8 @@ import type {
   RemoveGroupMembersRequest,
   RetryGroupUpgradeRequest,
   SetDefaultCapabilitiesRequest,
+  SetMetadataRequest,
   SetSubgroupVisibilityRequest,
-  SetGroupAliasRequest,
-  SetMemberAliasRequest,
   SetTeeAdmissionPolicyRequest,
   SubgroupEntry,
   SyncGroupRequest,
@@ -46,6 +46,14 @@ import type {
 } from '../types';
 
 export { useMero } from '../context';
+
+/**
+ * Shape accepted by the metadata-setter hooks — re-exported from mero-js so
+ * callers have one canonical type. A `set*Metadata` call **replaces the whole
+ * record**: `data` defaults to `{}` and wholly replaces the stored map; omit
+ * `name` to keep the current name.
+ */
+export type SetMetadataInput = SetMetadataRequest;
 
 function toError(err: unknown): Error {
   return err instanceof Error ? err : new Error(String(err));
@@ -1135,6 +1143,98 @@ export function useSetSubgroupVisibility() {
   return { setSubgroupVisibility, loading, error };
 }
 
+export function useDefaultCapabilities(groupId?: string | null) {
+  const { mero } = useMero();
+  const [defaultCapabilities, setDefaultCapabilitiesState] = useState<number | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+  const mountedRef = useMountedRef();
+
+  const refetch = useCallback(async () => {
+    if (!mero || !groupId) {
+      if (mountedRef.current) {
+        setDefaultCapabilitiesState(null);
+        setError(null);
+        setLoading(false);
+      }
+      return;
+    }
+
+    if (mountedRef.current) {
+      setLoading(true);
+      setError(null);
+    }
+
+    try {
+      const result = await mero.admin.getDefaultCapabilities(groupId);
+      if (mountedRef.current) {
+        setDefaultCapabilitiesState(result);
+      }
+    } catch (err) {
+      const errorValue = toError(err);
+      if (mountedRef.current) {
+        setError(errorValue);
+      }
+    } finally {
+      if (mountedRef.current) {
+        setLoading(false);
+      }
+    }
+  }, [groupId, mero, mountedRef]);
+
+  useEffect(() => {
+    void refetch();
+  }, [refetch]);
+
+  return { defaultCapabilities, loading, error, refetch };
+}
+
+export function useSubgroupVisibility(groupId?: string | null) {
+  const { mero } = useMero();
+  const [subgroupVisibility, setSubgroupVisibilityState] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+  const mountedRef = useMountedRef();
+
+  const refetch = useCallback(async () => {
+    if (!mero || !groupId) {
+      if (mountedRef.current) {
+        setSubgroupVisibilityState(null);
+        setError(null);
+        setLoading(false);
+      }
+      return;
+    }
+
+    if (mountedRef.current) {
+      setLoading(true);
+      setError(null);
+    }
+
+    try {
+      const result = await mero.admin.getSubgroupVisibility(groupId);
+      if (mountedRef.current) {
+        setSubgroupVisibilityState(result);
+      }
+    } catch (err) {
+      const errorValue = toError(err);
+      if (mountedRef.current) {
+        setError(errorValue);
+      }
+    } finally {
+      if (mountedRef.current) {
+        setLoading(false);
+      }
+    }
+  }, [groupId, mero, mountedRef]);
+
+  useEffect(() => {
+    void refetch();
+  }, [refetch]);
+
+  return { subgroupVisibility, loading, error, refetch };
+}
+
 export function useSetTeeAdmissionPolicy() {
   const { mero } = useMero();
   const { loading, error, run } = useAsyncMutation();
@@ -1165,34 +1265,143 @@ export function useUpdateGroupSettings() {
   return { updateGroupSettings, loading, error };
 }
 
-export function useSetGroupAlias() {
+// ---- Metadata Hooks ----
+
+export function useSetGroupMetadata() {
   const { mero } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
-  const setGroupAlias = useCallback(
-    async (groupId: string, request: SetGroupAliasRequest) => {
+  const setGroupMetadata = useCallback(
+    async (groupId: string, request: SetMetadataInput) => {
       if (!mero) return null;
-      return run(() => mero.admin.setGroupAlias(groupId, request));
+      return run(() => mero.admin.setGroupMetadata(groupId, request));
     },
     [mero, run],
   );
 
-  return { setGroupAlias, loading, error };
+  return { setGroupMetadata, loading, error };
 }
 
-export function useSetMemberAlias() {
+export function useSetMemberMetadata() {
   const { mero } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
-  const setMemberAlias = useCallback(
-    async (groupId: string, identity: string, request: SetMemberAliasRequest) => {
+  const setMemberMetadata = useCallback(
+    async (groupId: string, identity: string, request: SetMetadataInput) => {
       if (!mero) return null;
-      return run(() => mero.admin.setMemberAlias(groupId, identity, request));
+      return run(() => mero.admin.setMemberMetadata(groupId, identity, request));
     },
     [mero, run],
   );
 
-  return { setMemberAlias, loading, error };
+  return { setMemberMetadata, loading, error };
+}
+
+export function useSetContextMetadata() {
+  const { mero } = useMero();
+  const { loading, error, run } = useAsyncMutation();
+
+  const setContextMetadata = useCallback(
+    async (groupId: string, contextId: string, request: SetMetadataInput) => {
+      if (!mero) return null;
+      return run(() => mero.admin.setContextMetadata(groupId, contextId, request));
+    },
+    [mero, run],
+  );
+
+  return { setContextMetadata, loading, error };
+}
+
+export function useGroupMetadata(groupId?: string | null) {
+  const { mero } = useMero();
+  const [metadata, setMetadata] = useState<MetadataRecord | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+  const mountedRef = useMountedRef();
+
+  const refetch = useCallback(async () => {
+    if (!mero || !groupId) {
+      if (mountedRef.current) {
+        setMetadata(null);
+        setError(null);
+        setLoading(false);
+      }
+      return;
+    }
+
+    if (mountedRef.current) {
+      setLoading(true);
+      setError(null);
+    }
+
+    try {
+      const result = await mero.admin.getGroupMetadata(groupId);
+      if (mountedRef.current) {
+        setMetadata(result);
+      }
+    } catch (err) {
+      const errorValue = toError(err);
+      if (mountedRef.current) {
+        setError(errorValue);
+      }
+    } finally {
+      if (mountedRef.current) {
+        setLoading(false);
+      }
+    }
+  }, [groupId, mero, mountedRef]);
+
+  useEffect(() => {
+    void refetch();
+  }, [refetch]);
+
+  return { metadata, loading, error, refetch };
+}
+
+export function useMemberMetadata(groupId?: string | null, identity?: string | null) {
+  const { mero } = useMero();
+  const [metadata, setMetadata] = useState<MetadataRecord | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+  const mountedRef = useMountedRef();
+
+  const refetch = useCallback(async () => {
+    if (!mero || !groupId || !identity) {
+      if (mountedRef.current) {
+        setMetadata(null);
+        setError(null);
+        setLoading(false);
+      }
+      return;
+    }
+
+    if (mountedRef.current) {
+      setLoading(true);
+      setError(null);
+    }
+
+    try {
+      const result = await mero.admin.getMemberMetadata(groupId, identity);
+      if (mountedRef.current) {
+        setMetadata(result);
+      }
+    } catch (err) {
+      const errorValue = toError(err);
+      if (mountedRef.current) {
+        setError(errorValue);
+      }
+    } finally {
+      if (mountedRef.current) {
+        setLoading(false);
+      }
+    }
+  }, [groupId, identity, mero, mountedRef]);
+
+  useEffect(() => {
+    void refetch();
+  }, [refetch]);
+
+  return { metadata, loading, error, refetch };
 }
 
 // ---- Group Signing Key, Upgrades & Hierarchy ----

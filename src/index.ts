@@ -41,6 +41,7 @@ export {
   useCreateGroupInNamespace,
   useCreateNamespace,
   useCreateNamespaceInvitation,
+  useDefaultCapabilities,
   useDeleteContext,
   useDeleteGroup,
   useDeleteNamespace,
@@ -51,10 +52,12 @@ export {
   useGroupInfo,
   useGroupInvitations,
   useGroupMembers,
+  useGroupMetadata,
   useGroupUpgradeStatus,
   useJoinContext,
   useJoinGroup,
   useJoinNamespace,
+  useMemberMetadata,
   useNamespace,
   useNamespaceGroups,
   useNamespaceIdentity,
@@ -63,12 +66,14 @@ export {
   useNestGroup,
   useRegisterGroupSigningKey,
   useRetryGroupUpgrade,
+  useSetContextMetadata,
   useSetDefaultCapabilities,
+  useSetGroupMetadata,
+  useSetMemberMetadata,
   useSetSubgroupVisibility,
-  useSetGroupAlias,
-  useSetMemberAlias,
   useSetTeeAdmissionPolicy,
   useSubgroups,
+  useSubgroupVisibility,
   useUnnestGroup,
   useUpdateGroupSettings,
   useUpdateMemberRole,
@@ -78,6 +83,7 @@ export {
   useSubscription,
   useSyncGroup,
 } from './hooks';
+export type { SetMetadataInput } from './hooks';
 
 // Types
 export {
@@ -115,3 +121,9 @@ export {
 
 // Re-export everything from mero-js so apps only need one import
 export * from '@calimero-network/mero-js';
+
+// Explicit re-exports of the capability helpers / metadata types. These already
+// flow through the `export *` above, but are listed here so the public surface
+// of this package is self-documenting.
+export { CAPABILITIES, hasCap, withCap, withoutCap } from '@calimero-network/mero-js';
+export type { MetadataRecord } from '@calimero-network/mero-js';

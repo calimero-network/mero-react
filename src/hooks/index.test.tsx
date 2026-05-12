@@ -11,6 +11,7 @@ import {
   useCreateGroupInNamespace,
   useCreateNamespace,
   useCreateNamespaceInvitation,
+  useDefaultCapabilities,
   useDeleteContext,
   useDeleteGroup,
   useDeleteNamespace,
@@ -20,10 +21,12 @@ import {
   useGroupInfo,
   useGroupInvitations,
   useGroupMembers,
+  useGroupMetadata,
   useGroupUpgradeStatus,
   useJoinContext,
   useJoinGroup,
   useJoinNamespace,
+  useMemberMetadata,
   useNamespace,
   useNamespaceGroups,
   useNamespaceIdentity,
@@ -32,12 +35,14 @@ import {
   useNestGroup,
   useRegisterGroupSigningKey,
   useRetryGroupUpgrade,
+  useSetContextMetadata,
   useSetDefaultCapabilities,
+  useSetGroupMetadata,
+  useSetMemberMetadata,
   useSetSubgroupVisibility,
-  useSetGroupAlias,
-  useSetMemberAlias,
   useSetTeeAdmissionPolicy,
   useSubgroups,
+  useSubgroupVisibility,
   useUnnestGroup,
   useUpdateGroupSettings,
   useUpdateMemberRole,
@@ -103,8 +108,14 @@ function createMero(adminOverrides: Record<string, unknown> = {}) {
       setSubgroupVisibility: vi.fn().mockResolvedValue(undefined),
       setTeeAdmissionPolicy: vi.fn().mockResolvedValue(undefined),
       updateGroupSettings: vi.fn().mockResolvedValue(undefined),
-      setGroupAlias: vi.fn().mockResolvedValue(undefined),
-      setMemberAlias: vi.fn().mockResolvedValue(undefined),
+      setGroupMetadata: vi.fn().mockResolvedValue(undefined),
+      getGroupMetadata: vi.fn().mockResolvedValue(null),
+      setMemberMetadata: vi.fn().mockResolvedValue(undefined),
+      getMemberMetadata: vi.fn().mockResolvedValue(null),
+      setContextMetadata: vi.fn().mockResolvedValue(undefined),
+      getContextMetadata: vi.fn().mockResolvedValue(null),
+      getDefaultCapabilities: vi.fn().mockResolvedValue(7),
+      getSubgroupVisibility: vi.fn().mockResolvedValue('open'),
       registerGroupSigningKey: vi.fn().mockResolvedValue({ publicKey: 'pk-1' }),
       upgradeGroup: vi.fn().mockResolvedValue({ groupId: 'group-1', status: 'in_progress' }),
       getGroupUpgradeStatus: vi.fn().mockResolvedValue(null),
@@ -132,7 +143,7 @@ function createMero(adminOverrides: Record<string, unknown> = {}) {
       deleteNamespace: vi.fn().mockResolvedValue({ isDeleted: true }),
       createNamespaceInvitation: vi.fn().mockResolvedValue({
         invitation: { invitation: { inviterIdentity: [], groupId: [], expirationTimestamp: 0, secretSalt: [] }, inviterSignature: 'sig-1' },
-        groupAlias: 'test-ns',
+        groupName: 'test-ns',
       }),
       joinNamespace: vi.fn().mockResolvedValue({ groupId: 'ns-1', memberIdentity: 'member-1', governanceOp: 'MemberAdded' }),
       createGroupInNamespace: vi.fn().mockResolvedValue({ groupId: 'group-1' }),
@@ -310,7 +321,7 @@ describe('group and context hooks', () => {
           },
           inviterSignature: 'sig-1',
         },
-        groupAlias: 'Lobby',
+        groupName: 'Lobby',
       });
       if (!joined) {
         throw new Error('Expected group join result');
@@ -743,7 +754,7 @@ describe('group and context hooks', () => {
       const created = await result.current.createNamespace({
         applicationId: 'app-1',
         upgradePolicy: 'manual',
-        alias: 'My Namespace',
+        name: 'My Namespace',
       });
       expect(created).toEqual({ namespaceId: 'ns-9' });
     });
@@ -751,7 +762,7 @@ describe('group and context hooks', () => {
     expect(createNamespace).toHaveBeenCalledWith({
       applicationId: 'app-1',
       upgradePolicy: 'manual',
-      alias: 'My Namespace',
+      name: 'My Namespace',
     });
   });
 
@@ -773,7 +784,7 @@ describe('group and context hooks', () => {
   it('useCreateNamespaceInvitation creates an invitation', async () => {
     const invitation = {
       invitation: { invitation: { inviterIdentity: [], groupId: [], expirationTimestamp: 123, secretSalt: [] }, inviterSignature: 'sig-1' },
-      groupAlias: 'test-ns',
+      groupName: 'test-ns',
     };
     const createNamespaceInvitation = vi.fn().mockResolvedValue(invitation);
     const mero = createMero({ createNamespaceInvitation });
@@ -822,16 +833,16 @@ describe('group and context hooks', () => {
     const { result } = renderHook(() => useCreateGroupInNamespace());
 
     await act(async () => {
-      const created = await result.current.createGroupInNamespace('ns-1', { alias: 'Sub Group' });
+      const created = await result.current.createGroupInNamespace('ns-1', { name: 'Sub Group' });
       expect(created).toEqual({ groupId: 'group-9' });
     });
 
-    expect(createGroupInNamespace).toHaveBeenCalledWith('ns-1', { alias: 'Sub Group' });
+    expect(createGroupInNamespace).toHaveBeenCalledWith('ns-1', { name: 'Sub Group' });
   });
 
   it('useNamespaceGroups loads groups for a namespace', async () => {
     const listNamespaceGroups = vi.fn().mockResolvedValue([
-      { groupId: 'group-1', alias: 'Sub A' },
+      { groupId: 'group-1', name: 'Sub A' },
       { groupId: 'group-2' },
     ]);
     const mero = createMero({ listNamespaceGroups });
@@ -951,32 +962,208 @@ describe('group and context hooks', () => {
     expect(updateGroupSettings).toHaveBeenCalledWith('group-1', { upgradePolicy: 'auto' });
   });
 
-  it('useSetGroupAlias sets a group alias', async () => {
-    const setGroupAlias = vi.fn().mockResolvedValue(undefined);
-    const mero = createMero({ setGroupAlias });
+  // ---- Metadata Hooks ----
+
+  it('useSetGroupMetadata sets group metadata', async () => {
+    const setGroupMetadata = vi.fn().mockResolvedValue(undefined);
+    const mero = createMero({ setGroupMetadata });
     mockUseMero.mockReturnValue({ mero } as never);
 
-    const { result } = renderHook(() => useSetGroupAlias());
+    const { result } = renderHook(() => useSetGroupMetadata());
 
     await act(async () => {
-      await result.current.setGroupAlias('group-1', { alias: 'Lobby' });
+      await result.current.setGroupMetadata('group-1', { name: 'Lobby', data: { color: 'blue' } });
     });
 
-    expect(setGroupAlias).toHaveBeenCalledWith('group-1', { alias: 'Lobby' });
+    expect(setGroupMetadata).toHaveBeenCalledWith('group-1', { name: 'Lobby', data: { color: 'blue' } });
   });
 
-  it('useSetMemberAlias sets a member alias', async () => {
-    const setMemberAlias = vi.fn().mockResolvedValue(undefined);
-    const mero = createMero({ setMemberAlias });
+  it('useSetGroupMetadata surfaces errors', async () => {
+    const setGroupMetadata = vi.fn().mockRejectedValue(new Error('nope'));
+    const mero = createMero({ setGroupMetadata });
     mockUseMero.mockReturnValue({ mero } as never);
 
-    const { result } = renderHook(() => useSetMemberAlias());
+    const { result } = renderHook(() => useSetGroupMetadata());
 
     await act(async () => {
-      await result.current.setMemberAlias('group-1', 'member-1', { alias: 'Alice' });
+      await result.current.setGroupMetadata('group-1', { name: 'Lobby' });
     });
 
-    expect(setMemberAlias).toHaveBeenCalledWith('group-1', 'member-1', { alias: 'Alice' });
+    expect(result.current.error?.message).toBe('nope');
+  });
+
+  it('useSetMemberMetadata sets member metadata', async () => {
+    const setMemberMetadata = vi.fn().mockResolvedValue(undefined);
+    const mero = createMero({ setMemberMetadata });
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    const { result } = renderHook(() => useSetMemberMetadata());
+
+    await act(async () => {
+      await result.current.setMemberMetadata('group-1', 'member-1', { name: 'Alice' });
+    });
+
+    expect(setMemberMetadata).toHaveBeenCalledWith('group-1', 'member-1', { name: 'Alice' });
+  });
+
+  it('useSetContextMetadata sets context metadata', async () => {
+    const setContextMetadata = vi.fn().mockResolvedValue(undefined);
+    const mero = createMero({ setContextMetadata });
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    const { result } = renderHook(() => useSetContextMetadata());
+
+    await act(async () => {
+      await result.current.setContextMetadata('group-1', 'ctx-1', { data: { k: 'v' } });
+    });
+
+    expect(setContextMetadata).toHaveBeenCalledWith('group-1', 'ctx-1', { data: { k: 'v' } });
+  });
+
+  it('useGroupMetadata loads group metadata', async () => {
+    const record = { name: 'Lobby', data: { color: 'blue' }, updatedAt: 1, updatedBy: 'member-1' };
+    const getGroupMetadata = vi.fn().mockResolvedValue(record);
+    const mero = createMero({ getGroupMetadata });
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    const { result } = renderHook(() => useGroupMetadata('group-1'));
+
+    await waitFor(() => {
+      expect(result.current.metadata).toEqual(record);
+    });
+
+    expect(getGroupMetadata).toHaveBeenCalledWith('group-1');
+  });
+
+  it('useGroupMetadata clears when groupId becomes null', async () => {
+    const getGroupMetadata = vi.fn().mockRejectedValue(new Error('boom'));
+    const mero = createMero({ getGroupMetadata });
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    const { result, rerender } = renderHook(
+      ({ groupId }) => useGroupMetadata(groupId),
+      { initialProps: { groupId: 'group-1' as string | null } },
+    );
+
+    await waitFor(() => {
+      expect(result.current.error?.message).toBe('boom');
+    });
+
+    rerender({ groupId: null });
+
+    await waitFor(() => {
+      expect(result.current.error).toBeNull();
+      expect(result.current.metadata).toBeNull();
+    });
+  });
+
+  it('useMemberMetadata loads member metadata', async () => {
+    const record = { name: 'Alice', data: {}, updatedAt: 2, updatedBy: 'member-1' };
+    const getMemberMetadata = vi.fn().mockResolvedValue(record);
+    const mero = createMero({ getMemberMetadata });
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    const { result } = renderHook(() => useMemberMetadata('group-1', 'member-1'));
+
+    await waitFor(() => {
+      expect(result.current.metadata).toEqual(record);
+    });
+
+    expect(getMemberMetadata).toHaveBeenCalledWith('group-1', 'member-1');
+  });
+
+  it('useMemberMetadata clears when identity becomes null', async () => {
+    const getMemberMetadata = vi.fn().mockRejectedValue(new Error('boom'));
+    const mero = createMero({ getMemberMetadata });
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    const { result, rerender } = renderHook(
+      ({ groupId, identity }) => useMemberMetadata(groupId, identity),
+      { initialProps: { groupId: 'group-1' as string | null, identity: 'member-1' as string | null } },
+    );
+
+    await waitFor(() => {
+      expect(result.current.error?.message).toBe('boom');
+    });
+
+    rerender({ groupId: 'group-1', identity: null });
+
+    await waitFor(() => {
+      expect(result.current.error).toBeNull();
+      expect(result.current.metadata).toBeNull();
+    });
+  });
+
+  it('useDefaultCapabilities loads default capabilities for a group', async () => {
+    const getDefaultCapabilities = vi.fn().mockResolvedValue(15);
+    const mero = createMero({ getDefaultCapabilities });
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    const { result } = renderHook(() => useDefaultCapabilities('group-1'));
+
+    await waitFor(() => {
+      expect(result.current.defaultCapabilities).toBe(15);
+    });
+
+    expect(getDefaultCapabilities).toHaveBeenCalledWith('group-1');
+  });
+
+  it('useDefaultCapabilities clears when groupId becomes null', async () => {
+    const getDefaultCapabilities = vi.fn().mockRejectedValue(new Error('boom'));
+    const mero = createMero({ getDefaultCapabilities });
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    const { result, rerender } = renderHook(
+      ({ groupId }) => useDefaultCapabilities(groupId),
+      { initialProps: { groupId: 'group-1' as string | null } },
+    );
+
+    await waitFor(() => {
+      expect(result.current.error?.message).toBe('boom');
+    });
+
+    rerender({ groupId: null });
+
+    await waitFor(() => {
+      expect(result.current.error).toBeNull();
+      expect(result.current.defaultCapabilities).toBeNull();
+    });
+  });
+
+  it('useSubgroupVisibility loads subgroup visibility for a group', async () => {
+    const getSubgroupVisibility = vi.fn().mockResolvedValue('Restricted');
+    const mero = createMero({ getSubgroupVisibility });
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    const { result } = renderHook(() => useSubgroupVisibility('group-1'));
+
+    await waitFor(() => {
+      expect(result.current.subgroupVisibility).toBe('Restricted');
+    });
+
+    expect(getSubgroupVisibility).toHaveBeenCalledWith('group-1');
+  });
+
+  it('useSubgroupVisibility clears when groupId becomes null', async () => {
+    const getSubgroupVisibility = vi.fn().mockRejectedValue(new Error('boom'));
+    const mero = createMero({ getSubgroupVisibility });
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    const { result, rerender } = renderHook(
+      ({ groupId }) => useSubgroupVisibility(groupId),
+      { initialProps: { groupId: 'group-1' as string | null } },
+    );
+
+    await waitFor(() => {
+      expect(result.current.error?.message).toBe('boom');
+    });
+
+    rerender({ groupId: null });
+
+    await waitFor(() => {
+      expect(result.current.error).toBeNull();
+      expect(result.current.subgroupVisibility).toBeNull();
+    });
   });
 
   // ---- Group Signing Key, Upgrades & Hierarchy ----
@@ -1101,7 +1288,7 @@ describe('group and context hooks', () => {
 
   it('useSubgroups loads subgroups for a group', async () => {
     const listSubgroups = vi.fn().mockResolvedValue([
-      { groupId: 'child-1', alias: 'Sub A' },
+      { groupId: 'child-1', name: 'Sub A' },
       { groupId: 'child-2' },
     ]);
     const mero = createMero({ listSubgroups });
