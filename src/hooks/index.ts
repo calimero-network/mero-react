@@ -639,6 +639,21 @@ export function useJoinContext() {
   return { joinContext, loading, error };
 }
 
+export function useJoinSubgroupInheritance() {
+  const { mero } = useMero();
+  const { loading, error, run } = useAsyncMutation();
+
+  const joinSubgroupInheritance = useCallback(
+    async (groupId: string) => {
+      if (!mero) return null;
+      return run(() => mero.admin.joinSubgroupInheritance(groupId));
+    },
+    [mero, run],
+  );
+
+  return { joinSubgroupInheritance, loading, error };
+}
+
 export function useContextGroup(contextId?: string | null) {
   const { mero } = useMero();
   const [groupId, setGroupId] = useState<string | null>(null);

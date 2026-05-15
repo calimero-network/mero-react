@@ -57,6 +57,7 @@ export {
   useJoinContext,
   useJoinGroup,
   useJoinNamespace,
+  useJoinSubgroupInheritance,
   useMemberMetadata,
   useNamespace,
   useNamespaceGroups,
