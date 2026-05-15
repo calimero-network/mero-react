@@ -459,6 +459,8 @@ describe('group and context hooks', () => {
       const joined = await result.current.joinSubgroupInheritance('g-2');
       expect(joined?.wasInherited).toBe(false);
     });
+
+    expect(joinSubgroupInheritance).toHaveBeenCalledWith('g-2');
   });
 
   it('useContextGroup fetches the group id for a context', async () => {
