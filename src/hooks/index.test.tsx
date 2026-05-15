@@ -1134,6 +1134,46 @@ describe('group and context hooks', () => {
     });
   });
 
+  it('useMemberMetadata refetch() awaits the fetch (state ready after the promise resolves)', async () => {
+    // Regression for the original cursor[bot] concern on #24: an
+    // earlier draft of this PR had refetch() bump a tick and resolve
+    // immediately — callers that do `await refetch()` and then read
+    // state would see the OLD value. Production caller
+    // `useMemberDisplayName.setName` does exactly that. This asserts
+    // the state has been written by the time the promise resolves.
+    let resolveSecond: (record: typeof recordA) => void = () => {};
+    const recordA = { name: 'Alice', data: {}, updatedAt: 1, updatedBy: 'm-1' };
+    const recordB = { name: 'Alice Renamed', data: {}, updatedAt: 2, updatedBy: 'm-1' };
+    const getMemberMetadata = vi
+      .fn()
+      .mockResolvedValueOnce(recordA)
+      .mockImplementationOnce(
+        () =>
+          new Promise<typeof recordA>((r) => {
+            resolveSecond = r;
+          }),
+      );
+    const mero = createMero({ getMemberMetadata });
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    const { result } = renderHook(() => useMemberMetadata('group-1', 'member-1'));
+    await waitFor(() => {
+      expect(result.current.metadata).toEqual(recordA);
+    });
+
+    let awaitedDone = false;
+    await act(async () => {
+      const p = result.current.refetch();
+      // resolve the in-flight fetch BEFORE the await sees it. The
+      // promise must not resolve until state has been written.
+      resolveSecond(recordB);
+      await p;
+      awaitedDone = true;
+    });
+    expect(awaitedDone).toBe(true);
+    expect(result.current.metadata).toEqual(recordB);
+  });
+
   it('useMemberMetadata re-fetches on remount (regression: settings close→reopen)', async () => {
     // Repro for the mero-drive #42 / playwright "display-name input
     // stays empty on settings reopen" failure: under StrictMode-like

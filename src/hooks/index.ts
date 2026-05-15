@@ -1378,44 +1378,57 @@ export function useMemberMetadata(groupId?: string | null, identity?: string | n
   const [metadata, setMetadata] = useState<MetadataRecord | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
-  // Bump-counter to force the auto-fetch effect to re-run on explicit
-  // refetch() calls. Keying the effect on primitives + this counter
-  // (instead of on the refetch callback ref) makes a remount under
-  // StrictMode reliably re-fetch even when the in-flight response from
-  // the first mount lands between the cleanup and the second setup —
-  // the prior mountedRef-gated implementation could silently drop both
-  // setState calls in that race and leave the new mount with `metadata
-  // = null` forever.
-  const [refetchTick, setRefetchTick] = useState(0);
 
-  useEffect(() => {
-    if (!mero || !groupId || !identity) {
-      setMetadata(null);
-      setError(null);
-      setLoading(false);
-      return;
-    }
-    let aborted = false;
-    setLoading(true);
-    setError(null);
-    (async () => {
+  // Shared fetch logic for the auto-mount effect and the explicit
+  // refetch callable. The per-invocation `signal.aborted` flag covers
+  // the response-during-unmount race cleanly without the global
+  // mountedRef gate that — under StrictMode-like fast unmount/remount
+  // cycles — could leave the hook stuck on `metadata = null` when an
+  // in-flight response landed during cleanup and the followup mount's
+  // useCallback referential identity hadn't changed enough to re-fire
+  // the effect.
+  const run = useCallback(
+    async (signal: { aborted: boolean }) => {
+      if (!mero || !groupId || !identity) {
+        if (!signal.aborted) {
+          setMetadata(null);
+          setError(null);
+          setLoading(false);
+        }
+        return;
+      }
+      if (!signal.aborted) {
+        setLoading(true);
+        setError(null);
+      }
       try {
         const result = await mero.admin.getMemberMetadata(groupId, identity);
-        if (!aborted) setMetadata(result);
+        if (!signal.aborted) setMetadata(result);
       } catch (err) {
-        if (!aborted) setError(toError(err));
+        if (!signal.aborted) setError(toError(err));
       } finally {
-        if (!aborted) setLoading(false);
+        if (!signal.aborted) setLoading(false);
       }
-    })();
-    return () => {
-      aborted = true;
-    };
-  }, [mero, groupId, identity, refetchTick]);
+    },
+    [mero, groupId, identity],
+  );
 
+  useEffect(() => {
+    const signal = { aborted: false };
+    void run(signal);
+    return () => {
+      signal.aborted = true;
+    };
+  }, [run]);
+
+  // Explicit refetch — the caller's `await refetch()` resolves only
+  // after state has been written (preserves the prior API contract;
+  // call sites like `useMemberDisplayName.setName` rely on the new
+  // value being readable from state after the await).
   const refetch = useCallback(async () => {
-    setRefetchTick((t) => t + 1);
-  }, []);
+    const signal = { aborted: false };
+    await run(signal);
+  }, [run]);
 
   return { metadata, loading, error, refetch };
 }
