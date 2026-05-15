@@ -1,3 +1,9 @@
+## [2.4.0](https://github.com/calimero-network/mero-react/compare/mero-react-v2.3.0...mero-react-v2.4.0) (2026-05-15)
+
+### Features
+
+* add useJoinSubgroupInheritance hook ([00de345](https://github.com/calimero-network/mero-react/commit/00de3456dda77fbec64f7ed4b225ef8577400280)), closes [calimero-network/mero-js#37](https://github.com/calimero-network/mero-js/issues/37) [calimero-network/core#2360](https://github.com/calimero-network/core/issues/2360) [core#2357](https://github.com/calimero-network/core/issues/2357) [mero-js#37](https://github.com/calimero-network/mero-js/issues/37)
+
 ## [2.3.0](https://github.com/calimero-network/mero-react/compare/mero-react-v2.2.1...mero-react-v2.3.0) (2026-05-12)
 
 ### Features
