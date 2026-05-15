@@ -26,6 +26,7 @@ import {
   useJoinContext,
   useJoinGroup,
   useJoinNamespace,
+  useJoinSubgroupInheritance,
   useMemberMetadata,
   useNamespace,
   useNamespaceGroups,
@@ -101,6 +102,11 @@ function createMero(adminOverrides: Record<string, unknown> = {}) {
         },
       }),
       joinGroup: vi.fn().mockResolvedValue({ groupId: 'group-1', memberIdentity: 'member-1' }),
+      joinSubgroupInheritance: vi.fn().mockResolvedValue({
+        groupId: 'group-1',
+        memberPublicKey: 'pk-1',
+        wasInherited: true,
+      }),
       getMemberCapabilities: vi.fn().mockResolvedValue({ capabilities: 7 }),
       setMemberCapabilities: vi.fn().mockResolvedValue(undefined),
       updateMemberRole: vi.fn().mockResolvedValue(undefined),
@@ -421,6 +427,38 @@ describe('group and context hooks', () => {
     });
 
     expect(joinContext).toHaveBeenCalledWith('ctx-1');
+  });
+
+  it('useJoinSubgroupInheritance materialises inherited membership', async () => {
+    const joinSubgroupInheritance = vi
+      .fn()
+      .mockResolvedValue({ groupId: 'g-1', memberPublicKey: 'pk-1', wasInherited: true });
+    const mero = createMero({ joinSubgroupInheritance });
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    const { result } = renderHook(() => useJoinSubgroupInheritance());
+
+    await act(async () => {
+      const joined = await result.current.joinSubgroupInheritance('g-1');
+      expect(joined).toEqual({ groupId: 'g-1', memberPublicKey: 'pk-1', wasInherited: true });
+    });
+
+    expect(joinSubgroupInheritance).toHaveBeenCalledWith('g-1');
+  });
+
+  it('useJoinSubgroupInheritance returns wasInherited=false on direct-member no-op', async () => {
+    const joinSubgroupInheritance = vi
+      .fn()
+      .mockResolvedValue({ groupId: 'g-2', memberPublicKey: 'pk-2', wasInherited: false });
+    const mero = createMero({ joinSubgroupInheritance });
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    const { result } = renderHook(() => useJoinSubgroupInheritance());
+
+    await act(async () => {
+      const joined = await result.current.joinSubgroupInheritance('g-2');
+      expect(joined?.wasInherited).toBe(false);
+    });
   });
 
   it('useContextGroup fetches the group id for a context', async () => {
