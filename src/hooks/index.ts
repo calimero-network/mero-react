@@ -1378,43 +1378,44 @@ export function useMemberMetadata(groupId?: string | null, identity?: string | n
   const [metadata, setMetadata] = useState<MetadataRecord | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
-  const mountedRef = useMountedRef();
-
-  const refetch = useCallback(async () => {
-    if (!mero || !groupId || !identity) {
-      if (mountedRef.current) {
-        setMetadata(null);
-        setError(null);
-        setLoading(false);
-      }
-      return;
-    }
-
-    if (mountedRef.current) {
-      setLoading(true);
-      setError(null);
-    }
-
-    try {
-      const result = await mero.admin.getMemberMetadata(groupId, identity);
-      if (mountedRef.current) {
-        setMetadata(result);
-      }
-    } catch (err) {
-      const errorValue = toError(err);
-      if (mountedRef.current) {
-        setError(errorValue);
-      }
-    } finally {
-      if (mountedRef.current) {
-        setLoading(false);
-      }
-    }
-  }, [groupId, identity, mero, mountedRef]);
+  // Bump-counter to force the auto-fetch effect to re-run on explicit
+  // refetch() calls. Keying the effect on primitives + this counter
+  // (instead of on the refetch callback ref) makes a remount under
+  // StrictMode reliably re-fetch even when the in-flight response from
+  // the first mount lands between the cleanup and the second setup —
+  // the prior mountedRef-gated implementation could silently drop both
+  // setState calls in that race and leave the new mount with `metadata
+  // = null` forever.
+  const [refetchTick, setRefetchTick] = useState(0);
 
   useEffect(() => {
-    void refetch();
-  }, [refetch]);
+    if (!mero || !groupId || !identity) {
+      setMetadata(null);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+    let aborted = false;
+    setLoading(true);
+    setError(null);
+    (async () => {
+      try {
+        const result = await mero.admin.getMemberMetadata(groupId, identity);
+        if (!aborted) setMetadata(result);
+      } catch (err) {
+        if (!aborted) setError(toError(err));
+      } finally {
+        if (!aborted) setLoading(false);
+      }
+    })();
+    return () => {
+      aborted = true;
+    };
+  }, [mero, groupId, identity, refetchTick]);
+
+  const refetch = useCallback(async () => {
+    setRefetchTick((t) => t + 1);
+  }, []);
 
   return { metadata, loading, error, refetch };
 }
