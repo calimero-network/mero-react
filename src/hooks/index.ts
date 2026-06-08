@@ -1662,6 +1662,13 @@ export function useMigrationStatus(
     }
   }, [namespaceId, mero, mountedRef]);
 
+  // Clear stale state the instant the namespace changes, so the panel shows a
+  // loading state rather than the previous namespace's data during the refetch.
+  useEffect(() => {
+    setStatus(null);
+    setError(null);
+  }, [namespaceId]);
+
   useEffect(() => {
     void refetch();
   }, [refetch]);
@@ -1736,15 +1743,24 @@ export function useAppVersion(contextId?: string | null, expected?: string) {
     }
   }, [contextId, mero, mountedRef]);
 
+  // Reset on context change so a stale version isn't shown during the refetch.
+  useEffect(() => {
+    setAppVersion(undefined);
+    setError(null);
+  }, [contextId]);
+
   useEffect(() => {
     void refetch();
   }, [refetch]);
 
   useEffect(() => {
-    if (!mero || !contextId) return;
+    if (!mero?.events || !contextId) return;
     const off = mero.events.onAppVersionChanged((event: AppVersionChangedEvent) => {
       if (event.contextId !== contextId) return;
       if (mountedRef.current && event.toVersion) {
+        // Invalidate any in-flight refetch so its (older) result can't clobber
+        // this live update.
+        reqRef.current += 1;
         setAppVersion(event.toVersion);
       }
     });
@@ -1793,6 +1809,9 @@ export function useMyAuthoredMigration(contextId?: string | null) {
     if (!mero || !contextId) return null;
     const result = await run(() => mero.rpc.migrateMyEntries(contextId));
     if (result && mountedRef.current) {
+      // Invalidate any in-flight refresh so a stale count can't overwrite the
+      // authoritative post-convert remaining.
+      reqRef.current += 1;
       setSummary(result);
       setPendingCount(result.remaining);
     }

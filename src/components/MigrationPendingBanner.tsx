@@ -1,4 +1,4 @@
-import React from 'react';
+import type { ReactNode } from 'react';
 import { useMyAuthoredMigration } from '../hooks';
 
 export interface MigrationPendingBannerProps {
@@ -6,7 +6,7 @@ export interface MigrationPendingBannerProps {
   contextId: string;
   className?: string;
   /** Override the default prompt text. */
-  children?: React.ReactNode;
+  children?: ReactNode;
   /** Fired once a convert leaves nothing pending (`remaining === 0`). */
   onMigrated?: () => void;
 }

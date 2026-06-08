@@ -37,6 +37,13 @@ export function MigrationAdminPanel({ namespaceId, pollIntervalMs, className }: 
 
   return (
     <div className={className} data-testid="migration-admin-panel">
+      {error && (
+        // A poll failed after data was already loaded — keep showing the last
+        // good rollup but flag that it may be stale.
+        <div data-testid="migration-status-error" role="alert">
+          Could not refresh migration status: {error.message}
+        </div>
+      )}
       <dl>
         <div><dt>Target version</dt><dd>{status.targetVersion}</dd></div>
         <div><dt>Migrated</dt><dd>{rollup.migrated}</dd></div>
