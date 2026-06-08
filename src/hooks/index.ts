@@ -38,6 +38,11 @@ import type {
   UpdateGroupSettingsRequest,
   UpdateMemberRoleRequest,
   UpgradeGroupRequest,
+  MigrationStatus,
+  MemberMigrationStatusEntry,
+  MigrationStatusRollup,
+  MigrateMyEntriesSummary,
+  AppVersionChangedEvent,
 } from '@calimero-network/mero-js';
 import type {
   ApplicationContextRecord,
@@ -1603,4 +1608,223 @@ export function useDetachContextFromGroup() {
   );
 
   return { detachContextFromGroup, loading, error };
+}
+
+/**
+ * Migration-status rollup for a namespace (skew #3). Migration facts arrive via
+ * heartbeat gossip (no SSE), so liveness is polling: pass `pollIntervalMs` to
+ * re-fetch on an interval. Derived counters are null-safe before the first load.
+ */
+export function useMigrationStatus(
+  namespaceId?: string | null,
+  options?: { pollIntervalMs?: number },
+) {
+  const { mero } = useMero();
+  const [status, setStatus] = useState<MigrationStatus | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+  const mountedRef = useMountedRef();
+  // Monotonic request token: only the latest in-flight request applies its
+  // result, so an overlapping poll or a fast namespace change can't let a
+  // stale response overwrite fresher data.
+  const reqRef = useRef(0);
+
+  const refetch = useCallback(async () => {
+    if (!mero || !namespaceId) {
+      if (mountedRef.current) {
+        setStatus(null);
+        setError(null);
+        setLoading(false);
+      }
+      return;
+    }
+
+    const seq = ++reqRef.current;
+    if (mountedRef.current) {
+      setLoading(true);
+      setError(null);
+    }
+
+    try {
+      const result = await mero.admin.getMigrationStatus(namespaceId);
+      if (mountedRef.current && seq === reqRef.current) {
+        setStatus(result);
+      }
+    } catch (err) {
+      const errorValue = toError(err);
+      if (mountedRef.current && seq === reqRef.current) {
+        setError(errorValue);
+      }
+    } finally {
+      if (mountedRef.current && seq === reqRef.current) {
+        setLoading(false);
+      }
+    }
+  }, [namespaceId, mero, mountedRef]);
+
+  // Clear stale state the instant the namespace changes, so the panel shows a
+  // loading state rather than the previous namespace's data during the refetch.
+  useEffect(() => {
+    setStatus(null);
+    setError(null);
+  }, [namespaceId]);
+
+  useEffect(() => {
+    void refetch();
+  }, [refetch]);
+
+  const pollIntervalMs = options?.pollIntervalMs;
+  useEffect(() => {
+    if (!pollIntervalMs || !mero || !namespaceId) return;
+    const handle = setInterval(() => void refetch(), pollIntervalMs);
+    return () => clearInterval(handle);
+  }, [pollIntervalMs, mero, namespaceId, refetch]);
+
+  const rollup: MigrationStatusRollup | null = status?.rollup ?? null;
+  const members: MemberMigrationStatusEntry[] = status?.members ?? [];
+
+  return {
+    status,
+    rollup,
+    members,
+    allMigrated: rollup?.allMigrated ?? false,
+    membersPendingSignature: rollup?.membersPendingSignature ?? 0,
+    loading,
+    error,
+    refetch,
+  };
+}
+
+/**
+ * Bundle-version skew (#2): reads the context's installed `applicationVersion`
+ * (semver) and compares it to the app-declared `expected` build constant. Any
+ * mismatch (either direction) is `isStale` → "reload to update". Subscribes to
+ * `AppVersionChanged` so a live flip updates `appVersion` without a refetch.
+ */
+export function useAppVersion(contextId?: string | null, expected?: string) {
+  const { mero } = useMero();
+  const [appVersion, setAppVersion] = useState<string | undefined>(undefined);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+  const mountedRef = useMountedRef();
+  // Latest-request-wins token (see useMigrationStatus).
+  const reqRef = useRef(0);
+
+  const refetch = useCallback(async () => {
+    if (!mero || !contextId) {
+      if (mountedRef.current) {
+        setAppVersion(undefined);
+        setError(null);
+        setLoading(false);
+      }
+      return;
+    }
+
+    const seq = ++reqRef.current;
+    if (mountedRef.current) {
+      setLoading(true);
+      setError(null);
+    }
+
+    try {
+      const context = await mero.admin.getContext(contextId);
+      if (mountedRef.current && seq === reqRef.current) {
+        setAppVersion(context.applicationVersion);
+      }
+    } catch (err) {
+      const errorValue = toError(err);
+      if (mountedRef.current && seq === reqRef.current) {
+        setError(errorValue);
+      }
+    } finally {
+      if (mountedRef.current && seq === reqRef.current) {
+        setLoading(false);
+      }
+    }
+  }, [contextId, mero, mountedRef]);
+
+  // Reset on context change so a stale version isn't shown during the refetch.
+  useEffect(() => {
+    setAppVersion(undefined);
+    setError(null);
+  }, [contextId]);
+
+  useEffect(() => {
+    void refetch();
+  }, [refetch]);
+
+  useEffect(() => {
+    if (!mero?.events || !contextId) return;
+    const off = mero.events.onAppVersionChanged((event: AppVersionChangedEvent) => {
+      if (event.contextId !== contextId) return;
+      if (mountedRef.current && event.toVersion) {
+        // Invalidate any in-flight refetch so its (older) result can't clobber
+        // this live update.
+        reqRef.current += 1;
+        setAppVersion(event.toVersion);
+      }
+    });
+    return off;
+  }, [mero, contextId, mountedRef]);
+
+  const isStale = appVersion != null && expected != null && appVersion !== expected;
+
+  return { appVersion, expected, isStale, loading, error, refetch };
+}
+
+/**
+ * The caller's own identity-gated entries pending re-signature (skew #1).
+ * `pending` is `pendingCount > 0` (from `count_my_pending`); `authorize()` runs
+ * the one-tap `migrate_my_entries` convert and folds the resulting `remaining`
+ * back into the count.
+ */
+export function useMyAuthoredMigration(contextId?: string | null) {
+  const { mero } = useMero();
+  const [summary, setSummary] = useState<MigrateMyEntriesSummary | null>(null);
+  const [pendingCount, setPendingCount] = useState(0);
+  const mountedRef = useMountedRef();
+  const { loading, error, run } = useAsyncMutation();
+  // Latest-request-wins token (see useMigrationStatus).
+  const reqRef = useRef(0);
+
+  const refresh = useCallback(async () => {
+    if (!mero || !contextId) {
+      if (mountedRef.current) setPendingCount(0);
+      return;
+    }
+    const seq = ++reqRef.current;
+    try {
+      const count = await mero.rpc.countMyPending(contextId);
+      if (mountedRef.current && seq === reqRef.current) setPendingCount(count);
+    } catch {
+      // best-effort count; leave the previous value on a transient failure
+    }
+  }, [mero, contextId, mountedRef]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  const authorize = useCallback(async () => {
+    if (!mero || !contextId) return null;
+    const result = await run(() => mero.rpc.migrateMyEntries(contextId));
+    if (result && mountedRef.current) {
+      // Invalidate any in-flight refresh so a stale count can't overwrite the
+      // authoritative post-convert remaining.
+      reqRef.current += 1;
+      setSummary(result);
+      setPendingCount(result.remaining);
+    }
+    return result;
+  }, [mero, contextId, run, mountedRef]);
+
+  return {
+    summary,
+    pendingCount,
+    pending: pendingCount > 0,
+    authorize,
+    loading,
+    error,
+    refresh,
+  };
 }

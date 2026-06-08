@@ -20,6 +20,10 @@ export { LoginModal } from './components';
 export type { LoginModalProps } from './components';
 export { CalimeroLogo } from './components';
 export type { CalimeroLogoProps } from './components';
+export { MigrationPendingBanner } from './components';
+export type { MigrationPendingBannerProps } from './components';
+export { MigrationAdminPanel } from './components';
+export type { MigrationAdminPanelProps } from './components';
 
 // Theme
 export {
@@ -83,6 +87,9 @@ export {
   useRemoveGroupMembers,
   useSubscription,
   useSyncGroup,
+  useMigrationStatus,
+  useAppVersion,
+  useMyAuthoredMigration,
 } from './hooks';
 export type { SetMetadataInput } from './hooks';
 

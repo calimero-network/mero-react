@@ -51,6 +51,9 @@ import {
   useAddGroupMembers,
   useRemoveGroupMembers,
   useSyncGroup,
+  useMigrationStatus,
+  useAppVersion,
+  useMyAuthoredMigration,
 } from './index';
 import { useMero } from '../context';
 
@@ -60,9 +63,26 @@ vi.mock('../context', () => ({
 
 const mockUseMero = vi.mocked(useMero);
 
-function createMero(adminOverrides: Record<string, unknown> = {}) {
+function createMero(
+  adminOverrides: Record<string, unknown> = {},
+  extra: Record<string, unknown> = {},
+) {
   return {
     admin: {
+      getContext: vi.fn().mockResolvedValue({
+        id: 'ctx-1',
+        applicationId: 'app-1',
+        rootHash: 'rh',
+        dagHeads: [],
+        applicationVersion: '1.0.0',
+      }),
+      getMigrationStatus: vi.fn().mockResolvedValue({
+        targetVersion: 2,
+        expectedMembers: 0,
+        rollup: { migrated: 0, inProgress: 0, unknown: 0, total: 0, allMigrated: true, membersPendingSignature: 0 },
+        members: [],
+      }),
+      getCascadeStatus: vi.fn().mockResolvedValue([]),
       getContexts: vi.fn().mockResolvedValue({ contexts: [] }),
       getContextsForApplication: vi.fn().mockResolvedValue({ contexts: [] }),
       createContext: vi.fn().mockResolvedValue({ contextId: 'ctx-1', memberPublicKey: 'pk-1' }),
@@ -156,6 +176,7 @@ function createMero(adminOverrides: Record<string, unknown> = {}) {
       listNamespaceGroups: vi.fn().mockResolvedValue([]),
       ...adminOverrides,
     },
+    ...extra,
   };
 }
 
@@ -1380,5 +1401,105 @@ describe('group and context hooks', () => {
     });
 
     expect(detachContextFromGroup).toHaveBeenCalledWith('group-1', 'ctx-1', undefined);
+  });
+});
+
+describe('useMigrationStatus', () => {
+  it('exposes the rollup, members, and derived counters', async () => {
+    const getMigrationStatus = vi.fn().mockResolvedValue({
+      targetVersion: 2,
+      expectedMembers: 3,
+      rollup: { migrated: 2, inProgress: 0, unknown: 1, total: 3, allMigrated: false, membersPendingSignature: 1 },
+      members: [
+        { peer: 'aa', report: { schemaVersion: 2, residueAuto: 0, residueIdentity: 0, syncedUpToHlc: 0, reportedAt: 0, authoredRemaining: 0 }, state: 'migrated' },
+        { peer: 'bb', report: { schemaVersion: 1, residueAuto: 0, residueIdentity: 0, syncedUpToHlc: 0, reportedAt: 0, authoredRemaining: 2 }, state: 'in_progress' },
+        { peer: 'cc', report: null, state: 'unknown' },
+      ],
+    });
+    const mero = createMero({ getMigrationStatus });
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    const { result } = renderHook(() => useMigrationStatus('ns1'));
+
+    await waitFor(() => expect(result.current.status).not.toBeNull());
+    expect(result.current.membersPendingSignature).toBe(1);
+    expect(result.current.members).toHaveLength(3);
+    expect(result.current.allMigrated).toBe(false);
+    expect(getMigrationStatus).toHaveBeenCalledWith('ns1');
+  });
+
+  it('does not fetch when namespaceId is null', async () => {
+    const getMigrationStatus = vi.fn();
+    const mero = createMero({ getMigrationStatus });
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    const { result } = renderHook(() => useMigrationStatus(null));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.status).toBeNull();
+    expect(getMigrationStatus).not.toHaveBeenCalled();
+  });
+});
+
+describe('useAppVersion', () => {
+  it('reports stale when the installed version differs from expected', async () => {
+    const mero = createMero(
+      { getContext: vi.fn().mockResolvedValue({ id: 'ctx1', applicationId: 'a', rootHash: 'r', dagHeads: [], applicationVersion: '1.0.0' }) },
+      { events: { onAppVersionChanged: vi.fn(() => () => {}) } },
+    );
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    const { result } = renderHook(() => useAppVersion('ctx1', '2.0.0'));
+    await waitFor(() => expect(result.current.appVersion).toBe('1.0.0'));
+    expect(result.current.isStale).toBe(true);
+  });
+
+  it('is not stale when versions match', async () => {
+    const mero = createMero(
+      { getContext: vi.fn().mockResolvedValue({ id: 'ctx1', applicationId: 'a', rootHash: 'r', dagHeads: [], applicationVersion: '2.0.0' }) },
+      { events: { onAppVersionChanged: vi.fn(() => () => {}) } },
+    );
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    const { result } = renderHook(() => useAppVersion('ctx1', '2.0.0'));
+    await waitFor(() => expect(result.current.appVersion).toBe('2.0.0'));
+    expect(result.current.isStale).toBe(false);
+  });
+
+  it('updates appVersion live from an AppVersionChanged event', async () => {
+    let captured: ((e: { contextId: string; toVersion?: string }) => void) | null = null;
+    const mero = createMero(
+      { getContext: vi.fn().mockResolvedValue({ id: 'ctx1', applicationId: 'a', rootHash: 'r', dagHeads: [], applicationVersion: '1.0.0' }) },
+      { events: { onAppVersionChanged: vi.fn((cb: (e: { contextId: string; toVersion?: string }) => void) => { captured = cb; return () => {}; }) } },
+    );
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    const { result } = renderHook(() => useAppVersion('ctx1', '2.0.0'));
+    await waitFor(() => expect(result.current.appVersion).toBe('1.0.0'));
+
+    act(() => captured?.({ contextId: 'ctx1', toVersion: '2.0.0' }));
+    expect(result.current.appVersion).toBe('2.0.0');
+    expect(result.current.isStale).toBe(false);
+  });
+});
+
+describe('useMyAuthoredMigration', () => {
+  it('reports pending from countMyPending and clears after authorize', async () => {
+    const countMyPending = vi.fn().mockResolvedValue(2);
+    const migrateMyEntries = vi.fn().mockResolvedValue({ converted: 2, remaining: 0 });
+    const mero = createMero({}, { rpc: { countMyPending, migrateMyEntries } });
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    const { result } = renderHook(() => useMyAuthoredMigration('ctx1'));
+    await waitFor(() => expect(result.current.pending).toBe(true));
+    expect(result.current.pendingCount).toBe(2);
+
+    await act(async () => {
+      await result.current.authorize();
+    });
+
+    expect(migrateMyEntries).toHaveBeenCalledWith('ctx1');
+    expect(result.current.summary).toEqual({ converted: 2, remaining: 0 });
+    expect(result.current.pending).toBe(false);
+    expect(result.current.pendingCount).toBe(0);
   });
 });
