@@ -1624,6 +1624,10 @@ export function useMigrationStatus(
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const mountedRef = useMountedRef();
+  // Monotonic request token: only the latest in-flight request applies its
+  // result, so an overlapping poll or a fast namespace change can't let a
+  // stale response overwrite fresher data.
+  const reqRef = useRef(0);
 
   const refetch = useCallback(async () => {
     if (!mero || !namespaceId) {
@@ -1635,6 +1639,7 @@ export function useMigrationStatus(
       return;
     }
 
+    const seq = ++reqRef.current;
     if (mountedRef.current) {
       setLoading(true);
       setError(null);
@@ -1642,16 +1647,16 @@ export function useMigrationStatus(
 
     try {
       const result = await mero.admin.getMigrationStatus(namespaceId);
-      if (mountedRef.current) {
+      if (mountedRef.current && seq === reqRef.current) {
         setStatus(result);
       }
     } catch (err) {
       const errorValue = toError(err);
-      if (mountedRef.current) {
+      if (mountedRef.current && seq === reqRef.current) {
         setError(errorValue);
       }
     } finally {
-      if (mountedRef.current) {
+      if (mountedRef.current && seq === reqRef.current) {
         setLoading(false);
       }
     }
@@ -1695,6 +1700,8 @@ export function useAppVersion(contextId?: string | null, expected?: string) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const mountedRef = useMountedRef();
+  // Latest-request-wins token (see useMigrationStatus).
+  const reqRef = useRef(0);
 
   const refetch = useCallback(async () => {
     if (!mero || !contextId) {
@@ -1706,6 +1713,7 @@ export function useAppVersion(contextId?: string | null, expected?: string) {
       return;
     }
 
+    const seq = ++reqRef.current;
     if (mountedRef.current) {
       setLoading(true);
       setError(null);
@@ -1713,16 +1721,16 @@ export function useAppVersion(contextId?: string | null, expected?: string) {
 
     try {
       const context = await mero.admin.getContext(contextId);
-      if (mountedRef.current) {
+      if (mountedRef.current && seq === reqRef.current) {
         setAppVersion(context.applicationVersion);
       }
     } catch (err) {
       const errorValue = toError(err);
-      if (mountedRef.current) {
+      if (mountedRef.current && seq === reqRef.current) {
         setError(errorValue);
       }
     } finally {
-      if (mountedRef.current) {
+      if (mountedRef.current && seq === reqRef.current) {
         setLoading(false);
       }
     }
@@ -1760,15 +1768,18 @@ export function useMyAuthoredMigration(contextId?: string | null) {
   const [pendingCount, setPendingCount] = useState(0);
   const mountedRef = useMountedRef();
   const { loading, error, run } = useAsyncMutation();
+  // Latest-request-wins token (see useMigrationStatus).
+  const reqRef = useRef(0);
 
   const refresh = useCallback(async () => {
     if (!mero || !contextId) {
       if (mountedRef.current) setPendingCount(0);
       return;
     }
+    const seq = ++reqRef.current;
     try {
       const count = await mero.rpc.countMyPending(contextId);
-      if (mountedRef.current) setPendingCount(count);
+      if (mountedRef.current && seq === reqRef.current) setPendingCount(count);
     } catch {
       // best-effort count; leave the previous value on a transient failure
     }

@@ -14,17 +14,25 @@ export interface MigrationAdminPanelProps {
  * pair with the upgrade-trigger hooks to drive a migration.
  */
 export function MigrationAdminPanel({ namespaceId, pollIntervalMs, className }: MigrationAdminPanelProps) {
-  const { status, rollup, members, membersPendingSignature, loading } = useMigrationStatus(
+  const { status, rollup, members, membersPendingSignature, error } = useMigrationStatus(
     namespaceId,
     { pollIntervalMs },
   );
 
-  if (loading && !status) {
-    return <div className={className} data-testid="migration-admin-panel">Loading migration status…</div>;
+  // Surface a real failure rather than the misleading "no status" message.
+  if (error && !status) {
+    return (
+      <div className={className} data-testid="migration-admin-panel">
+        Failed to load migration status: {error.message}
+      </div>
+    );
   }
 
+  // Before the first successful fetch (initial paint or in-flight), show
+  // loading — a successful read always yields a rollup, so a null status here
+  // means "not loaded yet", never "empty".
   if (!status || !rollup) {
-    return <div className={className} data-testid="migration-admin-panel">No migration status available.</div>;
+    return <div className={className} data-testid="migration-admin-panel">Loading migration status…</div>;
   }
 
   return (
