@@ -1,3 +1,15 @@
+## [2.5.0](https://github.com/calimero-network/mero-react/compare/mero-react-v2.4.0...mero-react-v2.5.0) (2026-06-08)
+
+### Features
+
+* **components:** MigrationPendingBanner + MigrationAdminPanel (6h.4-6h.6) ([ac30b94](https://github.com/calimero-network/mero-react/commit/ac30b9414195f778b36cf21a583a44c7bbfc1b45))
+* **hooks:** useMigrationStatus, useAppVersion, useMyAuthoredMigration (6h.1-6h.3) ([c764dce](https://github.com/calimero-network/mero-react/commit/c764dce94bfd058479d2cc84290af3790d2bd243))
+
+### Bug Fixes
+
+* **6h:** clear state on id change, invalidate in-flight on event/authorize, surface poll errors (review) ([8a5a949](https://github.com/calimero-network/mero-react/commit/8a5a9492cb3bd945aa0ae6318b2d7e7cbbf4f066))
+* **6h:** latest-request-wins guard in hooks + admin panel load/error states (review) ([30ec4c8](https://github.com/calimero-network/mero-react/commit/30ec4c849c3dbbb36288fa16f97867d3505b44d3))
+
 ## [2.4.0](https://github.com/calimero-network/mero-react/compare/mero-react-v2.3.0...mero-react-v2.4.0) (2026-05-15)
 
 ### Features
