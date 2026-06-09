@@ -1,3 +1,13 @@
+## [2.6.0](https://github.com/calimero-network/mero-react/compare/mero-react-v2.5.0...mero-react-v2.6.0) (2026-06-09)
+
+### Features
+
+* **hooks:** useLatestVersion + failed migration state surfacing ([#2539](https://github.com/calimero-network/mero-react/issues/2539)) ([664c5e3](https://github.com/calimero-network/mero-react/commit/664c5e39212a0adc13ee6db78c8cf0d9fac76b15))
+
+### Bug Fixes
+
+* **useLatestVersion:** invalidate in-flight request when inputs are cleared ([1ae543b](https://github.com/calimero-network/mero-react/commit/1ae543beef892782212118ac741075e32793c859))
+
 ## [2.5.0](https://github.com/calimero-network/mero-react/compare/mero-react-v2.4.0...mero-react-v2.5.0) (2026-06-08)
 
 ### Features
