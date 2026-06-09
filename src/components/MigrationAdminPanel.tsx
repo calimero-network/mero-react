@@ -14,7 +14,7 @@ export interface MigrationAdminPanelProps {
  * pair with the upgrade-trigger hooks to drive a migration.
  */
 export function MigrationAdminPanel({ namespaceId, pollIntervalMs, className }: MigrationAdminPanelProps) {
-  const { status, rollup, members, membersPendingSignature, error } = useMigrationStatus(
+  const { status, rollup, members, membersPendingSignature, failed, error } = useMigrationStatus(
     namespaceId,
     { pollIntervalMs },
   );
@@ -49,6 +49,7 @@ export function MigrationAdminPanel({ namespaceId, pollIntervalMs, className }: 
         <div><dt>Migrated</dt><dd>{rollup.migrated}</dd></div>
         <div><dt>In progress</dt><dd>{rollup.inProgress}</dd></div>
         <div><dt>Unknown</dt><dd>{rollup.unknown}</dd></div>
+        <div><dt>Failed</dt><dd data-testid="migration-failed-count">{failed}</dd></div>
         <div><dt>Total</dt><dd>{rollup.total}</dd></div>
         <div><dt>All migrated</dt><dd>{rollup.allMigrated ? 'yes' : 'no'}</dd></div>
         <div>
@@ -58,7 +59,7 @@ export function MigrationAdminPanel({ namespaceId, pollIntervalMs, className }: 
       </dl>
       <table>
         <thead>
-          <tr><th>Peer</th><th>State</th><th>Schema</th><th>Pending</th></tr>
+          <tr><th>Peer</th><th>State</th><th>Schema</th><th>Pending</th><th>Reason</th></tr>
         </thead>
         <tbody>
           {members.map((m) => (
@@ -67,6 +68,7 @@ export function MigrationAdminPanel({ namespaceId, pollIntervalMs, className }: 
               <td>{m.state}</td>
               <td>{m.report?.schemaVersion ?? '—'}</td>
               <td>{m.report?.authoredRemaining ?? '—'}</td>
+              <td>{m.report?.migrationFailed ?? '—'}</td>
             </tr>
           ))}
         </tbody>

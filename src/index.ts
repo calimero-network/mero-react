@@ -89,6 +89,7 @@ export {
   useSyncGroup,
   useMigrationStatus,
   useAppVersion,
+  useLatestVersion,
   useMyAuthoredMigration,
 } from './hooks';
 export type { SetMetadataInput } from './hooks';
