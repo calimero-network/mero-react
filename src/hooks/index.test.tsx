@@ -53,6 +53,7 @@ import {
   useSyncGroup,
   useMigrationStatus,
   useAppVersion,
+  useLatestVersion,
   useMyAuthoredMigration,
 } from './index';
 import { useMero } from '../context';
@@ -79,9 +80,10 @@ function createMero(
       getMigrationStatus: vi.fn().mockResolvedValue({
         targetVersion: 2,
         expectedMembers: 0,
-        rollup: { migrated: 0, inProgress: 0, unknown: 0, total: 0, allMigrated: true, membersPendingSignature: 0 },
+        rollup: { migrated: 0, inProgress: 0, unknown: 0, failed: 0, total: 0, allMigrated: true, membersPendingSignature: 0 },
         members: [],
       }),
+      getRegistryVersions: vi.fn().mockResolvedValue(['2.0.0', '1.0.0']),
       getCascadeStatus: vi.fn().mockResolvedValue([]),
       getContexts: vi.fn().mockResolvedValue({ contexts: [] }),
       getContextsForApplication: vi.fn().mockResolvedValue({ contexts: [] }),
@@ -1479,6 +1481,44 @@ describe('useAppVersion', () => {
     act(() => captured?.({ contextId: 'ctx1', toVersion: '2.0.0' }));
     expect(result.current.appVersion).toBe('2.0.0');
     expect(result.current.isStale).toBe(false);
+  });
+});
+
+describe('useLatestVersion', () => {
+  it('flags an available update when the registry is ahead of the running version', async () => {
+    const getRegistryVersions = vi.fn().mockResolvedValue(['2.0.0', '1.0.0']);
+    const mero = createMero({ getRegistryVersions });
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    const { result } = renderHook(() =>
+      useLatestVersion('https://registry.example.com', 'com.acme.app', '1.0.0'),
+    );
+    await waitFor(() => expect(result.current.latestVersion).toBe('2.0.0'));
+    expect(result.current.updateAvailable).toBe(true);
+    expect(getRegistryVersions).toHaveBeenCalledWith('https://registry.example.com', 'com.acme.app');
+  });
+
+  it('reports no update when the running version is already the latest', async () => {
+    const getRegistryVersions = vi.fn().mockResolvedValue(['2.0.0', '1.0.0']);
+    const mero = createMero({ getRegistryVersions });
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    const { result } = renderHook(() =>
+      useLatestVersion('https://registry.example.com', 'com.acme.app', '2.0.0'),
+    );
+    await waitFor(() => expect(result.current.latestVersion).toBe('2.0.0'));
+    expect(result.current.updateAvailable).toBe(false);
+  });
+
+  it('does not fetch until registry and package are provided', async () => {
+    const getRegistryVersions = vi.fn().mockResolvedValue(['2.0.0']);
+    const mero = createMero({ getRegistryVersions });
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    const { result } = renderHook(() => useLatestVersion(null, null, '1.0.0'));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(getRegistryVersions).not.toHaveBeenCalled();
+    expect(result.current.updateAvailable).toBe(false);
   });
 });
 

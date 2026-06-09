@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { compareSemver } from '@calimero-network/mero-js';
 import { useMero } from '../context';
 import type {
   Context,
@@ -1689,6 +1690,8 @@ export function useMigrationStatus(
     members,
     allMigrated: rollup?.allMigrated ?? false,
     membersPendingSignature: rollup?.membersPendingSignature ?? 0,
+    /** Members whose migrate aborted (migration-check failed or apply errored). */
+    failed: rollup?.failed ?? 0,
     loading,
     error,
     refetch,
@@ -1770,6 +1773,81 @@ export function useAppVersion(contextId?: string | null, expected?: string) {
   const isStale = appVersion != null && expected != null && appVersion !== expected;
 
   return { appVersion, expected, isStale, loading, error, refetch };
+}
+
+/**
+ * "Is a newer version available?" for an Updates view. Reads a package's
+ * published versions from the registry and compares the newest to the running
+ * `currentVersion` (e.g. a context's `applicationVersion`). `updateAvailable`
+ * is true only when the registry's newest is strictly greater. This is the
+ * registry-side check the admin acts on; gate rendering on admin status at the
+ * call site. Pure read — fetching nothing until both `registryUrl` and
+ * `packageName` are provided.
+ */
+export function useLatestVersion(
+  registryUrl?: string | null,
+  packageName?: string | null,
+  currentVersion?: string | null,
+) {
+  const { mero } = useMero();
+  const [versions, setVersions] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+  const mountedRef = useMountedRef();
+  // Latest-request-wins token (see useMigrationStatus).
+  const reqRef = useRef(0);
+
+  const refetch = useCallback(async () => {
+    if (!mero || !registryUrl || !packageName) {
+      if (mountedRef.current) {
+        setVersions([]);
+        setError(null);
+        setLoading(false);
+      }
+      return;
+    }
+
+    const seq = ++reqRef.current;
+    if (mountedRef.current) {
+      setLoading(true);
+      setError(null);
+    }
+
+    try {
+      const result = await mero.admin.getRegistryVersions(registryUrl, packageName);
+      if (mountedRef.current && seq === reqRef.current) {
+        setVersions(result);
+      }
+    } catch (err) {
+      const errorValue = toError(err);
+      if (mountedRef.current && seq === reqRef.current) {
+        setError(errorValue);
+      }
+    } finally {
+      if (mountedRef.current && seq === reqRef.current) {
+        setLoading(false);
+      }
+    }
+  }, [mero, registryUrl, packageName, mountedRef]);
+
+  // Clear stale versions the instant the package/registry changes.
+  useEffect(() => {
+    setVersions([]);
+    setError(null);
+  }, [registryUrl, packageName]);
+
+  useEffect(() => {
+    void refetch();
+  }, [refetch]);
+
+  // getRegistryVersions returns newest-first, so [0] is the latest published.
+  const latestVersion = versions[0] ?? null;
+  const updateAvailable =
+    latestVersion != null &&
+    currentVersion != null &&
+    compareSemver(latestVersion, currentVersion) > 0;
+
+  return { versions, latestVersion, currentVersion, updateAvailable, loading, error, refetch };
 }
 
 /**
