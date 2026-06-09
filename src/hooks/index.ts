@@ -1799,6 +1799,9 @@ export function useLatestVersion(
 
   const refetch = useCallback(async () => {
     if (!mero || !registryUrl || !packageName) {
+      // Invalidate any in-flight request so a late response can't repopulate
+      // stale versions for the previous package after the inputs were cleared.
+      reqRef.current += 1;
       if (mountedRef.current) {
         setVersions([]);
         setError(null);

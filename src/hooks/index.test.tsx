@@ -1520,6 +1520,34 @@ describe('useLatestVersion', () => {
     expect(getRegistryVersions).not.toHaveBeenCalled();
     expect(result.current.updateAvailable).toBe(false);
   });
+
+  it('a late fetch does not repopulate versions after the package is cleared', async () => {
+    // Hang the fetch so we can clear the inputs while it is in flight.
+    let resolveFetch: (v: string[]) => void = () => {};
+    const getRegistryVersions = vi
+      .fn()
+      .mockReturnValue(new Promise<string[]>((r) => { resolveFetch = r; }));
+    const mero = createMero({ getRegistryVersions });
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    const { result, rerender } = renderHook(
+      ({ pkg }: { pkg: string | null }) =>
+        useLatestVersion('https://registry.example.com', pkg, '1.0.0'),
+      { initialProps: { pkg: 'com.acme.app' as string | null } },
+    );
+    await waitFor(() => expect(getRegistryVersions).toHaveBeenCalled());
+
+    // Caller clears the package before the in-flight request resolves.
+    rerender({ pkg: null });
+
+    // The stale response arrives late — it must NOT restore the old versions.
+    await act(async () => {
+      resolveFetch(['2.0.0', '1.0.0']);
+    });
+    expect(result.current.versions).toEqual([]);
+    expect(result.current.latestVersion).toBeNull();
+    expect(result.current.updateAvailable).toBe(false);
+  });
 });
 
 describe('useMyAuthoredMigration', () => {
