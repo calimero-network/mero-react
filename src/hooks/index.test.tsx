@@ -1157,6 +1157,77 @@ describe('group and context hooks', () => {
     });
   });
 
+  it('useMemberMetadata refetch() awaits the fetch (state ready after the promise resolves)', async () => {
+    // Regression for the original cursor[bot] concern on #24: an
+    // earlier draft of this PR had refetch() bump a tick and resolve
+    // immediately — callers that do `await refetch()` and then read
+    // state would see the OLD value. Production caller
+    // `useMemberDisplayName.setName` does exactly that. This asserts
+    // the state has been written by the time the promise resolves.
+    let resolveSecond: (record: typeof recordA) => void = () => {};
+    const recordA = { name: 'Alice', data: {}, updatedAt: 1, updatedBy: 'm-1' };
+    const recordB = { name: 'Alice Renamed', data: {}, updatedAt: 2, updatedBy: 'm-1' };
+    const getMemberMetadata = vi
+      .fn()
+      .mockResolvedValueOnce(recordA)
+      .mockImplementationOnce(
+        () =>
+          new Promise<typeof recordA>((r) => {
+            resolveSecond = r;
+          }),
+      );
+    const mero = createMero({ getMemberMetadata });
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    const { result } = renderHook(() => useMemberMetadata('group-1', 'member-1'));
+    await waitFor(() => {
+      expect(result.current.metadata).toEqual(recordA);
+    });
+
+    let awaitedDone = false;
+    await act(async () => {
+      const p = result.current.refetch();
+      // resolve the in-flight fetch BEFORE the await sees it. The
+      // promise must not resolve until state has been written.
+      resolveSecond(recordB);
+      await p;
+      awaitedDone = true;
+    });
+    expect(awaitedDone).toBe(true);
+    expect(result.current.metadata).toEqual(recordB);
+  });
+
+  it('useMemberMetadata re-fetches on remount (regression: settings close→reopen)', async () => {
+    // Repro for the mero-drive #42 / playwright "display-name input
+    // stays empty on settings reopen" failure: under StrictMode-like
+    // mount/unmount cycles, the prior mountedRef-gated implementation
+    // could drop both setState calls when the first mount's pending
+    // fetch landed during cleanup, leaving the second mount stuck on
+    // `metadata = null` forever. The auto-fetch effect must fire
+    // unconditionally for each fresh hook instance.
+    const record = { name: 'Alice', data: {}, updatedAt: 2, updatedBy: 'member-1' };
+    const getMemberMetadata = vi.fn().mockResolvedValue(record);
+    const mero = createMero({ getMemberMetadata });
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    const first = renderHook(() => useMemberMetadata('group-1', 'member-1'));
+    await waitFor(() => {
+      expect(first.result.current.metadata).toEqual(record);
+    });
+    first.unmount();
+
+    // Second mount with the same params — must trigger a fresh fetch
+    // and end up with the same record in state.
+    const second = renderHook(() => useMemberMetadata('group-1', 'member-1'));
+    await waitFor(() => {
+      expect(second.result.current.metadata).toEqual(record);
+    });
+
+    // Both mounts each fire one fetch — proves the second mount's
+    // auto-effect actually ran (not just inherited stale state).
+    expect(getMemberMetadata.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
   it('useDefaultCapabilities loads default capabilities for a group', async () => {
     const getDefaultCapabilities = vi.fn().mockResolvedValue(15);
     const mero = createMero({ getDefaultCapabilities });
