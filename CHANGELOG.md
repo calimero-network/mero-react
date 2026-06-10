@@ -1,3 +1,10 @@
+## [2.6.1](https://github.com/calimero-network/mero-react/compare/mero-react-v2.6.0...mero-react-v2.6.1) (2026-06-10)
+
+### Bug Fixes
+
+* **useMemberMetadata:** preserve `await refetch()` state-ready contract ([d2e7b38](https://github.com/calimero-network/mero-react/commit/d2e7b384740de5e8c93b3fb3404c52c106dec625))
+* **useMemberMetadata:** re-fetch reliably on remount ([9966e3a](https://github.com/calimero-network/mero-react/commit/9966e3a73f942afa14b4f2e2c458fa10677509e7))
+
 ## [2.6.0](https://github.com/calimero-network/mero-react/compare/mero-react-v2.5.0...mero-react-v2.6.0) (2026-06-09)
 
 ### Features
