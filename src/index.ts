@@ -83,6 +83,7 @@ export {
   useUpdateGroupSettings,
   useUpdateMemberRole,
   useUpgradeGroup,
+  useResyncContext,
   useAddGroupMembers,
   useRemoveGroupMembers,
   useSubscription,
