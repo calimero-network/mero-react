@@ -1,3 +1,17 @@
+## [3.0.0](https://github.com/calimero-network/mero-react/compare/mero-react-v2.6.1...mero-react-v3.0.0) (2026-06-15)
+
+### ⚠ BREAKING CHANGES
+
+* **hooks:** requires @calimero-network/mero-js >=3, which removes
+`migrateMethod` from `UpdateContextApplicationRequest` and `UpgradeGroupRequest`.
+mero-react re-exports these types, so callers must stop passing the field.
+
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+### Features
+
+* **hooks:** add useResyncContext; require mero-js v3 ([9d0b362](https://github.com/calimero-network/mero-react/commit/9d0b362923cfebc9c785875b6e06b4232b3b1980))
+
 ## [2.6.1](https://github.com/calimero-network/mero-react/compare/mero-react-v2.6.0...mero-react-v2.6.1) (2026-06-10)
 
 ### Bug Fixes
