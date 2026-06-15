@@ -48,6 +48,7 @@ import {
   useUpdateGroupSettings,
   useUpdateMemberRole,
   useUpgradeGroup,
+  useResyncContext,
   useAddGroupMembers,
   useRemoveGroupMembers,
   useSyncGroup,
@@ -146,6 +147,7 @@ function createMero(
       getSubgroupVisibility: vi.fn().mockResolvedValue('open'),
       registerGroupSigningKey: vi.fn().mockResolvedValue({ publicKey: 'pk-1' }),
       upgradeGroup: vi.fn().mockResolvedValue({ groupId: 'group-1', status: 'in_progress' }),
+      resyncContext: vi.fn().mockResolvedValue({ contextId: 'ctx-1', resyncStarted: true }),
       getGroupUpgradeStatus: vi.fn().mockResolvedValue(null),
       retryGroupUpgrade: vi.fn().mockResolvedValue({ groupId: 'group-1', status: 'in_progress' }),
       nestGroup: vi.fn().mockResolvedValue(undefined),
@@ -1330,6 +1332,35 @@ describe('group and context hooks', () => {
     });
 
     expect(upgradeGroup).toHaveBeenCalledWith('group-1', { targetApplicationId: 'app-2' });
+  });
+
+  it('useResyncContext kicks off a context re-pull', async () => {
+    const resyncContext = vi.fn().mockResolvedValue({ contextId: 'ctx-1', resyncStarted: true });
+    const mero = createMero({ resyncContext });
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    const { result } = renderHook(() => useResyncContext());
+
+    await act(async () => {
+      const res = await result.current.resyncContext('ctx-1', { force: true });
+      expect(res?.resyncStarted).toBe(true);
+    });
+
+    expect(resyncContext).toHaveBeenCalledWith('ctx-1', { force: true });
+  });
+
+  it('useResyncContext defaults to an empty request', async () => {
+    const resyncContext = vi.fn().mockResolvedValue({ contextId: 'ctx-1', resyncStarted: false });
+    const mero = createMero({ resyncContext });
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    const { result } = renderHook(() => useResyncContext());
+
+    await act(async () => {
+      await result.current.resyncContext('ctx-1');
+    });
+
+    expect(resyncContext).toHaveBeenCalledWith('ctx-1', {});
   });
 
   it('useGroupUpgradeStatus loads upgrade status', async () => {

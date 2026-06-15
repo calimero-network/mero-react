@@ -39,6 +39,7 @@ import type {
   UpdateGroupSettingsRequest,
   UpdateMemberRoleRequest,
   UpgradeGroupRequest,
+  ResyncContextRequest,
   MigrationStatus,
   MemberMigrationStatusEntry,
   MigrationStatusRollup,
@@ -1469,6 +1470,26 @@ export function useUpgradeGroup() {
   );
 
   return { upgradeGroup, loading, error };
+}
+
+/**
+ * Kick off a full state re-pull for a context — operator recovery for a
+ * context stranded mid-sync. `force` re-pulls even when the node does not
+ * flag the context as stranded.
+ */
+export function useResyncContext() {
+  const { mero } = useMero();
+  const { loading, error, run } = useAsyncMutation();
+
+  const resyncContext = useCallback(
+    async (contextId: string, request: ResyncContextRequest = {}) => {
+      if (!mero) return null;
+      return run(() => mero.admin.resyncContext(contextId, request));
+    },
+    [mero, run],
+  );
+
+  return { resyncContext, loading, error };
 }
 
 export function useGroupUpgradeStatus(groupId?: string | null) {
