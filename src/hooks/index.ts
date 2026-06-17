@@ -1498,8 +1498,12 @@ export function useGroupUpgradeStatus(groupId?: string | null) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const mountedRef = useMountedRef();
+  // Latest-request-wins token (see useMigrationStatus) so overlapping refetches
+  // can't land out of order and overwrite fresher data.
+  const reqRef = useRef(0);
 
   const refetch = useCallback(async () => {
+    const seq = ++reqRef.current;
     if (!mero || !groupId) {
       if (mountedRef.current) {
         setUpgradeStatus(null);
@@ -1516,20 +1520,28 @@ export function useGroupUpgradeStatus(groupId?: string | null) {
 
     try {
       const result = await mero.admin.getGroupUpgradeStatus(groupId);
-      if (mountedRef.current) {
+      if (mountedRef.current && seq === reqRef.current) {
         setUpgradeStatus(result);
       }
     } catch (err) {
       const errorValue = toError(err);
-      if (mountedRef.current) {
+      if (mountedRef.current && seq === reqRef.current) {
         setError(errorValue);
       }
     } finally {
-      if (mountedRef.current) {
+      if (mountedRef.current && seq === reqRef.current) {
         setLoading(false);
       }
     }
   }, [groupId, mero, mountedRef]);
+
+  // Clear stale status synchronously when the target group changes (and
+  // invalidate any in-flight refetch), mirroring useMigrationStatus.
+  useEffect(() => {
+    reqRef.current += 1;
+    setUpgradeStatus(null);
+    setError(null);
+  }, [groupId]);
 
   useEffect(() => {
     void refetch();
@@ -1916,6 +1928,15 @@ export function useMyAuthoredMigration(contextId?: string | null) {
       // best-effort count; leave the previous value on a transient failure
     }
   }, [mero, contextId, mountedRef]);
+
+  // Clear stale per-context state synchronously when the target changes (and
+  // invalidate any in-flight refresh), so the banner doesn't flash the previous
+  // context's count until the new count resolves. Mirrors useMigrationStatus.
+  useEffect(() => {
+    reqRef.current += 1;
+    setPendingCount(0);
+    setSummary(null);
+  }, [contextId]);
 
   useEffect(() => {
     void refresh();
