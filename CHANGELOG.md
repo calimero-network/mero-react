@@ -1,3 +1,9 @@
+## [3.0.1](https://github.com/calimero-network/mero-react/compare/mero-react-v3.0.0...mero-react-v3.0.1) (2026-06-17)
+
+### Bug Fixes
+
+* **hooks:** align useGroupUpgradeStatus + useMyAuthoredMigration with sibling consistency ([5f00b53](https://github.com/calimero-network/mero-react/commit/5f00b53eb79c1240f7b3eefcf004d2947d33822b))
+
 ## [3.0.0](https://github.com/calimero-network/mero-react/compare/mero-react-v2.6.1...mero-react-v3.0.0) (2026-06-15)
 
 ### ⚠ BREAKING CHANGES
