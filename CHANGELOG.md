@@ -1,3 +1,10 @@
+## [3.0.2](https://github.com/calimero-network/mero-react/compare/mero-react-v3.0.1...mero-react-v3.0.2) (2026-06-23)
+
+### Bug Fixes
+
+* **security:** bind OAuth callback node, make token store configurable, clear tokens on logout ([0ca921e](https://github.com/calimero-network/mero-react/commit/0ca921e140bbb0d95fd81ac82402ffae76baad72))
+* **security:** reject untrusted callback node by default and restore session on reject ([a815140](https://github.com/calimero-network/mero-react/commit/a8151407e152dab90421e09a9cdf797ee788f6cb))
+
 ## [3.0.1](https://github.com/calimero-network/mero-react/compare/mero-react-v3.0.0...mero-react-v3.0.1) (2026-06-17)
 
 ### Bug Fixes
