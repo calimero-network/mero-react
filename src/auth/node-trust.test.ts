@@ -25,7 +25,7 @@ describe('resolveTrustedNodeUrl', () => {
 
   it('uses the initiated node when the callback carries no node_url', () => {
     const r = resolveTrustedNodeUrl({ candidate: null, initiated });
-    expect(r).toEqual({ url: initiated, rejected: false, unverified: false });
+    expect(r).toEqual({ url: initiated, rejected: false });
   });
 
   it('accepts a callback node_url that matches the initiated origin', () => {
@@ -36,7 +36,7 @@ describe('resolveTrustedNodeUrl', () => {
 
   it('REJECTS a callback node_url whose origin differs from the initiated node (exfiltration attempt)', () => {
     const r = resolveTrustedNodeUrl({ candidate: 'https://evil.com', initiated });
-    expect(r).toEqual({ url: null, rejected: true, unverified: false });
+    expect(r).toEqual({ url: null, rejected: true });
   });
 
   it('REJECTS a same-host-different-port callback node_url', () => {
@@ -64,13 +64,11 @@ describe('resolveTrustedNodeUrl', () => {
       initiated: null,
       allowedNodeUrls: ['https://trusted.example.com'],
     });
-    expect(r).toEqual({ url: null, rejected: true, unverified: false });
+    expect(r).toEqual({ url: null, rejected: true });
   });
 
-  it('accepts but flags as unverified when there is neither an initiated node nor an allowlist', () => {
+  it('rejects a candidate when there is no trust anchor (no initiated node and no allowlist)', () => {
     const r = resolveTrustedNodeUrl({ candidate: 'https://unknown.example.com', initiated: null });
-    expect(r.url).toBe('https://unknown.example.com');
-    expect(r.rejected).toBe(false);
-    expect(r.unverified).toBe(true);
+    expect(r).toEqual({ url: null, rejected: true });
   });
 });

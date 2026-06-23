@@ -178,61 +178,54 @@ export function MeroProvider({
         // The callback URL is attacker-influenceable, so validate its node_url
         // BEFORE storing tokens or connecting — otherwise a malicious node_url
         // would receive the freshly-minted tokens (exfiltration).
-        const { url, rejected, unverified } = resolveTrustedNodeUrl({
+        const { url, rejected } = resolveTrustedNodeUrl({
           candidate: callback.nodeUrl,
           initiated: getNodeUrl(),
           allowedNodeUrls,
         });
 
-        if (rejected) {
-          console.error(
-            '[MeroProvider] OAuth callback node_url is not trusted (it does not match the node ' +
-              'login was initiated with, nor `allowedNodeUrls`). Ignoring the callback; no tokens stored.',
-          );
-          callbackRef.current = null;
-          if (isBrowser) {
-            window.history.replaceState({}, '', window.location.pathname + window.location.search);
-          }
-          if (active) setIsLoading(false);
-          return;
-        }
-
-        if (unverified) {
-          console.warn(
-            '[MeroProvider] Authenticating against an unvalidated OAuth callback node_url. ' +
-              'Configure `allowedNodeUrls` to defend against token exfiltration.',
-          );
-        }
-
-        // Validated → safe to persist the tokens for this node.
-        tokenStore.setTokens({
-          access_token: callback.accessToken,
-          refresh_token: callback.refreshToken,
-          expires_at: parseJwtExpiry(callback.accessToken),
-        });
-
-        if (callback.applicationId) {
-          setApplicationId(callback.applicationId);
-          if (active) setApplicationIdState(callback.applicationId);
-        }
-        if (callback.contextId) {
-          setContextId(callback.contextId);
-          if (active) setContextIdState(callback.contextId);
-        }
-        if (callback.contextIdentity) {
-          setContextIdentity(callback.contextIdentity);
-          if (active) setContextIdentityState(callback.contextIdentity);
-        }
-        if (url) {
-          setNodeUrl(url);
-          if (active) setNodeUrlState(url);
-        }
-        nodeFromCallback = url;
-
+        // Always strip the callback params (tokens + node_url) from the address
+        // bar and consume the parsed callback, whatever the trust outcome.
         if (isBrowser) {
           window.history.replaceState({}, '', window.location.pathname + window.location.search);
         }
         callbackRef.current = null;
+
+        if (rejected) {
+          // Untrusted node_url — likely a token-exfiltration attempt. Drop the
+          // callback's tokens, but DON'T return: fall through to restore any
+          // existing session from storage so a tampered callback can't log a
+          // legitimately authenticated user out.
+          console.error(
+            '[MeroProvider] OAuth callback node_url is not trusted (it does not match the node ' +
+              'login was initiated with, nor `allowedNodeUrls`). Ignoring the callback; no tokens stored.',
+          );
+        } else if (url) {
+          // Trusted node → safe to persist the callback's tokens and identifiers.
+          tokenStore.setTokens({
+            access_token: callback.accessToken,
+            refresh_token: callback.refreshToken,
+            expires_at: parseJwtExpiry(callback.accessToken),
+          });
+
+          if (callback.applicationId) {
+            setApplicationId(callback.applicationId);
+            if (active) setApplicationIdState(callback.applicationId);
+          }
+          if (callback.contextId) {
+            setContextId(callback.contextId);
+            if (active) setContextIdState(callback.contextId);
+          }
+          if (callback.contextIdentity) {
+            setContextIdentity(callback.contextIdentity);
+            if (active) setContextIdentityState(callback.contextIdentity);
+          }
+
+          setNodeUrl(url);
+          if (active) setNodeUrlState(url);
+          nodeFromCallback = url;
+        }
+        // url === null && !rejected → callback had no node to bind to; ignore it.
       }
 
       const savedUrl = nodeFromCallback || getNodeUrl();
@@ -250,7 +243,7 @@ export function MeroProvider({
         setMero(instance);
         setIsAuthenticated(true);
         setIsOnline(true);
-      } else if (callback) {
+      } else if (nodeFromCallback) {
         setMero(instance);
       }
 

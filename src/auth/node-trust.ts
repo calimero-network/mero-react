@@ -33,10 +33,8 @@ export interface ResolveTrustedNodeParams {
 export interface TrustedNodeResult {
   /** The node URL that is safe to authenticate against, or null. */
   url: string | null;
-  /** A candidate node_url was present but failed validation (likely an attack). */
+  /** A candidate node_url was present but could not be trusted (likely an attack). */
   rejected: boolean;
-  /** Accepted without being able to validate (no initiated node and no allowlist). */
-  unverified: boolean;
 }
 
 /**
@@ -45,26 +43,29 @@ export interface TrustedNodeResult {
  * - No candidate → fall back to the initiated node.
  * - Candidate + initiated node → must share the initiated node's origin, else reject.
  * - Candidate + no initiated node + allowlist → must be in the allowlist, else reject.
- * - Candidate + no initiated node + no allowlist → accept, flagged `unverified`.
+ * - Candidate + no trust anchor (no initiated node and no allowlist) → reject. There is
+ *   nothing to validate the attacker-influenceable callback against, so refusing is the
+ *   safe default. The normal flow always records the initiated node (via `connectToNode`)
+ *   before redirecting; configure `allowedNodeUrls` to permit direct-callback entry.
  */
 export function resolveTrustedNodeUrl(params: ResolveTrustedNodeParams): TrustedNodeResult {
   const { candidate, initiated, allowedNodeUrls } = params;
 
   if (!candidate) {
-    return { url: initiated ?? null, rejected: false, unverified: false };
+    return { url: initiated ?? null, rejected: false };
   }
 
   if (initiated) {
     return sameOrigin(candidate, initiated)
-      ? { url: candidate, rejected: false, unverified: false }
-      : { url: null, rejected: true, unverified: false };
+      ? { url: candidate, rejected: false }
+      : { url: null, rejected: true };
   }
 
   if (allowedNodeUrls && allowedNodeUrls.length > 0) {
     return allowedNodeUrls.some((u) => sameOrigin(candidate, u))
-      ? { url: candidate, rejected: false, unverified: false }
-      : { url: null, rejected: true, unverified: false };
+      ? { url: candidate, rejected: false }
+      : { url: null, rejected: true };
   }
 
-  return { url: candidate, rejected: false, unverified: true };
+  return { url: null, rejected: true };
 }

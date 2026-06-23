@@ -71,8 +71,8 @@ afterEach(() => {
 });
 
 describe('MeroProvider — OAuth callback node_url binding', () => {
-  it('rejects a callback whose node_url origin differs from the initiated node (no tokens stored, no client built against it)', async () => {
-    localStorage.setItem('mero:node_url', 'https://node-a.example.com'); // initiated
+  it('rejects a node_url that differs from the initiated node (no tokens stored, no client against the attacker) but still restores the existing session', async () => {
+    localStorage.setItem('mero:node_url', 'https://node-a.example.com'); // initiated / existing session
     mockParseAuthCallback.mockReturnValue({
       accessToken: 'a.b.c',
       refreshToken: 'r',
@@ -88,8 +88,11 @@ describe('MeroProvider — OAuth callback node_url binding', () => {
     await settled();
 
     expect(store.setTokens).not.toHaveBeenCalled();
-    expect(constructedBaseUrls()).not.toContain('https://evil.com');
     expect(console.error).toHaveBeenCalled();
+    const urls = constructedBaseUrls();
+    expect(urls).not.toContain('https://evil.com');
+    // a tampered callback must not log out a real user — the saved session is restored
+    expect(urls).toContain('https://node-a.example.com');
   });
 
   it('accepts a callback node_url matching the initiated node and stores tokens against it', async () => {
@@ -134,6 +137,43 @@ describe('MeroProvider — OAuth callback node_url binding', () => {
     expect(store.setTokens).not.toHaveBeenCalled();
     expect(constructedBaseUrls()).not.toContain('https://evil.com');
     expect(console.error).toHaveBeenCalled();
+  });
+
+  it('rejects a node_url when there is no trust anchor (no initiated node and no allowlist)', async () => {
+    mockParseAuthCallback.mockReturnValue({
+      accessToken: 'a.b.c',
+      refreshToken: 'r',
+      nodeUrl: 'https://evil.com',
+    } as never);
+    const store = makeStore();
+
+    render(
+      <MeroProvider mode={AppMode.MultiContext} tokenStore={store}>
+        <Consumer />
+      </MeroProvider>,
+    );
+    await settled();
+
+    expect(store.setTokens).not.toHaveBeenCalled();
+    expect(constructedBaseUrls()).not.toContain('https://evil.com');
+    expect(console.error).toHaveBeenCalled();
+  });
+
+  it('stores no tokens when the callback resolves to no node (no node_url, no saved node)', async () => {
+    mockParseAuthCallback.mockReturnValue({
+      accessToken: 'a.b.c',
+      refreshToken: 'r',
+    } as never);
+    const store = makeStore();
+
+    render(
+      <MeroProvider mode={AppMode.MultiContext} tokenStore={store}>
+        <Consumer />
+      </MeroProvider>,
+    );
+    await settled();
+
+    expect(store.setTokens).not.toHaveBeenCalled();
   });
 });
 
