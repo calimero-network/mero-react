@@ -14,7 +14,8 @@ import {
   buildAuthLoginUrl,
 } from '@calimero-network/mero-js';
 import { AppMode } from '../types';
-import type { AuthCallbackResult } from '@calimero-network/mero-js';
+import type { AuthCallbackResult, TokenStore } from '@calimero-network/mero-js';
+import { resolveTrustedNodeUrl } from '../auth/node-trust';
 import {
   getNodeUrl,
   setNodeUrl,
@@ -31,14 +32,6 @@ import type { MeroContextValue, MeroProviderConfig } from '../types';
 const MeroContext = createContext<MeroContextValue | null>(null);
 
 const isBrowser = typeof window !== 'undefined';
-
-let _tokenStore: LocalStorageTokenStore | null = null;
-function getTokenStore(): LocalStorageTokenStore {
-  if (!_tokenStore) {
-    _tokenStore = new LocalStorageTokenStore();
-  }
-  return _tokenStore;
-}
 
 function getPermissionsForMode(mode: AppMode): string[] {
   switch (mode) {
@@ -81,7 +74,13 @@ export function MeroProvider({
   packageVersion,
   registryUrl,
   timeoutMs = 30000,
+  allowedNodeUrls,
+  tokenStore: tokenStoreProp,
 }: MeroProviderProps) {
+  const tokenStore = useMemo<TokenStore>(
+    () => tokenStoreProp ?? new LocalStorageTokenStore(),
+    [tokenStoreProp],
+  );
   const [mero, setMero] = useState<MeroJs | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
@@ -108,13 +107,13 @@ export function MeroProvider({
       }
       const instance = new MeroJs({
         baseUrl: url,
-        tokenStore: getTokenStore(),
+        tokenStore,
         timeoutMs,
       });
       meroRef.current = instance;
       return instance;
     },
-    [timeoutMs],
+    [timeoutMs, tokenStore],
   );
 
   const checkAuth = useCallback(async (instance: MeroJs): Promise<boolean> => {
@@ -154,6 +153,9 @@ export function MeroProvider({
       meroRef.current.clearToken();
       meroRef.current.close();
     }
+    // Always clear the token store, even when not connected (meroRef is null) —
+    // otherwise the access/refresh tokens persist in storage after logout.
+    tokenStore.clear();
     clearAllStorage();
     setMero(null);
     setIsAuthenticated(false);
@@ -162,7 +164,7 @@ export function MeroProvider({
     setContextIdState(null);
     setContextIdentityState(null);
     meroRef.current = null;
-  }, []);
+  }, [tokenStore]);
 
   // Initialization effect
   useEffect(() => {
@@ -170,37 +172,63 @@ export function MeroProvider({
 
     const init = async () => {
       const callback = callbackRef.current;
+      let nodeFromCallback: string | null = null;
+
       if (callback) {
-        getTokenStore().setTokens({
-          access_token: callback.accessToken,
-          refresh_token: callback.refreshToken,
-          expires_at: parseJwtExpiry(callback.accessToken),
+        // The callback URL is attacker-influenceable, so validate its node_url
+        // BEFORE storing tokens or connecting — otherwise a malicious node_url
+        // would receive the freshly-minted tokens (exfiltration).
+        const { url, rejected } = resolveTrustedNodeUrl({
+          candidate: callback.nodeUrl,
+          initiated: getNodeUrl(),
+          allowedNodeUrls,
         });
 
-        if (callback.applicationId) {
-          setApplicationId(callback.applicationId);
-          if (active) setApplicationIdState(callback.applicationId);
-        }
-        if (callback.contextId) {
-          setContextId(callback.contextId);
-          if (active) setContextIdState(callback.contextId);
-        }
-        if (callback.contextIdentity) {
-          setContextIdentity(callback.contextIdentity);
-          if (active) setContextIdentityState(callback.contextIdentity);
-        }
-        if (callback.nodeUrl) {
-          setNodeUrl(callback.nodeUrl);
-          if (active) setNodeUrlState(callback.nodeUrl);
-        }
-
+        // Always strip the callback params (tokens + node_url) from the address
+        // bar and consume the parsed callback, whatever the trust outcome.
         if (isBrowser) {
           window.history.replaceState({}, '', window.location.pathname + window.location.search);
         }
         callbackRef.current = null;
+
+        if (rejected) {
+          // Untrusted node_url — likely a token-exfiltration attempt. Drop the
+          // callback's tokens, but DON'T return: fall through to restore any
+          // existing session from storage so a tampered callback can't log a
+          // legitimately authenticated user out.
+          console.error(
+            '[MeroProvider] OAuth callback node_url is not trusted (it does not match the node ' +
+              'login was initiated with, nor `allowedNodeUrls`). Ignoring the callback; no tokens stored.',
+          );
+        } else if (url) {
+          // Trusted node → safe to persist the callback's tokens and identifiers.
+          tokenStore.setTokens({
+            access_token: callback.accessToken,
+            refresh_token: callback.refreshToken,
+            expires_at: parseJwtExpiry(callback.accessToken),
+          });
+
+          if (callback.applicationId) {
+            setApplicationId(callback.applicationId);
+            if (active) setApplicationIdState(callback.applicationId);
+          }
+          if (callback.contextId) {
+            setContextId(callback.contextId);
+            if (active) setContextIdState(callback.contextId);
+          }
+          if (callback.contextIdentity) {
+            setContextIdentity(callback.contextIdentity);
+            if (active) setContextIdentityState(callback.contextIdentity);
+          }
+
+          setNodeUrl(url);
+          if (active) setNodeUrlState(url);
+          nodeFromCallback = url;
+        }
+        // url === null && !rejected → callback had no node to bind to; ignore it.
       }
 
-      const savedUrl = callback?.nodeUrl || getNodeUrl();
+      const savedUrl = nodeFromCallback || getNodeUrl();
       if (!savedUrl) {
         if (active) setIsLoading(false);
         return;
@@ -215,7 +243,7 @@ export function MeroProvider({
         setMero(instance);
         setIsAuthenticated(true);
         setIsOnline(true);
-      } else if (callback) {
+      } else if (nodeFromCallback) {
         setMero(instance);
       }
 
@@ -230,7 +258,7 @@ export function MeroProvider({
     return () => {
       active = false;
     };
-  }, [createMeroInstance, checkAuth]);
+  }, [createMeroInstance, checkAuth, allowedNodeUrls, tokenStore]);
 
   // SSE connection for online/offline detection — no polling.
   useEffect(() => {
