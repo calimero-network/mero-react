@@ -2,7 +2,7 @@
  * Types for mero-react
  */
 
-import type { MeroJs } from '@calimero-network/mero-js';
+import type { MeroJs, TokenStore } from '@calimero-network/mero-js';
 
 /**
  * Application mode determines the permission scope
@@ -132,4 +132,22 @@ export interface MeroProviderConfig {
   registryUrl?: string;
   /** Request timeout in milliseconds */
   timeoutMs?: number;
+  /**
+   * Origins the OAuth callback is allowed to authenticate against. Defends
+   * against a malicious `node_url` in the callback URL (token exfiltration):
+   * the node login was initiated with is always trusted, and this allowlist
+   * additionally permits direct-callback entry to known nodes. When neither is
+   * available the callback node is accepted but a warning is logged.
+   */
+  allowedNodeUrls?: string[];
+  /**
+   * Token store for access/refresh tokens. Defaults to a localStorage-backed
+   * store that persists across reloads.
+   *
+   * SECURITY: localStorage tokens — including the refresh token — are readable
+   * by any script on the page, so an XSS bug can exfiltrate them. For sensitive
+   * deployments pass a `MemoryTokenStore` (session-only) or a store backed by an
+   * HttpOnly cookie set by your auth service.
+   */
+  tokenStore?: TokenStore;
 }
