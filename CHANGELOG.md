@@ -1,3 +1,16 @@
+## [4.0.0](https://github.com/calimero-network/mero-react/compare/mero-react-v3.0.2...mero-react-v4.0.0) (2026-06-23)
+
+### ⚠ BREAKING CHANGES
+
+* **hooks:** useNestGroup/useUnnestGroup are removed in favor of
+useReparentGroup. Requires @calimero-network/mero-js >=6.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+### Features
+
+* **hooks:** replace useNestGroup/useUnnestGroup with useReparentGroup ([b60db86](https://github.com/calimero-network/mero-react/commit/b60db86c67a620f0845ed03fb2f4dd3e77080d5b)), closes [51/#52](https://github.com/51/mero-react/issues/52)
+
 ## [3.0.2](https://github.com/calimero-network/mero-react/compare/mero-react-v3.0.1...mero-react-v3.0.2) (2026-06-23)
 
 ### Bug Fixes
