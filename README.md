@@ -348,7 +348,7 @@ useContexts, useApplicationContexts, useContextGroup, useContextDiscovery
 useCreateContext, useDeleteContext, useJoinContext
 useGroupInfo, useGroupMembers, useGroupContexts, useGroupInvitations, useGroupCapabilities
 useJoinGroup, useDeleteGroup, useAddGroupMembers, useRemoveGroupMembers
-useSyncGroup, useNestGroup, useUnnestGroup, useSubgroups
+useSyncGroup, useReparentGroup, useSubgroups
 useUpgradeGroup, useGroupUpgradeStatus, useRetryGroupUpgrade
 useRegisterGroupSigningKey, useUpdateGroupSettings
 useSetGroupMetadata, useSetMemberMetadata, useSetContextMetadata

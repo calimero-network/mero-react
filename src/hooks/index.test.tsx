@@ -33,7 +33,7 @@ import {
   useNamespaceIdentity,
   useNamespaces,
   useNamespacesForApplication,
-  useNestGroup,
+  useReparentGroup,
   useRegisterGroupSigningKey,
   useRetryGroupUpgrade,
   useSetContextMetadata,
@@ -44,7 +44,6 @@ import {
   useSetTeeAdmissionPolicy,
   useSubgroups,
   useSubgroupVisibility,
-  useUnnestGroup,
   useUpdateGroupSettings,
   useUpdateMemberRole,
   useUpgradeGroup,
@@ -150,8 +149,7 @@ function createMero(
       resyncContext: vi.fn().mockResolvedValue({ contextId: 'ctx-1', resyncStarted: true }),
       getGroupUpgradeStatus: vi.fn().mockResolvedValue(null),
       retryGroupUpgrade: vi.fn().mockResolvedValue({ groupId: 'group-1', status: 'in_progress' }),
-      nestGroup: vi.fn().mockResolvedValue(undefined),
-      unnestGroup: vi.fn().mockResolvedValue(undefined),
+      reparentGroup: vi.fn().mockResolvedValue({ reparented: true }),
       listSubgroups: vi.fn().mockResolvedValue([]),
       detachContextFromGroup: vi.fn().mockResolvedValue(undefined),
       lookupContextAlias: vi.fn().mockResolvedValue(null),
@@ -1423,32 +1421,20 @@ describe('group and context hooks', () => {
     expect(retryGroupUpgrade).toHaveBeenCalledWith('group-1', undefined);
   });
 
-  it('useNestGroup nests a child group', async () => {
-    const nestGroup = vi.fn().mockResolvedValue(undefined);
-    const mero = createMero({ nestGroup });
+  it('useReparentGroup moves a child group under a new parent', async () => {
+    const reparentGroup = vi.fn().mockResolvedValue({ reparented: true });
+    const mero = createMero({ reparentGroup });
     mockUseMero.mockReturnValue({ mero } as never);
 
-    const { result } = renderHook(() => useNestGroup());
+    const { result } = renderHook(() => useReparentGroup());
 
+    let res: { reparented: boolean } | null = null;
     await act(async () => {
-      await result.current.nestGroup('parent-1', { childGroupId: 'child-1' });
+      res = await result.current.reparentGroup('child-1', { newParentId: 'parent-2' });
     });
 
-    expect(nestGroup).toHaveBeenCalledWith('parent-1', { childGroupId: 'child-1' });
-  });
-
-  it('useUnnestGroup unnests a child group', async () => {
-    const unnestGroup = vi.fn().mockResolvedValue(undefined);
-    const mero = createMero({ unnestGroup });
-    mockUseMero.mockReturnValue({ mero } as never);
-
-    const { result } = renderHook(() => useUnnestGroup());
-
-    await act(async () => {
-      await result.current.unnestGroup('parent-1', { childGroupId: 'child-1' });
-    });
-
-    expect(unnestGroup).toHaveBeenCalledWith('parent-1', { childGroupId: 'child-1' });
+    expect(reparentGroup).toHaveBeenCalledWith('child-1', { newParentId: 'parent-2' });
+    expect(res).toEqual({ reparented: true });
   });
 
   it('useSubgroups loads subgroups for a group', async () => {

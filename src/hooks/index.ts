@@ -23,7 +23,7 @@ import type {
   ListGroupMembersResponseData,
   Namespace,
   NamespaceIdentity,
-  NestGroupRequest,
+  ReparentGroupRequest,
   AddGroupMembersRequest,
   RegisterGroupSigningKeyRequest,
   RemoveGroupMembersRequest,
@@ -35,7 +35,6 @@ import type {
   SubgroupEntry,
   SyncGroupRequest,
   SseEventData,
-  UnnestGroupRequest,
   UpdateGroupSettingsRequest,
   UpdateMemberRoleRequest,
   UpgradeGroupRequest,
@@ -1565,34 +1564,20 @@ export function useRetryGroupUpgrade() {
   return { retryGroupUpgrade, loading, error };
 }
 
-export function useNestGroup() {
+/** Move `childGroupId` under a new parent. */
+export function useReparentGroup() {
   const { mero } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
-  const nestGroup = useCallback(
-    async (parentGroupId: string, request: NestGroupRequest) => {
+  const reparentGroup = useCallback(
+    async (childGroupId: string, request: ReparentGroupRequest) => {
       if (!mero) return null;
-      return run(() => mero.admin.nestGroup(parentGroupId, request));
+      return run(() => mero.admin.reparentGroup(childGroupId, request));
     },
     [mero, run],
   );
 
-  return { nestGroup, loading, error };
-}
-
-export function useUnnestGroup() {
-  const { mero } = useMero();
-  const { loading, error, run } = useAsyncMutation();
-
-  const unnestGroup = useCallback(
-    async (parentGroupId: string, request: UnnestGroupRequest) => {
-      if (!mero) return null;
-      return run(() => mero.admin.unnestGroup(parentGroupId, request));
-    },
-    [mero, run],
-  );
-
-  return { unnestGroup, loading, error };
+  return { reparentGroup, loading, error };
 }
 
 export function useSubgroups(groupId?: string | null) {
