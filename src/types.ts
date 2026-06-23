@@ -137,7 +137,8 @@ export interface MeroProviderConfig {
    * against a malicious `node_url` in the callback URL (token exfiltration):
    * the node login was initiated with is always trusted, and this allowlist
    * additionally permits direct-callback entry to known nodes. When neither is
-   * available the callback node is accepted but a warning is logged.
+   * available (no initiated node and no allowlist) a callback node_url is
+   * rejected and a security error is logged.
    */
   allowedNodeUrls?: string[];
   /**
