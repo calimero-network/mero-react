@@ -41,6 +41,8 @@
 <div class="fr"><div class="fp">packageVersion</div><div class="fd">Optional. Version string for your package. Used during application installation.</div></div>
 <div class="fr"><div class="fp">registryUrl</div><div class="fd">Optional. Custom registry URL for package discovery.</div></div>
 <div class="fr"><div class="fp">timeoutMs</div><div class="fd">Optional. HTTP request timeout in ms. Passed to the underlying <span class="code">MeroJs</span> instance. Default: 30 000.</div></div>
+<div class="fr"><div class="fp">allowedNodeUrls</div><div class="fd">Optional. <span class="ty">string[]</span> — origins the OAuth callback may authenticate against. The node login was initiated with is always trusted; this allowlist additionally permits direct-callback entry to known nodes. A callback <span class="code">node_url</span> matching neither is rejected and a security error is logged.</div></div>
+<div class="fr"><div class="fp">tokenStore</div><div class="fd">Optional. <span class="ty">TokenStore</span> — pluggable store for access/refresh tokens. Defaults to a localStorage-backed store. <strong>Security:</strong> localStorage tokens (including the refresh token) are readable by any script on the page, so an XSS bug can exfiltrate them — pass a <span class="code">MemoryTokenStore</span> (session-only) or an HttpOnly-cookie-backed store for sensitive deployments.</div></div>
 <div class="fr"><div class="fp">children</div><div class="fd">React children — your application tree.</div></div>
 </div>
 
