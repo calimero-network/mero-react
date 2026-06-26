@@ -91,6 +91,8 @@ Props (`MeroProviderConfig & { children }`):
 | `packageVersion` | `string` | No | Specific version (defaults to latest) |
 | `registryUrl` | `string` | No | Registry URL override |
 | `timeoutMs` | `number` | No | HTTP request timeout (default 30000) |
+| `allowedNodeUrls` | `string[]` | No | Origins the OAuth callback may authenticate against. The initiated node is always trusted; this allowlist additionally permits direct-callback entry. A callback `node_url` matching neither is rejected. |
+| `tokenStore` | `TokenStore` | No | Pluggable access/refresh token store. Defaults to localStorage. Pass a `MemoryTokenStore` or cookie-backed store for sensitive deployments (localStorage tokens are XSS-readable). |
 
 Modes and their permissions:
 
@@ -100,7 +102,7 @@ Modes and their permissions:
 | `MultiContext` | `context:create`, `context:list`, `context:execute` | Apps managing multiple contexts |
 | `Admin` | `admin` | Admin dashboards, dev tools |
 
-Auth flow: when `connectToNode(url)` is called, the provider redirects to the node's auth page. After login, the node redirects back with tokens in the URL hash. The provider processes these once (StrictMode-safe via ref) and sets `isAuthenticated = true`.
+Auth flow: when `connectToNode(url)` is called, the provider redirects to the node's auth page. After login, the node redirects back with tokens in the URL hash. The provider processes these once (StrictMode-safe via ref) and sets `isAuthenticated = true`. The callback's `node_url` is validated against the node login was initiated with (or `allowedNodeUrls`); a `node_url` matching neither is rejected.
 
 Online detection: the provider opens an SSE connection to the node after auth. `isOnline` reflects the SSE connection state — no polling.
 
