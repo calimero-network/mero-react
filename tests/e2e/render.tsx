@@ -16,7 +16,8 @@ export function meroContextValue(mero: MeroJs): MeroContextValue {
     mero,
     isAuthenticated: true,
     isOnline: true,
-    nodeUrl: (mero as unknown as { config?: { baseUrl?: string } }).config?.baseUrl ?? null,
+    // Hooks read only `mero` from context; nodeUrl/ids are unused by them.
+    nodeUrl: null,
     applicationId: null,
     contextId: null,
     contextIdentity: null,

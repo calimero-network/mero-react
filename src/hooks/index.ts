@@ -135,7 +135,9 @@ function useAsyncResource<T>(
   const [error, setError] = useState<Error | null>(null);
   const reqRef = useRef(0);
 
-  // Call the freshest fetcher/initialValue without making them dependencies.
+  // fetcherRef is refreshed every render so refetch() always calls the latest
+  // closure; initialRef captures the (per-hook constant) initial value once.
+  // Neither is a dependency — adding them would break latest-request-wins.
   const fetcherRef = useRef(fetcher);
   fetcherRef.current = fetcher;
   const initialRef = useRef(initialValue);

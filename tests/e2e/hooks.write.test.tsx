@@ -31,7 +31,7 @@ describe('Phase 1 — mutations + round-trips vs live node', () => {
     const name = `sub-${fx.run}`;
 
     const { result: mut } = renderHook(() => useCreateGroupInNamespace(), { wrapper });
-    let created: any;
+    let created: Awaited<ReturnType<typeof mut.current.createGroupInNamespace>> | undefined;
     await act(async () => {
       created = await mut.current.createGroupInNamespace(fx.namespaceId, { name });
     });
@@ -41,7 +41,7 @@ describe('Phase 1 — mutations + round-trips vs live node', () => {
     const { result: read } = renderHook(() => useNamespaceGroups(fx.namespaceId), { wrapper });
     await waitFor(() => expect(read.current.loading).toBe(false), { timeout: 30000 });
     expect(read.current.error).toBeNull();
-    expect(read.current.groups.some((g: any) => g.groupId === created.groupId)).toBe(true);
+    expect(read.current.groups.some((g) => g.groupId === created?.groupId)).toBe(true);
   });
 
   // BUG (mero-js): getGroupMetadata/getMemberMetadata do `response.data.data`,
