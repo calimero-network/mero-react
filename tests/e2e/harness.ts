@@ -70,7 +70,7 @@ export async function setupFixture(): Promise<E2eFixture> {
   const ns = await mero.admin.createNamespace({
     applicationId,
     upgradePolicy: 'LazyOnAccess',
-    alias: `rt-${run}`,
+    name: `rt-${run}`,
   });
   const namespaceId = ns.namespaceId;
   const ctx = await mero.admin.createContext({ applicationId, groupId: namespaceId });

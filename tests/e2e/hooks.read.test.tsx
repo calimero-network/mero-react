@@ -51,63 +51,63 @@ describe('Phase 1 — read hooks vs live node', () => {
   it('useContexts(appId)', async () => {
     const r = await settle(() => renderHookWithMero(fx.mero, () => useContexts(fx.applicationId)));
     expect(r.error).toBeNull();
-    expect((r as any).contexts.some((c: any) => c.contextId === fx.contextId || c.id === fx.contextId)).toBe(true);
+    expect(r.contexts.some((c) => c.contextId === fx.contextId)).toBe(true);
   });
 
   it('useGroupContexts(groupId)', async () => {
     const r = await settle(() => renderHookWithMero(fx.mero, () => useGroupContexts(fx.groupId)));
     expect(r.error).toBeNull();
-    expect(Array.isArray((r as any).contexts)).toBe(true);
+    expect(Array.isArray(r.contexts)).toBe(true);
   });
 
   it('useContextGroup(contextId) resolves to the fixture group', async () => {
     const r = await settle(() => renderHookWithMero(fx.mero, () => useContextGroup(fx.contextId)));
     expect(r.error).toBeNull();
-    expect((r as any).groupId).toBe(fx.groupId);
+    expect(r.groupId).toBe(fx.groupId);
   });
 
   it('useNamespaces()', async () => {
     const r = await settle(() => renderHookWithMero(fx.mero, () => useNamespaces()));
     expect(r.error).toBeNull();
-    expect((r as any).namespaces.some((n: any) => n.namespaceId === fx.namespaceId)).toBe(true);
+    expect(r.namespaces.some((n) => n.namespaceId === fx.namespaceId)).toBe(true);
   });
 
   it('useNamespacesForApplication(appId)', async () => {
     const r = await settle(() => renderHookWithMero(fx.mero, () => useNamespacesForApplication(fx.applicationId)));
     expect(r.error).toBeNull();
-    expect((r as any).namespaces.some((n: any) => n.namespaceId === fx.namespaceId)).toBe(true);
+    expect(r.namespaces.some((n) => n.namespaceId === fx.namespaceId)).toBe(true);
   });
 
   it('useNamespace(namespaceId)', async () => {
     const r = await settle(() => renderHookWithMero(fx.mero, () => useNamespace(fx.namespaceId)));
     expect(r.error).toBeNull();
-    expect((r as any).namespace).toBeTruthy();
+    expect(r.namespace).toBeTruthy();
   });
 
   it('useNamespaceIdentity(namespaceId)', async () => {
     const r = await settle(() => renderHookWithMero(fx.mero, () => useNamespaceIdentity(fx.namespaceId)));
     expect(r.error).toBeNull();
-    expect((r as any).identity).toBeTruthy();
+    expect(r.identity).toBeTruthy();
   });
 
   it('useNamespaceGroups(namespaceId)', async () => {
     const r = await settle(() => renderHookWithMero(fx.mero, () => useNamespaceGroups(fx.namespaceId)));
     expect(r.error).toBeNull();
-    expect(Array.isArray((r as any).groups)).toBe(true);
+    expect(Array.isArray(r.groups)).toBe(true);
   });
 
   it('useGroupInfo(groupId) returns groupStateHash', async () => {
     const r = await settle(() => renderHookWithMero(fx.mero, () => useGroupInfo(fx.groupId)));
     expect(r.error).toBeNull();
-    expect((r as any).groupInfo).toBeTruthy();
-    expect((r as any).groupInfo.groupId).toBe(fx.groupId);
+    expect(r.groupInfo).toBeTruthy();
+    expect(r.groupInfo?.groupId).toBe(fx.groupId);
   });
 
   it('useGroupMembers(groupId) includes the creator', async () => {
     const r = await settle(() => renderHookWithMero(fx.mero, () => useGroupMembers(fx.groupId)));
     expect(r.error).toBeNull();
-    expect((r as any).members.length).toBeGreaterThan(0);
-    expect((r as any).members.some((m: any) => m.identity === fx.identity)).toBe(true);
+    expect(r.members.length).toBeGreaterThan(0);
+    expect(r.members.some((m) => m.identity === fx.identity)).toBe(true);
   });
 
   it('useGroupCapabilities(groupId, identity)', async () => {
@@ -118,13 +118,13 @@ describe('Phase 1 — read hooks vs live node', () => {
   it('useDefaultCapabilities(groupId)', async () => {
     const r = await settle(() => renderHookWithMero(fx.mero, () => useDefaultCapabilities(fx.groupId)));
     expect(r.error).toBeNull();
-    expect(typeof (r as any).defaultCapabilities).toBe('number');
+    expect(typeof r.defaultCapabilities).toBe('number');
   });
 
   it('useSubgroupVisibility(groupId)', async () => {
     const r = await settle(() => renderHookWithMero(fx.mero, () => useSubgroupVisibility(fx.groupId)));
     expect(r.error).toBeNull();
-    expect(typeof (r as any).subgroupVisibility).toBe('string');
+    expect(typeof r.subgroupVisibility).toBe('string');
   });
 
   it('useGroupMetadata(groupId)', async () => {
@@ -140,7 +140,7 @@ describe('Phase 1 — read hooks vs live node', () => {
   it('useSubgroups(groupId)', async () => {
     const r = await settle(() => renderHookWithMero(fx.mero, () => useSubgroups(fx.groupId)));
     expect(r.error).toBeNull();
-    expect(Array.isArray((r as any).subgroups)).toBe(true);
+    expect(Array.isArray(r.subgroups)).toBe(true);
   });
 
   it('useGroupUpgradeStatus(groupId) [guarded hook]', async () => {
