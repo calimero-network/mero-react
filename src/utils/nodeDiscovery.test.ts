@@ -3,6 +3,7 @@ import {
   discoverLocalNodes,
   probeNodeHealth,
   localNodeUrl,
+  nodeEndpoint,
   DEFAULT_LOCAL_NODE_PORTS,
 } from './nodeDiscovery';
 
@@ -37,6 +38,26 @@ afterEach(() => {
 describe('localNodeUrl', () => {
   it('builds a localhost base URL for a port', () => {
     expect(localNodeUrl(2428)).toBe('http://localhost:2428');
+  });
+});
+
+describe('nodeEndpoint', () => {
+  it('appends the path to a root base URL', () => {
+    expect(nodeEndpoint('http://localhost:2428', 'admin-api/health')).toBe(
+      'http://localhost:2428/admin-api/health',
+    );
+  });
+
+  it('preserves a path prefix on the base URL (NODE_PATH_PREFIX)', () => {
+    expect(nodeEndpoint('http://host/node1', 'admin-api/health')).toBe(
+      'http://host/node1/admin-api/health',
+    );
+  });
+
+  it('does not double up the slash when the base already ends with one', () => {
+    expect(nodeEndpoint('http://host/node1/', 'admin-api/health')).toBe(
+      'http://host/node1/admin-api/health',
+    );
   });
 });
 

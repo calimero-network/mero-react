@@ -30,6 +30,7 @@ export {
   discoverLocalNodes,
   probeNodeHealth,
   localNodeUrl,
+  nodeEndpoint,
   DEFAULT_LOCAL_NODE_PORTS,
 } from './utils/nodeDiscovery';
 export type { DiscoverLocalNodesOptions } from './utils/nodeDiscovery';

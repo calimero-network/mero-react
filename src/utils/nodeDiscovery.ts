@@ -37,6 +37,17 @@ export function localNodeUrl(port: number): string {
 }
 
 /**
+ * Resolve an API `path` against a node `baseUrl`. Ensures the base ends with a
+ * slash first, so a base that carries a path prefix (e.g. a `NODE_PATH_PREFIX`
+ * deployment like `http://host/node1`) keeps that segment instead of having it
+ * stripped by relative URL resolution.
+ */
+export function nodeEndpoint(baseUrl: string, path: string): string {
+  const base = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+  return new URL(path, base).toString();
+}
+
+/**
  * Probe a single node's health endpoint. Resolves `true` only when the node
  * answers with a 2xx and (when the body is JSON) reports a non-dead status.
  * Any network error, timeout, or non-ok response resolves `false` — never
@@ -59,7 +70,7 @@ export async function probeNodeHealth(
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const url = new URL('admin-api/health', baseUrl).toString();
+    const url = nodeEndpoint(baseUrl, 'admin-api/health');
     const res = await fetch(url, {
       method: 'GET',
       signal: controller.signal,
@@ -88,8 +99,8 @@ export async function probeNodeHealth(
 
 /**
  * Probe the configured local ports in parallel and return the base URLs that
- * responded as healthy, in ascending port order. Returns an empty array when
- * nothing local is running.
+ * responded as healthy, in the same order as the `ports` argument (which
+ * defaults to ascending). Returns an empty array when nothing local is running.
  */
 export async function discoverLocalNodes(
   options: DiscoverLocalNodesOptions = {},

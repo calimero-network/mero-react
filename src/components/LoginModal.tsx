@@ -16,6 +16,7 @@ import type { ConnectionType, CustomConnectionConfig } from '../types';
 import { ConnectionType as ConnectionTypeEnum } from '../types';
 import {
   discoverLocalNodes,
+  nodeEndpoint,
   DEFAULT_LOCAL_NODE_PORTS,
 } from '../utils/nodeDiscovery';
 import {
@@ -451,6 +452,8 @@ export function LoginModal({
     const controller = new AbortController();
     let active = true;
     setDiscovering(true);
+    // Clear any prior results so a re-scan never shows stale nodes.
+    setDiscovered([]);
     setError(null);
 
     discoverLocalNodes({ ports: localNodePorts, signal: controller.signal })
@@ -518,7 +521,7 @@ export function LoginModal({
 
     try {
       const response = await fetch(
-        new URL('admin-api/is-authed', normalizedUrl).toString(),
+        nodeEndpoint(normalizedUrl, 'admin-api/is-authed'),
       );
 
       if (response.ok || response.status === 401) {
