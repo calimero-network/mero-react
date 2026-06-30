@@ -40,8 +40,11 @@ function mockFetch(healthyBases: string[]) {
 
 const NODE_A = 'http://localhost:2428';
 const NODE_B = 'http://localhost:2528';
+const DEFAULT_LOCAL = 'http://node1.127.0.0.1.nip.io';
 
-function renderModal(props: Partial<React.ComponentProps<typeof LoginModal>> = {}) {
+function renderModal(
+  props: Partial<React.ComponentProps<typeof LoginModal>> = {},
+) {
   const onConnect = vi.fn();
   const onClose = vi.fn();
   render(
@@ -56,6 +59,11 @@ function renderModal(props: Partial<React.ComponentProps<typeof LoginModal>> = {
   return { onConnect, onClose };
 }
 
+const healthCalls = (mock: ReturnType<typeof mockFetch>) =>
+  mock.mock.calls.filter((c) => String(c[0]).includes('/admin-api/health'));
+const isAuthedCalls = (mock: ReturnType<typeof mockFetch>) =>
+  mock.mock.calls.filter((c) => String(c[0]).includes('/admin-api/is-authed'));
+
 beforeEach(() => {
   localStorage.clear();
 });
@@ -65,20 +73,54 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('LoginModal — local node discovery', () => {
+describe('LoginModal — Local (unchanged)', () => {
+  it('shows the default local node and connects to it after an is-authed check', async () => {
+    const fetchMock = mockFetch([]);
+    vi.stubGlobal('fetch', fetchMock);
+    const { onConnect } = renderModal({ connectionType: ConnectionType.Local });
+
+    expect(screen.getByText(DEFAULT_LOCAL)).toBeTruthy();
+    // Local never probes the discovery ports.
+    expect(healthCalls(fetchMock)).toHaveLength(0);
+
+    fireEvent.click(screen.getByTestId('connect-button'));
+    await waitFor(() => expect(onConnect).toHaveBeenCalledWith(DEFAULT_LOCAL));
+    expect(isAuthedCalls(fetchMock)).toHaveLength(1);
+  });
+});
+
+describe('LoginModal — RemoteAndLocal toggle', () => {
+  it('defaults to Local and only discovers after switching to Remote', async () => {
+    const fetchMock = mockFetch([NODE_A]);
+    vi.stubGlobal('fetch', fetchMock);
+    renderModal();
+
+    // Default view is Local — no probing yet.
+    expect(screen.getByText(DEFAULT_LOCAL)).toBeTruthy();
+    expect(healthCalls(fetchMock)).toHaveLength(0);
+    expect(screen.queryByTestId('node-discovering')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('node-type-remote'));
+
+    await screen.findByTestId('node-option-localhost:2428');
+    expect(healthCalls(fetchMock).length).toBeGreaterThan(0);
+  });
+});
+
+describe('LoginModal — Remote discovery', () => {
   it('shows a discovering state while probing local ports', () => {
     // A never-resolving fetch keeps discovery pending.
     vi.stubGlobal(
       'fetch',
       vi.fn(() => new Promise(() => {})),
     );
-    renderModal();
+    renderModal({ connectionType: ConnectionType.Remote });
     expect(screen.getByTestId('node-discovering')).toBeTruthy();
   });
 
   it('lists each discovered node plus an always-present manual option', async () => {
     vi.stubGlobal('fetch', mockFetch([NODE_A, NODE_B]));
-    renderModal();
+    renderModal({ connectionType: ConnectionType.Remote });
 
     await screen.findByTestId('node-option-localhost:2428');
     expect(screen.getByTestId('node-option-localhost:2528')).toBeTruthy();
@@ -90,22 +132,19 @@ describe('LoginModal — local node discovery', () => {
   it('connects directly to the default (first) discovered node without an extra check', async () => {
     const fetchMock = mockFetch([NODE_A, NODE_B]);
     vi.stubGlobal('fetch', fetchMock);
-    const { onConnect } = renderModal();
+    const { onConnect } = renderModal({ connectionType: ConnectionType.Remote });
 
     await screen.findByTestId('node-option-localhost:2428');
     fireEvent.click(screen.getByTestId('connect-button'));
 
     await waitFor(() => expect(onConnect).toHaveBeenCalledWith(NODE_A));
     // Discovered nodes are already health-checked, so no is-authed probe.
-    const isAuthedCalls = fetchMock.mock.calls.filter((c) =>
-      String(c[0]).includes('is-authed'),
-    );
-    expect(isAuthedCalls).toHaveLength(0);
+    expect(isAuthedCalls(fetchMock)).toHaveLength(0);
   });
 
   it('connects to a different discovered node when selected', async () => {
     vi.stubGlobal('fetch', mockFetch([NODE_A, NODE_B]));
-    const { onConnect } = renderModal();
+    const { onConnect } = renderModal({ connectionType: ConnectionType.Remote });
 
     await screen.findByTestId('node-option-localhost:2528');
     fireEvent.click(screen.getByTestId('node-option-localhost:2528'));
@@ -117,7 +156,7 @@ describe('LoginModal — local node discovery', () => {
   it('reveals the URL field and verifies reachability when manual entry is chosen', async () => {
     const fetchMock = mockFetch([NODE_A]);
     vi.stubGlobal('fetch', fetchMock);
-    const { onConnect } = renderModal();
+    const { onConnect } = renderModal({ connectionType: ConnectionType.Remote });
 
     await screen.findByTestId('node-option-custom');
     fireEvent.click(screen.getByTestId('node-option-custom'));
@@ -131,17 +170,14 @@ describe('LoginModal — local node discovery', () => {
     await waitFor(() =>
       expect(onConnect).toHaveBeenCalledWith('https://remote.example.com'),
     );
-    const isAuthedCalls = fetchMock.mock.calls.filter((c) =>
-      String(c[0]).includes('is-authed'),
-    );
-    expect(isAuthedCalls).toHaveLength(1);
+    expect(isAuthedCalls(fetchMock)).toHaveLength(1);
   });
 });
 
-describe('LoginModal — no local node found', () => {
+describe('LoginModal — Remote with no node found', () => {
   it('falls through to manual entry with a "no local node" message', async () => {
     vi.stubGlobal('fetch', mockFetch([]));
-    const { onConnect } = renderModal();
+    const { onConnect } = renderModal({ connectionType: ConnectionType.Remote });
 
     const input = await screen.findByTestId('node-url-input');
     expect(screen.getByText(/no local node found/i)).toBeTruthy();
@@ -163,7 +199,7 @@ describe('LoginModal — no local node found', () => {
 
   it('keeps the connect button disabled for an invalid URL', async () => {
     vi.stubGlobal('fetch', mockFetch([]));
-    renderModal();
+    renderModal({ connectionType: ConnectionType.Remote });
 
     const input = await screen.findByTestId('node-url-input');
     fireEvent.change(input, { target: { value: 'not a url' } });
@@ -175,38 +211,17 @@ describe('LoginModal — no local node found', () => {
   it('re-probes when the user clicks rescan', async () => {
     const fetchMock = mockFetch([]);
     vi.stubGlobal('fetch', fetchMock);
-    renderModal();
+    renderModal({ connectionType: ConnectionType.Remote });
 
     await screen.findByTestId('rescan-button');
-    const healthCallsBefore = fetchMock.mock.calls.filter((c) =>
-      String(c[0]).includes('/admin-api/health'),
-    ).length;
-    expect(healthCallsBefore).toBeGreaterThan(0);
+    const before = healthCalls(fetchMock).length;
+    expect(before).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByTestId('rescan-button'));
 
-    await waitFor(() => {
-      const healthCallsAfter = fetchMock.mock.calls.filter((c) =>
-        String(c[0]).includes('/admin-api/health'),
-      ).length;
-      expect(healthCallsAfter).toBeGreaterThan(healthCallsBefore);
-    });
-  });
-});
-
-describe('LoginModal — remote-only', () => {
-  it('skips local discovery and shows only the URL field', async () => {
-    const fetchMock = mockFetch([]);
-    vi.stubGlobal('fetch', fetchMock);
-    renderModal({ connectionType: ConnectionType.Remote });
-
-    await screen.findByTestId('node-url-input');
-    // No local probing for remote-only.
-    expect(
-      fetchMock.mock.calls.some((c) => String(c[0]).includes('/admin-api/health')),
-    ).toBe(false);
-    expect(screen.queryByTestId('rescan-button')).toBeNull();
-    expect(screen.queryByTestId('node-discovering')).toBeNull();
+    await waitFor(() =>
+      expect(healthCalls(fetchMock).length).toBeGreaterThan(before),
+    );
   });
 
   it('prefills the saved node URL from localStorage', async () => {

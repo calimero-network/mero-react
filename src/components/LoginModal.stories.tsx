@@ -131,12 +131,12 @@ export const LocalOnly: Story = {
 };
 
 export const Discovery: Story = {
-  args: { connectionType: ConnectionType.RemoteAndLocal },
+  args: { connectionType: ConnectionType.Remote },
   parameters: {
     docs: {
       description: {
         story:
-          'On open the modal probes the well-known local ports (2428, 2429, 2528, 2529) at `/admin-api/health`. Running locally with one or more nodes up, each is offered as a radio choice alongside an always-present "enter URL manually" option. With nothing running it shows "No local node found" and falls through to the URL field. Use the toolbar "Rescan" link after starting a node.',
+          'The Remote view probes the well-known local ports (2428, 2429, 2528, 2529) at `/admin-api/health`. With one or more nodes up, each is offered as a radio choice alongside an always-present "enter URL manually" option. With nothing running it shows "No local node found" and falls through to the URL field. Use the toolbar "Rescan" link after starting a node. (In `RemoteAndLocal` mode this view appears after selecting "Remote"; "Local" keeps the default-node behaviour.)',
       },
     },
   },
