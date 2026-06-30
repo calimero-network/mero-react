@@ -463,6 +463,11 @@ export function LoginModal({
         // Default to the first discovered node, else fall through to manual.
         setSelected(nodes.length > 0 ? nodes[0] : CUSTOM_SELECTION);
       })
+      // discoverLocalNodes is designed never to reject; the catch is purely
+      // defensive so a future change can't surface an unhandled rejection.
+      .catch(() => {
+        if (active) setSelected(CUSTOM_SELECTION);
+      })
       .finally(() => {
         if (active) setDiscovering(false);
       });
