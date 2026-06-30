@@ -25,6 +25,15 @@ export type { MigrationPendingBannerProps } from './components';
 export { MigrationAdminPanel } from './components';
 export type { MigrationAdminPanelProps } from './components';
 
+// Local-node discovery
+export {
+  discoverLocalNodes,
+  probeNodeHealth,
+  localNodeUrl,
+  DEFAULT_LOCAL_NODE_PORTS,
+} from './utils/nodeDiscovery';
+export type { DiscoverLocalNodesOptions } from './utils/nodeDiscovery';
+
 // Theme
 export {
   MERO_CSS_VARS,
