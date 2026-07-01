@@ -1,3 +1,14 @@
+## [4.1.0](https://github.com/calimero-network/mero-react/compare/mero-react-v4.0.1...mero-react-v4.1.0) (2026-07-01)
+
+### Features
+
+* **LoginModal:** auto-discover local nodes via health probe ([96da04f](https://github.com/calimero-network/mero-react/commit/96da04f62b1d27563258773dc606d2971859fb14))
+
+### Bug Fixes
+
+* address review — health status edge cases + abort/radio cleanup ([3bfde38](https://github.com/calimero-network/mero-react/commit/3bfde38ca4cc4da556247ca913c7d6c8200ffd9e))
+* **LoginModal:** address review — path-safe endpoints, reset stale nodes ([43350bb](https://github.com/calimero-network/mero-react/commit/43350bb26f30ba2fdc988a87ba7c6a0bc816a75c))
+
 ## [4.0.1](https://github.com/calimero-network/mero-react/compare/mero-react-v4.0.0...mero-react-v4.0.1) (2026-06-26)
 
 ## [4.0.0](https://github.com/calimero-network/mero-react/compare/mero-react-v3.0.2...mero-react-v4.0.0) (2026-06-23)
