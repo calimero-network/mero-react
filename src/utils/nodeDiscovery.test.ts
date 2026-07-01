@@ -93,6 +93,39 @@ describe('probeNodeHealth', () => {
     expect(await probeNodeHealth('http://localhost:2428')).toBe(false);
   });
 
+  it('returns false for an explicit null status', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({ data: { status: null } }),
+      })),
+    );
+    expect(await probeNodeHealth('http://localhost:2428')).toBe(false);
+  });
+
+  it('treats a 2xx with no status field as alive', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: true, status: 200, json: async () => ({}) })),
+    );
+    expect(await probeNodeHealth('http://localhost:2428')).toBe(true);
+  });
+
+  it('returns false without fetching when the signal is already aborted', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const controller = new AbortController();
+    controller.abort();
+    expect(
+      await probeNodeHealth('http://localhost:2428', {
+        signal: controller.signal,
+      }),
+    ).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('returns false on a non-ok response', async () => {
     vi.stubGlobal(
       'fetch',

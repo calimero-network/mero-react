@@ -59,14 +59,17 @@ export async function probeNodeHealth(
 ): Promise<boolean> {
   const { timeoutMs = DEFAULT_PROBE_TIMEOUT_MS, signal } = options;
 
+  // Already cancelled before we start — don't fetch, and don't register a
+  // timer or listener that would then need cleanup.
+  if (signal?.aborted) return false;
+
   // Per-probe timeout, also linked to the caller's abort signal so closing the
-  // modal cancels every in-flight probe.
+  // modal cancels every in-flight probe. Track whether the listener was added
+  // so cleanup stays symmetric with registration.
   const controller = new AbortController();
   const onAbort = () => controller.abort();
-  if (signal) {
-    if (signal.aborted) controller.abort();
-    else signal.addEventListener('abort', onAbort, { once: true });
-  }
+  const listenerAdded = !!signal;
+  if (listenerAdded) signal!.addEventListener('abort', onAbort, { once: true });
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
@@ -79,13 +82,17 @@ export async function probeNodeHealth(
     if (!res.ok) return false;
 
     // Health body is `{ data: { status: "alive" } }`, but tolerate plain
-    // `{ status }` and non-JSON 2xx responses (still treated as alive).
+    // `{ status }` and non-JSON 2xx responses. A *missing* status is treated as
+    // alive (the 2xx is enough); a status that is present but not "alive"
+    // (including an explicit `null`) is treated as unhealthy.
     try {
       const body = (await res.json()) as
-        | { data?: { status?: string }; status?: string }
+        | { data?: { status?: string | null }; status?: string | null }
         | undefined;
-      const status = body?.data?.status ?? body?.status;
-      return status ? status.toLowerCase() === 'alive' : true;
+      const status =
+        body?.data?.status !== undefined ? body?.data?.status : body?.status;
+      if (status === undefined) return true;
+      return typeof status === 'string' && status.toLowerCase() === 'alive';
     } catch {
       return true;
     }
@@ -93,7 +100,7 @@ export async function probeNodeHealth(
     return false;
   } finally {
     clearTimeout(timer);
-    if (signal) signal.removeEventListener('abort', onAbort);
+    if (listenerAdded) signal!.removeEventListener('abort', onAbort);
   }
 }
 

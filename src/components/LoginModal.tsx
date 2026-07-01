@@ -550,6 +550,10 @@ export function LoginModal({
   const renderRadio = (value: string, label: string, meta?: string) => {
     const active = selected === value;
     return (
+      // Selection is driven solely by the radio input's `onChange` — clicking
+      // anywhere on the wrapping label forwards to the input, and keyboard
+      // users can tab to / arrow through the (visually hidden but focusable)
+      // input. A label `onClick` here would double-fire `setSelected`.
       <label
         key={value}
         data-testid={`node-option-${value === CUSTOM_SELECTION ? 'custom' : displayNodeUrl(value)}`}
@@ -557,7 +561,6 @@ export function LoginModal({
           ...styles.radioItem,
           ...(active ? styles.radioItemActive : {}),
         }}
-        onClick={() => setSelected(value)}
       >
         <input
           type="radio"
@@ -565,7 +568,7 @@ export function LoginModal({
           value={value}
           checked={active}
           onChange={() => setSelected(value)}
-          style={{ position: 'absolute', opacity: 0, pointerEvents: 'none' }}
+          style={{ position: 'absolute', opacity: 0 }}
         />
         <span
           style={{
