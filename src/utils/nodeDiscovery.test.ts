@@ -156,16 +156,21 @@ describe('probeNodeHealth', () => {
 });
 
 describe('discoverLocalNodes', () => {
-  it('returns only the healthy nodes, in ascending port order', async () => {
+  it('returns healthy nodes in candidate order (HTTP ports first)', async () => {
     vi.stubGlobal(
       'fetch',
       fetchRespondingFor(['http://localhost:2528', 'http://localhost:2428']),
     );
     const nodes = await discoverLocalNodes();
+    // Defaults lead with the HTTP/RPC ports, so 2528 precedes the swarm 2428.
     expect(nodes).toEqual([
-      'http://localhost:2428',
       'http://localhost:2528',
+      'http://localhost:2428',
     ]);
+  });
+
+  it('leads its default ports with the HTTP/RPC port 2528', () => {
+    expect(DEFAULT_LOCAL_NODE_PORTS[0]).toBe(2528);
   });
 
   it('returns an empty array when nothing local is running', async () => {
@@ -190,5 +195,65 @@ describe('discoverLocalNodes', () => {
     const nodes = await discoverLocalNodes({ ports: [3000, 3001] });
     expect(nodes).toEqual(['http://localhost:3000']);
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('probes a custom host', async () => {
+    const fetchMock = fetchRespondingFor(['http://192.168.1.9:2528']);
+    vi.stubGlobal('fetch', fetchMock);
+    const nodes = await discoverLocalNodes({
+      ports: [2528],
+      host: '192.168.1.9',
+    });
+    expect(nodes).toEqual(['http://192.168.1.9:2528']);
+  });
+
+  it('includes extraUrls and returns them after port candidates', async () => {
+    vi.stubGlobal(
+      'fetch',
+      fetchRespondingFor([
+        'http://localhost:2528',
+        'https://remote.example.com',
+      ]),
+    );
+    const nodes = await discoverLocalNodes({
+      ports: [2528],
+      extraUrls: ['https://remote.example.com/'],
+    });
+    expect(nodes).toEqual([
+      'http://localhost:2528',
+      'https://remote.example.com',
+    ]);
+  });
+
+  it('dedupes an extraUrl that matches a port candidate', async () => {
+    const fetchMock = fetchRespondingFor(['http://localhost:2528']);
+    vi.stubGlobal('fetch', fetchMock);
+    const nodes = await discoverLocalNodes({
+      ports: [2528],
+      extraUrls: ['http://localhost:2528'],
+    });
+    expect(nodes).toEqual(['http://localhost:2528']);
+    // Deduped → probed once, not twice.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('honors the concurrency cap (never more than N probes in flight)', async () => {
+    let inFlight = 0;
+    let peak = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        inFlight++;
+        peak = Math.max(peak, inFlight);
+        await Promise.resolve();
+        inFlight--;
+        return { ok: false, status: 503, json: async () => ({}) } as Response;
+      }),
+    );
+    await discoverLocalNodes({
+      ports: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+      concurrency: 3,
+    });
+    expect(peak).toBeLessThanOrEqual(3);
   });
 });

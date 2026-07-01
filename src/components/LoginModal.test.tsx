@@ -134,10 +134,11 @@ describe('LoginModal — Remote discovery', () => {
     vi.stubGlobal('fetch', fetchMock);
     const { onConnect } = renderModal({ connectionType: ConnectionType.Remote });
 
-    await screen.findByTestId('node-option-localhost:2428');
+    await screen.findByTestId('node-option-localhost:2528');
     fireEvent.click(screen.getByTestId('connect-button'));
 
-    await waitFor(() => expect(onConnect).toHaveBeenCalledWith(NODE_A));
+    // Defaults lead with the HTTP port 2528, so it's the first discovered node.
+    await waitFor(() => expect(onConnect).toHaveBeenCalledWith(NODE_B));
     // Discovered nodes are already health-checked, so no is-authed probe.
     expect(isAuthedCalls(fetchMock)).toHaveLength(0);
   });
@@ -146,11 +147,12 @@ describe('LoginModal — Remote discovery', () => {
     vi.stubGlobal('fetch', mockFetch([NODE_A, NODE_B]));
     const { onConnect } = renderModal({ connectionType: ConnectionType.Remote });
 
-    await screen.findByTestId('node-option-localhost:2528');
-    fireEvent.click(screen.getByTestId('node-option-localhost:2528'));
+    // 2528 is the default; pick the non-default 2428 instead.
+    await screen.findByTestId('node-option-localhost:2428');
+    fireEvent.click(screen.getByTestId('node-option-localhost:2428'));
     fireEvent.click(screen.getByTestId('connect-button'));
 
-    await waitFor(() => expect(onConnect).toHaveBeenCalledWith(NODE_B));
+    await waitFor(() => expect(onConnect).toHaveBeenCalledWith(NODE_A));
   });
 
   it('reveals the URL field and verifies reachability when manual entry is chosen', async () => {

@@ -456,7 +456,14 @@ export function LoginModal({
     setDiscovered([]);
     setError(null);
 
-    discoverLocalNodes({ ports: localNodePorts, signal: controller.signal })
+    // Probe the last-used node too, so a previously-connected node (incl. a
+    // non-standard host/port) resurfaces as a choice without retyping it.
+    const lastUsed = localStorage.getItem('mero:node_url');
+    discoverLocalNodes({
+      ports: localNodePorts,
+      extraUrls: lastUsed ? [lastUsed] : [],
+      signal: controller.signal,
+    })
       .then((nodes) => {
         if (!active) return;
         setDiscovered(nodes);

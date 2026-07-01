@@ -136,7 +136,7 @@ export const Discovery: Story = {
     docs: {
       description: {
         story:
-          'This story renders the `Remote` connection type to show the discovery view directly. It probes the well-known local ports (2428, 2429, 2528, 2529) at `/admin-api/health`: with one or more nodes up, each is offered as a radio choice alongside an always-present "enter URL manually" option; with nothing running it shows "No local node found" and falls through to the URL field. Use the toolbar "Rescan" link after starting a node. In `RemoteAndLocal` mode (see the Default story) this exact view appears after selecting "Remote", while "Local" keeps the default-node behaviour.',
+          'This story renders the `Remote` connection type to show the discovery view directly. It probes the well-known merod HTTP/RPC ports (2528–2531, plus the swarm-range 2428/2429 for back-compat) and the last-used node URL at `/admin-api/health`: with one or more nodes up, each is offered as a radio choice alongside an always-present "enter URL manually" option; with nothing running it shows "No local node found" and falls through to the URL field. Use the toolbar "Rescan" link after starting a node. In `RemoteAndLocal` mode (see the Default story) this exact view appears after selecting "Remote", while "Local" keeps the default-node behaviour.',
       },
     },
   },
