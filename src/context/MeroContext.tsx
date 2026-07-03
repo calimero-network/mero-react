@@ -116,14 +116,26 @@ export function MeroProvider({
     [timeoutMs, tokenStore],
   );
 
-  const checkAuth = useCallback(async (instance: MeroJs): Promise<boolean> => {
-    try {
-      await instance.admin.getContexts();
-      return true;
-    } catch {
-      return false;
-    }
-  }, []);
+  const checkAuth = useCallback(
+    async (instance: MeroJs): Promise<boolean> => {
+      // Validate the session via /auth/validate (signature, revocation, node
+      // binding — no permission requirement) instead of probing
+      // GET /admin-api/contexts. Since core 0.11.0-rc.9 the node enforces
+      // token permission scopes, and /admin-api/contexts requires Global
+      // `context:list` — which single-context tokens (execute-only) and
+      // app-scoped tokens don't hold, so probing it 403'd valid sessions and
+      // bounced every app straight back to the login page.
+      const accessToken = tokenStore.getTokens()?.access_token;
+      if (!accessToken) return false;
+      try {
+        const { valid } = await instance.auth.validateToken(accessToken);
+        return valid;
+      } catch {
+        return false;
+      }
+    },
+    [tokenStore],
+  );
 
   const connectToNode = useCallback(
     (url: string) => {

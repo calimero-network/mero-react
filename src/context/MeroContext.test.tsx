@@ -7,6 +7,9 @@ import { render, screen, waitFor, act, cleanup } from '@testing-library/react';
 vi.mock('@calimero-network/mero-js', () => ({
   MeroJs: vi.fn().mockImplementation(() => ({
     admin: { getContexts: vi.fn().mockResolvedValue([]) },
+    auth: {
+      validateToken: vi.fn().mockResolvedValue({ valid: true, headers: {}, status: 200 }),
+    },
     events: { on: vi.fn(), off: vi.fn(), connect: vi.fn().mockResolvedValue(undefined) },
     clearToken: vi.fn(),
     close: vi.fn(),
@@ -46,10 +49,11 @@ function makeStore(): MockStore {
 }
 
 function Consumer() {
-  const { isLoading, logout } = useMero();
+  const { isLoading, isAuthenticated, logout } = useMero();
   return (
     <div>
       <span data-testid="loading">{String(isLoading)}</span>
+      <span data-testid="authed">{String(isAuthenticated)}</span>
       <button onClick={logout}>logout</button>
     </div>
   );
@@ -174,6 +178,89 @@ describe('MeroProvider — OAuth callback node_url binding', () => {
     await settled();
 
     expect(store.setTokens).not.toHaveBeenCalled();
+  });
+});
+
+describe('MeroProvider — checkAuth (scope-enforced cores, rc.9+)', () => {
+  // Cores since 0.11.0-rc.9 enforce token permission scopes: GET /admin-api/contexts
+  // requires Global `context:list`, which single-context and app-scoped tokens don't
+  // hold. checkAuth must therefore probe /auth/validate (permission-free), never the
+  // contexts route — otherwise valid sessions 403 and every app loops back to login.
+
+  function storeWithTokens(): MockStore {
+    const store = makeStore();
+    store.getTokens.mockReturnValue({
+      access_token: 'a.b.c',
+      refresh_token: 'r',
+      expires_at: Date.now() + 3_600_000,
+    });
+    return store;
+  }
+
+  /** Build a full mock MeroJs instance and make the next constructions return it. */
+  function mockInstance(validateResult: { valid: boolean; status: number }) {
+    const instance = {
+      admin: { getContexts: vi.fn().mockResolvedValue([]) },
+      auth: {
+        validateToken: vi.fn().mockResolvedValue({ ...validateResult, headers: {} }),
+      },
+      events: { on: vi.fn(), off: vi.fn(), connect: vi.fn().mockResolvedValue(undefined) },
+      clearToken: vi.fn(),
+      close: vi.fn(),
+    };
+    meroMock.mockImplementation(() => instance as never);
+    return instance;
+  }
+
+  it('restores a saved session via auth.validateToken, without touching admin.getContexts', async () => {
+    localStorage.setItem('mero:node_url', 'https://node-a.example.com');
+    mockParseAuthCallback.mockReturnValue(null as never);
+    const store = storeWithTokens();
+    const instance = mockInstance({ valid: true, status: 200 });
+
+    render(
+      <MeroProvider mode={AppMode.SingleContext} tokenStore={store}>
+        <Consumer />
+      </MeroProvider>,
+    );
+    await settled();
+
+    expect(screen.getByTestId('authed').textContent).toBe('true');
+    expect(instance.auth.validateToken).toHaveBeenCalledWith('a.b.c');
+    expect(instance.admin.getContexts).not.toHaveBeenCalled();
+  });
+
+  it('is not authenticated when the token fails validation', async () => {
+    localStorage.setItem('mero:node_url', 'https://node-a.example.com');
+    mockParseAuthCallback.mockReturnValue(null as never);
+    const store = storeWithTokens();
+    mockInstance({ valid: false, status: 401 });
+
+    render(
+      <MeroProvider mode={AppMode.MultiContext} tokenStore={store}>
+        <Consumer />
+      </MeroProvider>,
+    );
+    await settled();
+
+    expect(screen.getByTestId('authed').textContent).toBe('false');
+  });
+
+  it('is not authenticated when the token store is empty (no /auth/validate round-trip)', async () => {
+    localStorage.setItem('mero:node_url', 'https://node-a.example.com');
+    mockParseAuthCallback.mockReturnValue(null as never);
+    const store = makeStore(); // getTokens → null
+    const instance = mockInstance({ valid: true, status: 200 });
+
+    render(
+      <MeroProvider mode={AppMode.MultiContext} tokenStore={store}>
+        <Consumer />
+      </MeroProvider>,
+    );
+    await settled();
+
+    expect(screen.getByTestId('authed').textContent).toBe('false');
+    expect(instance.auth.validateToken).not.toHaveBeenCalled();
   });
 });
 
