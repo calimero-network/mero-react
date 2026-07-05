@@ -20,7 +20,15 @@ import { MeroJs } from '@calimero-network/mero-js';
 import { authedMero, ensureApplication, resolveBaseUrl, runId } from './harness';
 
 /** Keep in sync with getPermissionsForMode(AppMode.MultiContext). */
-const MULTI_CONTEXT_PERMISSIONS = ['context:create', 'context:list', 'context:execute'];
+const MULTI_CONTEXT_PERMISSIONS = [
+  'context:create',
+  'context:list',
+  'context:execute',
+  'namespace',
+  'group',
+  'blob',
+  'context:alias',
+];
 
 let root: MeroJs;
 let client: MeroJs;
