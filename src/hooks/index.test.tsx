@@ -816,7 +816,7 @@ describe('group and context hooks', () => {
     await act(async () => {
       const created = await result.current.createNamespace({
         applicationId: 'app-1',
-        upgradePolicy: 'manual',
+        upgradePolicy: 'LazyOnAccess',
         name: 'My Namespace',
       });
       expect(created).toEqual({ namespaceId: 'ns-9' });
@@ -824,7 +824,7 @@ describe('group and context hooks', () => {
 
     expect(createNamespace).toHaveBeenCalledWith({
       applicationId: 'app-1',
-      upgradePolicy: 'manual',
+      upgradePolicy: 'LazyOnAccess',
       name: 'My Namespace',
     });
   });

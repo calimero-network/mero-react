@@ -15,7 +15,6 @@ import type {
   DetachContextFromGroupRequest,
   GroupContextEntry,
   GroupInfo,
-  GroupMember,
   GroupUpgradeStatusResponseData,
   MetadataRecord,
   JoinGroupRequest,
@@ -115,6 +114,72 @@ function useAsyncMutation() {
   );
 
   return { loading, error, run, setError };
+}
+
+/**
+ * Generic read resource: fetch + loading/error/data with a latest-request-wins
+ * guard. `fetcher` is null when the read is disabled (missing args) — the
+ * resource resets to `initialValue` and nothing is fetched. `deps` drive both
+ * the refetch and a synchronous reset when they change, so a slow earlier
+ * request can never overwrite a newer one. This is the staleness guard the read
+ * hooks used to hand-roll (and mostly lacked), now in one place.
+ */
+function useAsyncResource<T>(
+  fetcher: (() => Promise<T>) | null,
+  initialValue: T,
+  deps: readonly unknown[],
+): { data: T; loading: boolean; error: Error | null; refetch: () => Promise<void> } {
+  const mountedRef = useMountedRef();
+  const [data, setData] = useState<T>(initialValue);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+  const reqRef = useRef(0);
+
+  // fetcherRef is refreshed every render so refetch() always calls the latest
+  // closure; initialRef captures the (per-hook constant) initial value once.
+  // Neither is a dependency — adding them would break latest-request-wins.
+  const fetcherRef = useRef(fetcher);
+  fetcherRef.current = fetcher;
+  const initialRef = useRef(initialValue);
+
+  const refetch = useCallback(async () => {
+    const seq = ++reqRef.current;
+    const fn = fetcherRef.current;
+    if (!fn) {
+      if (mountedRef.current && seq === reqRef.current) {
+        setData(initialRef.current);
+        setError(null);
+        setLoading(false);
+      }
+      return;
+    }
+    if (mountedRef.current) {
+      setLoading(true);
+      setError(null);
+    }
+    try {
+      const result = await fn();
+      if (mountedRef.current && seq === reqRef.current) setData(result);
+    } catch (err) {
+      if (mountedRef.current && seq === reqRef.current) setError(toError(err));
+    } finally {
+      if (mountedRef.current && seq === reqRef.current) setLoading(false);
+    }
+  }, deps);
+
+  // Invalidate any in-flight request and clear stale data synchronously when
+  // the inputs change, so a pending response for old deps can't land later.
+  useEffect(() => {
+    reqRef.current += 1;
+    setData(initialRef.current);
+    setError(null);
+  }, deps);
+
+  useEffect(() => {
+    void refetch();
+  }, [refetch]);
+
+  return { data, loading, error, refetch };
 }
 
 function sleep(ms: number): Promise<void> {
@@ -230,44 +295,19 @@ export function useSubscription(
  */
 export function useContexts(applicationId?: string | null) {
   const { mero } = useMero();
-  const [contexts, setContexts] = useState<ApplicationContextRecord[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
-  const mountedRef = useMountedRef();
-
-  const refetch = useCallback(async () => {
-    if (!mero) return;
-
-    if (mountedRef.current) {
-      setLoading(true);
-      setError(null);
-    }
-
-    try {
-      const response = applicationId
-        ? await mero.admin.getContextsForApplication(applicationId)
-        : await mero.admin.getContexts();
-      const list = mapApplicationContexts(response.contexts ?? []);
-      if (mountedRef.current) {
-        setContexts(list);
-      }
-    } catch (err) {
-      const errorValue = toError(err);
-      if (mountedRef.current) {
-        setError(errorValue);
-      }
-    } finally {
-      if (mountedRef.current) {
-        setLoading(false);
-      }
-    }
-  }, [mero, applicationId]);
-
-  useEffect(() => {
-    void refetch();
-  }, [refetch]);
-
-  return { contexts, loading, error, refetch };
+  const { data, loading, error, refetch } = useAsyncResource<ApplicationContextRecord[]>(
+    mero
+      ? async () => {
+          const response = applicationId
+            ? await mero.admin.getContextsForApplication(applicationId)
+            : await mero.admin.getContexts();
+          return mapApplicationContexts(response.contexts ?? []);
+        }
+      : null,
+    [],
+    [mero, applicationId],
+  );
+  return { contexts: data, loading, error, refetch };
 }
 
 export function useApplicationContexts(applicationId?: string | null) {
@@ -276,100 +316,29 @@ export function useApplicationContexts(applicationId?: string | null) {
 
 export function useGroupMembers(groupId?: string | null) {
   const { mero } = useMero();
-  const [members, setMembers] = useState<GroupMember[]>([]);
-  const [selfIdentity, setSelfIdentity] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
-  const mountedRef = useMountedRef();
-
-  const refetch = useCallback(async () => {
-    if (!mero || !groupId) {
-      if (mountedRef.current) {
-        setMembers([]);
-        setSelfIdentity(null);
-        setError(null);
-        setLoading(false);
-      }
-      return;
-    }
-
-    if (mountedRef.current) {
-      setLoading(true);
-      setError(null);
-    }
-
-    try {
-      const response: ListGroupMembersResponseData = await mero.admin.listGroupMembers(groupId);
-      if (mountedRef.current) {
-        // mero-js >=2.0.1 guarantees `members` as a non-optional array; `?? []`
-        // is a belt-and-suspenders against consumer overrides / test mocks /
-        // future contract drift.
-        setMembers(response.members ?? []);
-        setSelfIdentity(response.selfIdentity ?? null);
-      }
-    } catch (err) {
-      const errorValue = toError(err);
-      if (mountedRef.current) {
-        setError(errorValue);
-      }
-    } finally {
-      if (mountedRef.current) {
-        setLoading(false);
-      }
-    }
-  }, [groupId, mero, mountedRef]);
-
-  useEffect(() => {
-    void refetch();
-  }, [refetch]);
-
-  return { members, selfIdentity, loading, error, refetch };
+  const { data, loading, error, refetch } = useAsyncResource<ListGroupMembersResponseData | null>(
+    mero && groupId ? () => mero.admin.listGroupMembers(groupId) : null,
+    null,
+    [mero, groupId],
+  );
+  // `members` is a guaranteed array on the wire; `?? []` guards mocks / drift.
+  return {
+    members: data?.members ?? [],
+    selfIdentity: data?.selfIdentity ?? null,
+    loading,
+    error,
+    refetch,
+  };
 }
 
 export function useGroupContexts(groupId?: string | null) {
   const { mero } = useMero();
-  const [contexts, setContexts] = useState<GroupContextEntry[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
-  const mountedRef = useMountedRef();
-
-  const refetch = useCallback(async () => {
-    if (!mero || !groupId) {
-      if (mountedRef.current) {
-        setContexts([]);
-        setError(null);
-        setLoading(false);
-      }
-      return;
-    }
-
-    if (mountedRef.current) {
-      setLoading(true);
-      setError(null);
-    }
-
-    try {
-      const nextContexts = await mero.admin.listGroupContexts(groupId);
-      if (mountedRef.current) {
-        setContexts(nextContexts);
-      }
-    } catch (err) {
-      const errorValue = toError(err);
-      if (mountedRef.current) {
-        setError(errorValue);
-      }
-    } finally {
-      if (mountedRef.current) {
-        setLoading(false);
-      }
-    }
-  }, [groupId, mero, mountedRef]);
-
-  useEffect(() => {
-    void refetch();
-  }, [refetch]);
-
-  return { contexts, loading, error, refetch };
+  const { data, loading, error, refetch } = useAsyncResource<GroupContextEntry[]>(
+    mero && groupId ? () => mero.admin.listGroupContexts(groupId) : null,
+    [],
+    [mero, groupId],
+  );
+  return { contexts: data, loading, error, refetch };
 }
 
 export function useGroupInvitations() {
@@ -412,10 +381,14 @@ export function useGroupCapabilities(groupId?: string | null, memberId?: string 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const mountedRef = useMountedRef();
+  // Read+write hybrid (setCapabilities shares this state), so it keeps the
+  // inline latest-request-wins guard rather than useAsyncResource.
+  const reqRef = useRef(0);
 
   const refetch = useCallback(async () => {
+    const seq = ++reqRef.current;
     if (!mero || !groupId || !memberId) {
-      if (mountedRef.current) {
+      if (mountedRef.current && seq === reqRef.current) {
         setCapabilitiesState(null);
         setError(null);
         setLoading(false);
@@ -430,22 +403,28 @@ export function useGroupCapabilities(groupId?: string | null, memberId?: string 
 
     try {
       const response = await mero.admin.getMemberCapabilities(groupId, memberId);
-      if (mountedRef.current) {
+      if (mountedRef.current && seq === reqRef.current) {
         setCapabilitiesState(response.capabilities);
       }
       return response.capabilities;
     } catch (err) {
       const errorValue = toError(err);
-      if (mountedRef.current) {
+      if (mountedRef.current && seq === reqRef.current) {
         setError(errorValue);
       }
       return null;
     } finally {
-      if (mountedRef.current) {
+      if (mountedRef.current && seq === reqRef.current) {
         setLoading(false);
       }
     }
   }, [groupId, memberId, mero, mountedRef]);
+
+  useEffect(() => {
+    reqRef.current += 1;
+    setCapabilitiesState(null);
+    setError(null);
+  }, [groupId, memberId]);
 
   useEffect(() => {
     void refetch();
@@ -662,96 +641,24 @@ export function useJoinSubgroupInheritance() {
 
 export function useContextGroup(contextId?: string | null) {
   const { mero } = useMero();
-  const [groupId, setGroupId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
-  const mountedRef = useMountedRef();
-
-  const refetch = useCallback(async () => {
-    if (!mero || !contextId) {
-      if (mountedRef.current) {
-        setGroupId(null);
-        setError(null);
-        setLoading(false);
-      }
-      return;
-    }
-
-    if (mountedRef.current) {
-      setLoading(true);
-      setError(null);
-    }
-
-    try {
-      const result = await mero.admin.getContextGroup(contextId);
-      if (mountedRef.current) {
-        setGroupId(result);
-      }
-    } catch (err) {
-      const errorValue = toError(err);
-      if (mountedRef.current) {
-        setError(errorValue);
-      }
-    } finally {
-      if (mountedRef.current) {
-        setLoading(false);
-      }
-    }
-  }, [contextId, mero, mountedRef]);
-
-  useEffect(() => {
-    void refetch();
-  }, [refetch]);
-
-  return { groupId, loading, error, refetch };
+  const { data, loading, error, refetch } = useAsyncResource<string | null>(
+    mero && contextId ? () => mero.admin.getContextGroup(contextId) : null,
+    null,
+    [mero, contextId],
+  );
+  return { groupId: data, loading, error, refetch };
 }
 
 // ---- Group Info / Management Hooks ----
 
 export function useGroupInfo(groupId?: string | null) {
   const { mero } = useMero();
-  const [groupInfo, setGroupInfo] = useState<GroupInfo | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
-  const mountedRef = useMountedRef();
-
-  const refetch = useCallback(async () => {
-    if (!mero || !groupId) {
-      if (mountedRef.current) {
-        setGroupInfo(null);
-        setError(null);
-        setLoading(false);
-      }
-      return;
-    }
-
-    if (mountedRef.current) {
-      setLoading(true);
-      setError(null);
-    }
-
-    try {
-      const result = await mero.admin.getGroupInfo(groupId);
-      if (mountedRef.current) {
-        setGroupInfo(result);
-      }
-    } catch (err) {
-      const errorValue = toError(err);
-      if (mountedRef.current) {
-        setError(errorValue);
-      }
-    } finally {
-      if (mountedRef.current) {
-        setLoading(false);
-      }
-    }
-  }, [groupId, mero, mountedRef]);
-
-  useEffect(() => {
-    void refetch();
-  }, [refetch]);
-
-  return { groupInfo, loading, error, refetch };
+  const { data, loading, error, refetch } = useAsyncResource<GroupInfo | null>(
+    mero && groupId ? () => mero.admin.getGroupInfo(groupId) : null,
+    null,
+    [mero, groupId],
+  );
+  return { groupInfo: data, loading, error, refetch };
 }
 
 export function useDeleteGroup() {
@@ -818,179 +725,42 @@ export function useRemoveGroupMembers() {
 
 export function useNamespaces() {
   const { mero } = useMero();
-  const [namespaces, setNamespaces] = useState<Namespace[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
-  const mountedRef = useMountedRef();
-
-  const refetch = useCallback(async () => {
-    if (!mero) return;
-
-    if (mountedRef.current) {
-      setLoading(true);
-      setError(null);
-    }
-
-    try {
-      const result = await mero.admin.listNamespaces();
-      if (mountedRef.current) {
-        setNamespaces(result);
-      }
-    } catch (err) {
-      const errorValue = toError(err);
-      if (mountedRef.current) {
-        setError(errorValue);
-      }
-    } finally {
-      if (mountedRef.current) {
-        setLoading(false);
-      }
-    }
-  }, [mero, mountedRef]);
-
-  useEffect(() => {
-    void refetch();
-  }, [refetch]);
-
-  return { namespaces, loading, error, refetch };
+  const { data, loading, error, refetch } = useAsyncResource<Namespace[]>(
+    mero ? () => mero.admin.listNamespaces() : null,
+    [],
+    [mero],
+  );
+  return { namespaces: data, loading, error, refetch };
 }
 
 export function useNamespace(namespaceId?: string | null) {
   const { mero } = useMero();
-  const [namespace, setNamespace] = useState<Namespace | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
-  const mountedRef = useMountedRef();
-
-  const refetch = useCallback(async () => {
-    if (!mero || !namespaceId) {
-      if (mountedRef.current) {
-        setNamespace(null);
-        setError(null);
-        setLoading(false);
-      }
-      return;
-    }
-
-    if (mountedRef.current) {
-      setLoading(true);
-      setError(null);
-    }
-
-    try {
-      const result = await mero.admin.getNamespace(namespaceId);
-      if (mountedRef.current) {
-        setNamespace(result);
-      }
-    } catch (err) {
-      const errorValue = toError(err);
-      if (mountedRef.current) {
-        setError(errorValue);
-      }
-    } finally {
-      if (mountedRef.current) {
-        setLoading(false);
-      }
-    }
-  }, [namespaceId, mero, mountedRef]);
-
-  useEffect(() => {
-    void refetch();
-  }, [refetch]);
-
-  return { namespace, loading, error, refetch };
+  const { data, loading, error, refetch } = useAsyncResource<Namespace | null>(
+    mero && namespaceId ? () => mero.admin.getNamespace(namespaceId) : null,
+    null,
+    [mero, namespaceId],
+  );
+  return { namespace: data, loading, error, refetch };
 }
 
 export function useNamespaceIdentity(namespaceId?: string | null) {
   const { mero } = useMero();
-  const [identity, setIdentity] = useState<NamespaceIdentity | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
-  const mountedRef = useMountedRef();
-
-  const refetch = useCallback(async () => {
-    if (!mero || !namespaceId) {
-      if (mountedRef.current) {
-        setIdentity(null);
-        setError(null);
-        setLoading(false);
-      }
-      return;
-    }
-
-    if (mountedRef.current) {
-      setLoading(true);
-      setError(null);
-    }
-
-    try {
-      const result = await mero.admin.getNamespaceIdentity(namespaceId);
-      if (mountedRef.current) {
-        setIdentity(result);
-      }
-    } catch (err) {
-      const errorValue = toError(err);
-      if (mountedRef.current) {
-        setError(errorValue);
-      }
-    } finally {
-      if (mountedRef.current) {
-        setLoading(false);
-      }
-    }
-  }, [namespaceId, mero, mountedRef]);
-
-  useEffect(() => {
-    void refetch();
-  }, [refetch]);
-
-  return { identity, loading, error, refetch };
+  const { data, loading, error, refetch } = useAsyncResource<NamespaceIdentity | null>(
+    mero && namespaceId ? () => mero.admin.getNamespaceIdentity(namespaceId) : null,
+    null,
+    [mero, namespaceId],
+  );
+  return { identity: data, loading, error, refetch };
 }
 
 export function useNamespacesForApplication(applicationId?: string | null) {
   const { mero } = useMero();
-  const [namespaces, setNamespaces] = useState<Namespace[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
-  const mountedRef = useMountedRef();
-
-  const refetch = useCallback(async () => {
-    if (!mero || !applicationId) {
-      if (mountedRef.current) {
-        setNamespaces([]);
-        setError(null);
-        setLoading(false);
-      }
-      return;
-    }
-
-    if (mountedRef.current) {
-      setLoading(true);
-      setError(null);
-    }
-
-    try {
-      const result = await mero.admin.listNamespacesForApplication(applicationId);
-      if (mountedRef.current) {
-        setNamespaces(result);
-      }
-    } catch (err) {
-      const errorValue = toError(err);
-      if (mountedRef.current) {
-        setError(errorValue);
-      }
-    } finally {
-      if (mountedRef.current) {
-        setLoading(false);
-      }
-    }
-  }, [applicationId, mero, mountedRef]);
-
-  useEffect(() => {
-    void refetch();
-  }, [refetch]);
-
-  return { namespaces, loading, error, refetch };
+  const { data, loading, error, refetch } = useAsyncResource<Namespace[]>(
+    mero && applicationId ? () => mero.admin.listNamespacesForApplication(applicationId) : null,
+    [],
+    [mero, applicationId],
+  );
+  return { namespaces: data, loading, error, refetch };
 }
 
 export function useCreateNamespace() {
@@ -1073,48 +843,12 @@ export function useCreateGroupInNamespace() {
 
 export function useNamespaceGroups(namespaceId?: string | null) {
   const { mero } = useMero();
-  const [groups, setGroups] = useState<SubgroupEntry[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
-  const mountedRef = useMountedRef();
-
-  const refetch = useCallback(async () => {
-    if (!mero || !namespaceId) {
-      if (mountedRef.current) {
-        setGroups([]);
-        setError(null);
-        setLoading(false);
-      }
-      return;
-    }
-
-    if (mountedRef.current) {
-      setLoading(true);
-      setError(null);
-    }
-
-    try {
-      const result = await mero.admin.listNamespaceGroups(namespaceId);
-      if (mountedRef.current) {
-        setGroups(result);
-      }
-    } catch (err) {
-      const errorValue = toError(err);
-      if (mountedRef.current) {
-        setError(errorValue);
-      }
-    } finally {
-      if (mountedRef.current) {
-        setLoading(false);
-      }
-    }
-  }, [namespaceId, mero, mountedRef]);
-
-  useEffect(() => {
-    void refetch();
-  }, [refetch]);
-
-  return { groups, loading, error, refetch };
+  const { data, loading, error, refetch } = useAsyncResource<SubgroupEntry[]>(
+    mero && namespaceId ? () => mero.admin.listNamespaceGroups(namespaceId) : null,
+    [],
+    [mero, namespaceId],
+  );
+  return { groups: data, loading, error, refetch };
 }
 
 // ---- Group Settings & Role Management ----
@@ -1166,94 +900,22 @@ export function useSetSubgroupVisibility() {
 
 export function useDefaultCapabilities(groupId?: string | null) {
   const { mero } = useMero();
-  const [defaultCapabilities, setDefaultCapabilitiesState] = useState<number | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
-  const mountedRef = useMountedRef();
-
-  const refetch = useCallback(async () => {
-    if (!mero || !groupId) {
-      if (mountedRef.current) {
-        setDefaultCapabilitiesState(null);
-        setError(null);
-        setLoading(false);
-      }
-      return;
-    }
-
-    if (mountedRef.current) {
-      setLoading(true);
-      setError(null);
-    }
-
-    try {
-      const result = await mero.admin.getDefaultCapabilities(groupId);
-      if (mountedRef.current) {
-        setDefaultCapabilitiesState(result);
-      }
-    } catch (err) {
-      const errorValue = toError(err);
-      if (mountedRef.current) {
-        setError(errorValue);
-      }
-    } finally {
-      if (mountedRef.current) {
-        setLoading(false);
-      }
-    }
-  }, [groupId, mero, mountedRef]);
-
-  useEffect(() => {
-    void refetch();
-  }, [refetch]);
-
-  return { defaultCapabilities, loading, error, refetch };
+  const { data, loading, error, refetch } = useAsyncResource<number | null>(
+    mero && groupId ? () => mero.admin.getDefaultCapabilities(groupId) : null,
+    null,
+    [mero, groupId],
+  );
+  return { defaultCapabilities: data, loading, error, refetch };
 }
 
 export function useSubgroupVisibility(groupId?: string | null) {
   const { mero } = useMero();
-  const [subgroupVisibility, setSubgroupVisibilityState] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
-  const mountedRef = useMountedRef();
-
-  const refetch = useCallback(async () => {
-    if (!mero || !groupId) {
-      if (mountedRef.current) {
-        setSubgroupVisibilityState(null);
-        setError(null);
-        setLoading(false);
-      }
-      return;
-    }
-
-    if (mountedRef.current) {
-      setLoading(true);
-      setError(null);
-    }
-
-    try {
-      const result = await mero.admin.getSubgroupVisibility(groupId);
-      if (mountedRef.current) {
-        setSubgroupVisibilityState(result);
-      }
-    } catch (err) {
-      const errorValue = toError(err);
-      if (mountedRef.current) {
-        setError(errorValue);
-      }
-    } finally {
-      if (mountedRef.current) {
-        setLoading(false);
-      }
-    }
-  }, [groupId, mero, mountedRef]);
-
-  useEffect(() => {
-    void refetch();
-  }, [refetch]);
-
-  return { subgroupVisibility, loading, error, refetch };
+  const { data, loading, error, refetch } = useAsyncResource<string | null>(
+    mero && groupId ? () => mero.admin.getSubgroupVisibility(groupId) : null,
+    null,
+    [mero, groupId],
+  );
+  return { subgroupVisibility: data, loading, error, refetch };
 }
 
 export function useSetTeeAdmissionPolicy() {
@@ -1335,48 +997,12 @@ export function useSetContextMetadata() {
 
 export function useGroupMetadata(groupId?: string | null) {
   const { mero } = useMero();
-  const [metadata, setMetadata] = useState<MetadataRecord | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
-  const mountedRef = useMountedRef();
-
-  const refetch = useCallback(async () => {
-    if (!mero || !groupId) {
-      if (mountedRef.current) {
-        setMetadata(null);
-        setError(null);
-        setLoading(false);
-      }
-      return;
-    }
-
-    if (mountedRef.current) {
-      setLoading(true);
-      setError(null);
-    }
-
-    try {
-      const result = await mero.admin.getGroupMetadata(groupId);
-      if (mountedRef.current) {
-        setMetadata(result);
-      }
-    } catch (err) {
-      const errorValue = toError(err);
-      if (mountedRef.current) {
-        setError(errorValue);
-      }
-    } finally {
-      if (mountedRef.current) {
-        setLoading(false);
-      }
-    }
-  }, [groupId, mero, mountedRef]);
-
-  useEffect(() => {
-    void refetch();
-  }, [refetch]);
-
-  return { metadata, loading, error, refetch };
+  const { data, loading, error, refetch } = useAsyncResource<MetadataRecord | null>(
+    mero && groupId ? () => mero.admin.getGroupMetadata(groupId) : null,
+    null,
+    [mero, groupId],
+  );
+  return { metadata: data, loading, error, refetch };
 }
 
 export function useMemberMetadata(groupId?: string | null, identity?: string | null) {
@@ -1582,48 +1208,12 @@ export function useReparentGroup() {
 
 export function useSubgroups(groupId?: string | null) {
   const { mero } = useMero();
-  const [subgroups, setSubgroups] = useState<SubgroupEntry[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
-  const mountedRef = useMountedRef();
-
-  const refetch = useCallback(async () => {
-    if (!mero || !groupId) {
-      if (mountedRef.current) {
-        setSubgroups([]);
-        setError(null);
-        setLoading(false);
-      }
-      return;
-    }
-
-    if (mountedRef.current) {
-      setLoading(true);
-      setError(null);
-    }
-
-    try {
-      const result = await mero.admin.listSubgroups(groupId);
-      if (mountedRef.current) {
-        setSubgroups(result);
-      }
-    } catch (err) {
-      const errorValue = toError(err);
-      if (mountedRef.current) {
-        setError(errorValue);
-      }
-    } finally {
-      if (mountedRef.current) {
-        setLoading(false);
-      }
-    }
-  }, [groupId, mero, mountedRef]);
-
-  useEffect(() => {
-    void refetch();
-  }, [refetch]);
-
-  return { subgroups, loading, error, refetch };
+  const { data, loading, error, refetch } = useAsyncResource<SubgroupEntry[]>(
+    mero && groupId ? () => mero.admin.listSubgroups(groupId) : null,
+    [],
+    [mero, groupId],
+  );
+  return { subgroups: data, loading, error, refetch };
 }
 
 // ---- Context-Group Relationship ----
