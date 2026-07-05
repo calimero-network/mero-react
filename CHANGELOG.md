@@ -1,3 +1,9 @@
+## [4.2.0](https://github.com/calimero-network/mero-react/compare/mero-react-v4.1.1...mero-react-v4.2.0) (2026-07-05)
+
+### Features
+
+* live-node hook integration tests + useAsyncResource staleness guard ([c26bac7](https://github.com/calimero-network/mero-react/commit/c26bac7b3159a9be4cac110ed59a8fce3632bf06))
+
 ## [4.1.1](https://github.com/calimero-network/mero-react/compare/mero-react-v4.1.0...mero-react-v4.1.1) (2026-07-05)
 
 ### Bug Fixes
