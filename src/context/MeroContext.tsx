@@ -33,12 +33,36 @@ const MeroContext = createContext<MeroContextValue | null>(null);
 
 const isBrowser = typeof window !== 'undefined';
 
-function getPermissionsForMode(mode: AppMode): string[] {
+/**
+ * Permission grants requested for the client token at login.
+ *
+ * Cores since 0.11.0-rc.9 default-deny admin-api routes the token holds no
+ * scope for; cores >=0.11.0-rc.11 map the governance/blob/alias routes to the
+ * client-grantable `namespace` / `group` / `blob` / `context:alias`
+ * permissions, so app tokens must request them here or every workspace,
+ * group, blob and context-alias call 403s.
+ *
+ * `context:list` is included even in single-context mode because every app
+ * calls GET /admin-api/contexts/:id/identities-owned right after login, which
+ * maps to a `context:list` requirement.
+ *
+ * Exported for tests.
+ */
+export function getPermissionsForMode(mode: AppMode): string[] {
   switch (mode) {
     case AppMode.SingleContext:
-      return ['context:execute'];
+      return ['context:execute', 'context:list', 'application:list', 'blob', 'context:alias'];
     case AppMode.MultiContext:
-      return ['context:create', 'context:list', 'context:execute'];
+      return [
+        'context:create',
+        'context:list',
+        'context:execute',
+        'application:list',
+        'namespace',
+        'group',
+        'blob',
+        'context:alias',
+      ];
     case AppMode.Admin:
       return ['admin'];
     default:

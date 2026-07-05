@@ -23,7 +23,7 @@ vi.mock('@calimero-network/mero-js', () => ({
   buildAuthLoginUrl: vi.fn(() => 'https://auth.example/login'),
 }));
 
-import { MeroProvider, useMero } from './MeroContext';
+import { MeroProvider, useMero, getPermissionsForMode } from './MeroContext';
 import { AppMode } from '../types';
 import { MeroJs, parseAuthCallback } from '@calimero-network/mero-js';
 import type { TokenStore } from '@calimero-network/mero-js';
@@ -281,5 +281,42 @@ describe('MeroProvider — logout', () => {
     });
 
     expect(store.clear).toHaveBeenCalled();
+  });
+});
+
+describe('getPermissionsForMode — grants requested at login (scope-enforced cores)', () => {
+  it('MultiContext requests context + namespace/group/blob/alias grants', () => {
+    expect(getPermissionsForMode(AppMode.MultiContext)).toEqual([
+      'context:create',
+      'context:list',
+      'context:execute',
+      'application:list',
+      'namespace',
+      'group',
+      'blob',
+      'context:alias',
+    ]);
+  });
+
+  it('SingleContext requests execute/list plus blob and alias grants', () => {
+    // context:list: every app calls GET /admin-api/contexts/:id/identities-owned
+    // right after login, which maps to a context:list requirement.
+    expect(getPermissionsForMode(AppMode.SingleContext)).toEqual([
+      'context:execute',
+      'context:list',
+      'application:list',
+      'blob',
+      'context:alias',
+    ]);
+  });
+
+  it('Admin is unchanged', () => {
+    expect(getPermissionsForMode(AppMode.Admin)).toEqual(['admin']);
+  });
+
+  it('throws on an unsupported mode', () => {
+    expect(() => getPermissionsForMode('bogus' as AppMode)).toThrow(
+      /Unsupported application mode/,
+    );
   });
 });
