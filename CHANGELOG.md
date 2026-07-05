@@ -1,3 +1,9 @@
+## [4.1.1](https://github.com/calimero-network/mero-react/compare/mero-react-v4.1.0...mero-react-v4.1.1) (2026-07-05)
+
+### Bug Fixes
+
+* **auth:** validate sessions via /auth/validate instead of GET /admin-api/contexts ([#41](https://github.com/calimero-network/mero-react/issues/41)) ([9533c27](https://github.com/calimero-network/mero-react/commit/9533c27fccff268f289e7af5902d1347ab357c10)), closes [calimero-network/core#3040](https://github.com/calimero-network/core/issues/3040)
+
 ## [4.1.0](https://github.com/calimero-network/mero-react/compare/mero-react-v4.0.1...mero-react-v4.1.0) (2026-07-01)
 
 ### Features
