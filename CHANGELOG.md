@@ -1,3 +1,9 @@
+## [4.3.0](https://github.com/calimero-network/mero-react/compare/mero-react-v4.2.0...mero-react-v4.3.0) (2026-07-05)
+
+### Features
+
+* **auth:** request namespace/group/blob/alias grants for scope-enforced cores ([#42](https://github.com/calimero-network/mero-react/issues/42)) ([3de7ea8](https://github.com/calimero-network/mero-react/commit/3de7ea884f2995bf403f753c4f04f8d4776af286))
+
 ## [4.2.0](https://github.com/calimero-network/mero-react/compare/mero-react-v4.1.1...mero-react-v4.2.0) (2026-07-05)
 
 ### Features
