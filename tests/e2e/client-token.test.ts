@@ -24,6 +24,7 @@ const MULTI_CONTEXT_PERMISSIONS = [
   'context:create',
   'context:list',
   'context:execute',
+  'application:list',
   'namespace',
   'group',
   'blob',

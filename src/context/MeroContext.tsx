@@ -51,12 +51,13 @@ const isBrowser = typeof window !== 'undefined';
 export function getPermissionsForMode(mode: AppMode): string[] {
   switch (mode) {
     case AppMode.SingleContext:
-      return ['context:execute', 'context:list', 'blob', 'context:alias'];
+      return ['context:execute', 'context:list', 'application:list', 'blob', 'context:alias'];
     case AppMode.MultiContext:
       return [
         'context:create',
         'context:list',
         'context:execute',
+        'application:list',
         'namespace',
         'group',
         'blob',

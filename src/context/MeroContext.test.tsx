@@ -290,6 +290,7 @@ describe('getPermissionsForMode — grants requested at login (scope-enforced co
       'context:create',
       'context:list',
       'context:execute',
+      'application:list',
       'namespace',
       'group',
       'blob',
@@ -303,6 +304,7 @@ describe('getPermissionsForMode — grants requested at login (scope-enforced co
     expect(getPermissionsForMode(AppMode.SingleContext)).toEqual([
       'context:execute',
       'context:list',
+      'application:list',
       'blob',
       'context:alias',
     ]);
