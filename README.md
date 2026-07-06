@@ -292,7 +292,7 @@ Helpers: `defaultMeroTheme` (the full default palette), `resolveMeroTheme(partia
 
 | Prop | Type | Default | Notes |
 |------|------|---------|-------|
-| `connectionType` | `ConnectionType \| CustomConnectionConfig` | `RemoteAndLocal` | Which options the embedded LoginModal shows. `Custom` skips the modal. |
+| `connectionType` | `ConnectionType \| CustomConnectionConfig` | `Remote` | `Custom` connects straight to the given URL, skipping the modal. Every other value opens the LoginModal (node discovery + manual URL entry). |
 | `theme` | `MeroTheme` | — | Partial token override. |
 | `logoOnly` | `boolean` | `false` | Render only the Calimero logo (square button). The label is still announced via `aria-label`. |
 | `label` | `string \| { connect?, connected?, reconnecting? }` | — | Override default labels. Bare string targets the disconnected state. |
@@ -305,10 +305,10 @@ AppMode.SingleContext   // 'single-context'
 AppMode.MultiContext    // 'multi-context'
 AppMode.Admin           // 'admin'
 
-ConnectionType.RemoteAndLocal  // 'remote-and-local'
-ConnectionType.Remote          // 'remote'
-ConnectionType.Local           // 'local'
-ConnectionType.Custom          // 'custom'
+ConnectionType.Remote          // 'remote' — opens the LoginModal (discovery + manual URL)
+ConnectionType.Custom          // 'custom' — skip the modal, connect to a fixed URL
+ConnectionType.RemoteAndLocal  // deprecated, same as Remote
+ConnectionType.Local           // deprecated, same as Remote
 ```
 
 ## Types

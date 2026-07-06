@@ -63,12 +63,9 @@ const meta: Meta<FlatArgs> = {
     },
     connectionType: {
       control: 'select',
-      options: [
-        ConnectionType.RemoteAndLocal,
-        ConnectionType.Remote,
-        ConnectionType.Local,
-      ],
-      description: 'Which options the embedded LoginModal shows',
+      options: [ConnectionType.Remote],
+      description:
+        'Connection behaviour — the embedded LoginModal always shows node discovery + manual URL entry; `Custom` (object form) skips the modal',
     },
   },
   render: (args) => {
@@ -106,7 +103,7 @@ type Story = StoryObj<FlatArgs>;
 
 export const Default: Story = {
   args: {
-    connectionType: ConnectionType.RemoteAndLocal,
+    connectionType: ConnectionType.Remote,
   },
 };
 
