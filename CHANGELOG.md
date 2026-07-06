@@ -1,3 +1,9 @@
+## [4.3.1](https://github.com/calimero-network/mero-react/compare/mero-react-v4.3.0...mero-react-v4.3.1) (2026-07-06)
+
+### Bug Fixes
+
+* **login:** remove Local/Remote tabs from LoginModal ([#43](https://github.com/calimero-network/mero-react/issues/43)) ([8a24c6f](https://github.com/calimero-network/mero-react/commit/8a24c6fa177565a942b0c95b6e3ebdbc557c5db6))
+
 ## [4.3.0](https://github.com/calimero-network/mero-react/compare/mero-react-v4.2.0...mero-react-v4.3.0) (2026-07-05)
 
 ### Features
