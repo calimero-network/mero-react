@@ -14,7 +14,11 @@ import { ConnectionType as ConnectionTypeEnum } from '../types';
 import { resolveMeroTheme, themeToCssVars, type MeroTheme } from '../theme';
 
 export interface ConnectButtonProps {
-  /** Connection type for login modal */
+  /**
+   * Connection behaviour. `Custom` (object form) connects straight to the
+   * given URL, skipping the modal; every other value opens the LoginModal,
+   * which always shows node discovery + manual URL entry.
+   */
   connectionType?: ConnectionType | CustomConnectionConfig;
   /** Custom class name */
   className?: string;
@@ -42,7 +46,7 @@ export interface ConnectButtonProps {
  * ConnectButton - Displays connection status and handles login/logout
  */
 export function ConnectButton({
-  connectionType = ConnectionTypeEnum.RemoteAndLocal,
+  connectionType = ConnectionTypeEnum.Remote,
   className,
   style,
   theme,
@@ -202,7 +206,6 @@ export function ConnectButton({
         isOpen={isModalOpen}
         onConnect={handleModalConnect}
         onClose={() => setIsModalOpen(false)}
-        connectionType={typeof connectionType === 'object' ? ConnectionTypeEnum.RemoteAndLocal : connectionType}
         theme={resolvedTheme ?? theme}
       />
     </div>

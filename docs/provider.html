@@ -63,9 +63,9 @@
 <div class="card gd">
 <h2>ConnectionType</h2>
 <p style="margin-bottom:12px;">Used with <span class="code">ConnectButton</span> and <span class="code">LoginModal</span> to control which node URLs are offered.</p>
-<div class="fr"><div class="fp">ConnectionType.Remote</div><div class="fd">Only remote/cloud nodes. Users enter a node URL.</div></div>
-<div class="fr"><div class="fp">ConnectionType.Local</div><div class="fd">Only localhost nodes.</div></div>
-<div class="fr"><div class="fp">ConnectionType.RemoteAndLocal</div><div class="fd">Both remote and local options available.</div></div>
+<div class="fr"><div class="fp">ConnectionType.Remote</div><div class="fd">Opens the LoginModal: auto-discovers local nodes on the well-known ports and always offers manual URL entry.</div></div>
+<div class="fr"><div class="fp">ConnectionType.Local</div><div class="fd">Deprecated — behaves the same as <span class="code">Remote</span>.</div></div>
+<div class="fr"><div class="fp">ConnectionType.RemoteAndLocal</div><div class="fd">Deprecated — behaves the same as <span class="code">Remote</span>.</div></div>
 <div class="fr"><div class="fp">ConnectionType.Custom</div><div class="fd">Custom connection — pass a <span class="code">CustomConnectionConfig</span> object instead.</div></div>
 <div class="typedef" style="margin-top:12px;">
 <span class="kw">import</span> &#123; <span class="ty">ConnectionType</span> &#125; <span class="kw">from</span> <span class="comment">'@calimero-network/mero-react'</span>;<br><br>
@@ -105,7 +105,7 @@
 
 <div class="card gg">
 <h2>ConnectButton</h2>
-<p style="margin-bottom:12px;">Drop-in button that shows connection status and handles the full connect/disconnect flow. Uses <span class="code">ConnectionType</span> to decide whether to show the <span class="code">LoginModal</span> or connect directly.</p>
+<p style="margin-bottom:12px;">Drop-in button that shows connection status and handles the full connect/disconnect flow. Shows the <span class="code">LoginModal</span> (node discovery + manual URL entry), or connects directly when <span class="code">ConnectionType.Custom</span> is used.</p>
 <div class="typedef">
 <span class="kw">import</span> &#123; <span class="ty">ConnectButton</span>, <span class="ty">ConnectionType</span> &#125; <span class="kw">from</span> <span class="comment">'@calimero-network/mero-react'</span>;<br><br>
 <span class="comment">// Show modal with local + remote options (default)</span><br>
@@ -115,7 +115,7 @@
 <span class="comment">// Skip modal — connect directly to a URL</span><br>
 &lt;<span class="ty">ConnectButton</span> <span class="field">connectionType</span>=&#123;&#123; <span class="field">type</span>: <span class="ty">ConnectionType</span>.<span class="field">Custom</span>, <span class="field">url</span>: <span class="comment">'http://localhost:4001'</span> &#125;&#125; /&gt;
 </div>
-<div class="fr" style="margin-top:12px;"><div class="fp">connectionType?</div><div class="fd"><span class="ty">ConnectionType</span> | <span class="ty">CustomConnectionConfig</span>. Default: <span class="code">RemoteAndLocal</span>.</div></div>
+<div class="fr" style="margin-top:12px;"><div class="fp">connectionType?</div><div class="fd"><span class="ty">ConnectionType</span> | <span class="ty">CustomConnectionConfig</span>. Default: <span class="code">Remote</span>.</div></div>
 <div class="fr"><div class="fp">className?</div><div class="fd">CSS class applied to the button element.</div></div>
 <div class="fr"><div class="fp">style?</div><div class="fd"><span class="ty">React.CSSProperties</span> — inline style override.</div></div>
 <div class="fr"><div class="fp">theme?</div><div class="fd"><span class="ty">MeroTheme</span> — partial palette override. Forwarded to the embedded LoginModal. Defaults to the green Calimero palette when omitted. See <a href="#theming">Theming</a>.</div></div>
@@ -131,7 +131,7 @@
 &nbsp;&nbsp;<span class="field">isOpen</span>=&#123;<span class="field">showModal</span>&#125;<br>
 &nbsp;&nbsp;<span class="field">onConnect</span>=&#123;(<span class="field">url</span>) =&gt; &#123; connectToNode(<span class="field">url</span>); <span class="field">setShowModal</span>(<span class="kw">false</span>); &#125;&#125;<br>
 &nbsp;&nbsp;<span class="field">onClose</span>=&#123;() =&gt; <span class="field">setShowModal</span>(<span class="kw">false</span>)&#125;<br>
-&nbsp;&nbsp;<span class="field">connectionType</span>=&#123;<span class="ty">ConnectionType</span>.<span class="field">RemoteAndLocal</span>&#125;<br>
+&nbsp;&nbsp;<span class="field">connectionType</span>=&#123;<span class="ty">ConnectionType</span>.<span class="field">Remote</span>&#125;<br>
 /&gt;
 </div>
 <div class="fr" style="margin-top:12px;"><div class="fp">isOpen</div><div class="fd"><strong>Required.</strong> <span class="ty">boolean</span> — controls modal visibility.</div></div>

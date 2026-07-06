@@ -1,19 +1,20 @@
 /**
  * LoginModal - Modal for connecting to a Calimero node
  *
- * - **Local** connects to the default local node (`node1.127.0.0.1.nip.io`),
- *   unchanged.
- * - **Remote** auto-discovers nodes on the well-known local ports (see
- *   `nodeDiscovery`) and offers whatever is running as radio choices, plus an
- *   always-available "enter URL manually" option. With nothing found it falls
- *   straight through to manual URL entry.
+ * A single section: the modal auto-discovers nodes on the well-known local
+ * ports (see `nodeDiscovery`) and offers whatever is running as radio choices,
+ * plus an always-available "enter URL manually" option. With nothing found it
+ * falls straight through to manual URL entry.
+ *
+ * The old Local/Remote tabs are gone — the "Local" tab pointed at a hardcoded
+ * default node (`node1.127.0.0.1.nip.io`) that doesn't resolve in most setups;
+ * discovery + manual entry covers both cases properly.
  */
 
 import { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { CalimeroLogo } from './CalimeroLogo';
 import type { ConnectionType, CustomConnectionConfig } from '../types';
-import { ConnectionType as ConnectionTypeEnum } from '../types';
 import {
   discoverLocalNodes,
   nodeEndpoint,
@@ -27,9 +28,6 @@ import {
   type ResolvedMeroTheme,
 } from '../theme';
 
-/** Default local node used by the unchanged "Local" option. */
-const DEFAULT_LOCAL_NODE_URL = 'http://node1.127.0.0.1.nip.io';
-
 /** Sentinel selection value for the manual "enter a URL" option. */
 const CUSTOM_SELECTION = '__custom__';
 
@@ -38,16 +36,20 @@ export interface LoginModalProps {
   onConnect: (url: string) => void;
   /** Callback when modal is closed */
   onClose: () => void;
-  /** Connection type determines what options to show */
-  connectionType: ConnectionType | CustomConnectionConfig;
+  /**
+   * @deprecated Ignored. The modal always shows node discovery + manual URL
+   * entry; the old hardcoded-default "Local" view was removed. Kept so
+   * existing call sites keep compiling.
+   */
+  connectionType?: ConnectionType | CustomConnectionConfig;
   /** Whether the modal is open */
   isOpen: boolean;
   /** Theme overrides — accepts any subset of `MeroTheme` tokens */
   theme?: MeroTheme;
   /**
-   * Ports probed when discovering remote/local nodes. Defaults to the
-   * well-known Calimero dev ports (2428, 2429, 2528, 2529). Mostly an escape
-   * hatch for non-standard setups and tests.
+   * Ports probed when discovering local nodes. Defaults to the well-known
+   * Calimero dev ports (2428, 2429, 2528, 2529). Mostly an escape hatch for
+   * non-standard setups and tests.
    */
   localNodePorts?: readonly number[];
 }
@@ -203,29 +205,6 @@ function buildStyles(t: ResolvedMeroTheme) {
       fontSize: '0.875rem',
       textAlign: 'center' as const,
     },
-    radioGroup: {
-      display: 'flex',
-      gap: '0.75rem',
-      marginBottom: '1rem',
-      justifyContent: 'center',
-    },
-    radioLabel: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: '0.5rem',
-      color: text,
-      cursor: 'pointer',
-      padding: '0.5rem 1rem',
-      borderRadius: radius,
-      border: `1px solid ${border}`,
-      backgroundColor: bgSecondary,
-      transition: 'all 0.15s ease',
-    },
-    radioLabelActive: {
-      border: `1px solid ${accent}`,
-      backgroundColor: accentGlow,
-      color: text,
-    },
     radioList: {
       display: 'flex',
       flexDirection: 'column' as const,
@@ -287,29 +266,6 @@ function buildStyles(t: ResolvedMeroTheme) {
       outline: 'none',
       marginBottom: '1rem',
       boxSizing: 'border-box' as const,
-    },
-    localInfo: {
-      color: textSecondary,
-      fontSize: '0.875rem',
-      textAlign: 'center' as const,
-      padding: '0.75rem',
-      backgroundColor: bgSecondary,
-      borderRadius: radius,
-      marginBottom: '1rem',
-      border: `1px solid ${border}`,
-    },
-    localInfoCode: {
-      color: accent,
-    },
-    noNodeInfo: {
-      color: textSecondary,
-      fontSize: '0.875rem',
-      textAlign: 'center' as const,
-      padding: '0.75rem',
-      backgroundColor: bgSecondary,
-      borderRadius: radius,
-      marginBottom: '1rem',
-      border: `1px solid ${border}`,
     },
     toolbar: {
       display: 'flex',
@@ -385,14 +341,11 @@ function buildStyles(t: ResolvedMeroTheme) {
 export function LoginModal({
   onConnect,
   onClose,
-  connectionType,
   isOpen,
   theme,
   localNodePorts = DEFAULT_LOCAL_NODE_PORTS,
 }: LoginModalProps) {
-  const [nodeType, setNodeType] = useState<'local' | 'remote'>('local');
-
-  // Remote discovery state. `selected` is a discovered node URL or CUSTOM.
+  // `selected` is a discovered node URL or CUSTOM.
   const [selected, setSelected] = useState<string>(CUSTOM_SELECTION);
   const [discovered, setDiscovered] = useState<string[]>([]);
   const [discovering, setDiscovering] = useState<boolean>(false);
@@ -412,15 +365,6 @@ export function LoginModal({
     [theme, resolved],
   );
 
-  // Determine what to show
-  const shouldShowLocal =
-    connectionType === ConnectionTypeEnum.RemoteAndLocal ||
-    connectionType === ConnectionTypeEnum.Local;
-  const shouldShowRemote =
-    connectionType === ConnectionTypeEnum.RemoteAndLocal ||
-    connectionType === ConnectionTypeEnum.Remote;
-  const shouldShowRadioGroup = shouldShowLocal && shouldShowRemote;
-
   // Load saved URL into the manual field
   useEffect(() => {
     const savedUrl = localStorage.getItem('mero:node_url');
@@ -429,23 +373,13 @@ export function LoginModal({
     }
   }, []);
 
-  // Set initial node type
-  useEffect(() => {
-    if (connectionType === ConnectionTypeEnum.Local) {
-      setNodeType('local');
-    } else if (connectionType === ConnectionTypeEnum.Remote) {
-      setNodeType('remote');
-    }
-  }, [connectionType]);
-
-  // Probe local ports for the Remote view. Runs when the modal is open and the
-  // remote view is active; a bumpable nonce lets the user trigger a re-scan.
+  // Probe local ports whenever the modal is open; a bumpable nonce lets the
+  // user trigger a re-scan.
   const [scanNonce, setScanNonce] = useState(0);
   const portsKey = useMemo(() => localNodePorts.join(','), [localNodePorts]);
-  const remoteActive = isOpen && shouldShowRemote && nodeType === 'remote';
 
   useEffect(() => {
-    if (!remoteActive) {
+    if (!isOpen) {
       return;
     }
 
@@ -477,38 +411,25 @@ export function LoginModal({
       controller.abort();
     };
     // portsKey captures localNodePorts content; scanNonce forces a re-scan.
-  }, [remoteActive, portsKey, scanNonce]);
+  }, [isOpen, portsKey, scanNonce]);
 
   const isCustom = selected === CUSTOM_SELECTION;
   const hasDiscovered = discovered.length > 0;
 
   // Whether the connect button can fire in the current state.
   const canConnect =
-    !loading &&
-    (nodeType === 'local'
-      ? true
-      : discovering
-        ? false
-        : isCustom
-          ? isValidUrl(customUrl)
-          : true);
+    !loading && !discovering && (isCustom ? isValidUrl(customUrl) : true);
 
   // Keep a ref so the input's keydown handler always sees current validity.
   const canConnectRef = useRef(canConnect);
   canConnectRef.current = canConnect;
 
   const handleConnect = useCallback(async () => {
-    const targetUrl =
-      nodeType === 'local'
-        ? DEFAULT_LOCAL_NODE_URL
-        : selected === CUSTOM_SELECTION
-          ? customUrl
-          : selected;
+    const usingDiscovered = selected !== CUSTOM_SELECTION;
+    const targetUrl = usingDiscovered ? selected : customUrl;
 
-    const usingDiscovered = nodeType === 'remote' && selected !== CUSTOM_SELECTION;
-
-    // Manual remote URLs must look valid before we try them.
-    if (nodeType === 'remote' && !usingDiscovered && !isValidUrl(targetUrl)) {
+    // Manual URLs must look valid before we try them.
+    if (!usingDiscovered && !isValidUrl(targetUrl)) {
       return;
     }
 
@@ -520,7 +441,7 @@ export function LoginModal({
       return;
     }
 
-    // Local default + manually entered remote URLs are verified via is-authed.
+    // Manually entered URLs are verified via is-authed.
     setLoading(true);
     setError(null);
 
@@ -540,13 +461,13 @@ export function LoginModal({
       setError('Failed to connect. Please check the URL and try again.');
       setLoading(false);
     }
-  }, [nodeType, selected, customUrl, onConnect]);
+  }, [selected, customUrl, onConnect]);
 
   if (!isOpen) {
     return null;
   }
 
-  const showManualInput = isCustom; // within the remote view
+  const showManualInput = isCustom;
   const renderRadio = (value: string, label: string, meta?: string) => {
     const active = selected === value;
     return (
@@ -584,7 +505,7 @@ export function LoginModal({
     );
   };
 
-  const renderRemoteView = () => {
+  const renderNodeSection = () => {
     if (discovering) {
       return (
         <div style={styles.discovering} data-testid="node-discovering">
@@ -598,7 +519,7 @@ export function LoginModal({
       <>
         <p style={styles.info}>
           {hasDiscovered
-            ? 'Select a discovered node, or enter a node URL manually.'
+            ? 'Select your Calimero node to continue.'
             : 'No local node found. Enter a node URL to continue.'}
         </p>
 
@@ -672,61 +593,9 @@ export function LoginModal({
             </div>
           ) : (
             <>
-              {shouldShowRadioGroup && (
-                <p style={styles.info}>Select your Calimero node type to continue.</p>
-              )}
-
               {error && <p style={styles.error}>{error}</p>}
 
-              {shouldShowRadioGroup && (
-                <div style={styles.radioGroup}>
-                  <label
-                    data-testid="node-type-local"
-                    style={{
-                      ...styles.radioLabel,
-                      ...(nodeType === 'local' ? styles.radioLabelActive : {}),
-                    }}
-                    onClick={() => setNodeType('local')}
-                  >
-                    <input
-                      type="radio"
-                      value="local"
-                      checked={nodeType === 'local'}
-                      onChange={() => setNodeType('local')}
-                      style={{ display: 'none' }}
-                    />
-                    Local
-                  </label>
-                  <label
-                    data-testid="node-type-remote"
-                    style={{
-                      ...styles.radioLabel,
-                      ...(nodeType === 'remote' ? styles.radioLabelActive : {}),
-                    }}
-                    onClick={() => setNodeType('remote')}
-                  >
-                    <input
-                      type="radio"
-                      value="remote"
-                      checked={nodeType === 'remote'}
-                      onChange={() => setNodeType('remote')}
-                      style={{ display: 'none' }}
-                    />
-                    Remote
-                  </label>
-                </div>
-              )}
-
-              {/* Local: unchanged default-node behaviour. */}
-              {nodeType === 'local' && shouldShowLocal && (
-                <p style={styles.localInfo}>
-                  Using default local node: <br />
-                  <code style={styles.localInfoCode}>{DEFAULT_LOCAL_NODE_URL}</code>
-                </p>
-              )}
-
-              {/* Remote: auto-discovery + manual entry. */}
-              {nodeType === 'remote' && shouldShowRemote && renderRemoteView()}
+              {renderNodeSection()}
 
               <div style={styles.buttonGroup}>
                 <button

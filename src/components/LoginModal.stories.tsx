@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
 import { LoginModal } from './LoginModal';
-import { ConnectionType } from '../types';
 import type { MeroTheme } from '../theme';
 
 interface FlatArgs {
@@ -16,7 +15,6 @@ interface FlatArgs {
   error?: string;
   overlay?: string;
   radius?: string;
-  connectionType?: ConnectionType;
 }
 
 const colorArg = { control: 'color' as const };
@@ -71,14 +69,6 @@ const meta: Meta<FlatArgs> = {
       control: 'text',
       description: 'Theme: border radius (e.g. 8px, 999px)',
     },
-    connectionType: {
-      control: 'select',
-      options: [
-        ConnectionType.RemoteAndLocal,
-        ConnectionType.Remote,
-        ConnectionType.Local,
-      ],
-    },
   },
   render: (args) => {
     const [open, setOpen] = useState(true);
@@ -107,7 +97,6 @@ const meta: Meta<FlatArgs> = {
             setOpen(false);
           }}
           onClose={() => setOpen(false)}
-          connectionType={args.connectionType ?? ConnectionType.RemoteAndLocal}
           theme={buildTheme(args)}
         />
       </div>
@@ -119,24 +108,11 @@ export default meta;
 type Story = StoryObj<FlatArgs>;
 
 export const Default: Story = {
-  args: { connectionType: ConnectionType.RemoteAndLocal },
-};
-
-export const RemoteOnly: Story = {
-  args: { connectionType: ConnectionType.Remote },
-};
-
-export const LocalOnly: Story = {
-  args: { connectionType: ConnectionType.Local },
-};
-
-export const Discovery: Story = {
-  args: { connectionType: ConnectionType.Remote },
   parameters: {
     docs: {
       description: {
         story:
-          'This story renders the `Remote` connection type to show the discovery view directly. It probes the well-known local ports (2428, 2429, 2528, 2529) at `/admin-api/health`: with one or more nodes up, each is offered as a radio choice alongside an always-present "enter URL manually" option; with nothing running it shows "No local node found" and falls through to the URL field. Use the toolbar "Rescan" link after starting a node. In `RemoteAndLocal` mode (see the Default story) this exact view appears after selecting "Remote", while "Local" keeps the default-node behaviour.',
+          'The modal probes the well-known local ports (2428, 2429, 2528, 2529) at `/admin-api/health` as soon as it opens: with one or more nodes up, each is offered as a radio choice alongside an always-present "enter URL manually" option; with nothing running it shows "No local node found" and falls through to the URL field. Use the toolbar "Rescan" link after starting a node.',
       },
     },
   },
@@ -144,7 +120,6 @@ export const Discovery: Story = {
 
 export const Pink: Story = {
   args: {
-    connectionType: ConnectionType.RemoteAndLocal,
     primary: '#ff4081',
     primaryHover: '#e91e63',
     primaryText: '#ffffff',
@@ -153,7 +128,6 @@ export const Pink: Story = {
 
 export const Blue: Story = {
   args: {
-    connectionType: ConnectionType.RemoteAndLocal,
     primary: '#3b82f6',
     primaryHover: '#2563eb',
     primaryText: '#ffffff',
@@ -161,12 +135,11 @@ export const Blue: Story = {
 };
 
 export const Pill: Story = {
-  args: { connectionType: ConnectionType.RemoteAndLocal, radius: '999px' },
+  args: { radius: '999px' },
 };
 
 export const FullCustom: Story = {
   args: {
-    connectionType: ConnectionType.RemoteAndLocal,
     primary: '#fbbf24',
     primaryHover: '#f59e0b',
     primaryText: '#1a0a00',

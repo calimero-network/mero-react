@@ -35,11 +35,17 @@ export enum AppMode {
  * Connection type for the login modal
  */
 export enum ConnectionType {
-  /** Show both local and remote options */
+  /**
+   * @deprecated The login modal no longer has Local/Remote tabs — it always
+   * shows node discovery + manual URL entry. Behaves the same as `Remote`.
+   */
   RemoteAndLocal = 'remote-and-local',
-  /** Show only remote option */
+  /** Open the login modal (node discovery + manual URL entry) */
   Remote = 'remote',
-  /** Show only local option */
+  /**
+   * @deprecated The hardcoded default-local-node view was removed. Behaves
+   * the same as `Remote`.
+   */
   Local = 'local',
   /** Custom URL (skip modal) */
   Custom = 'custom',
