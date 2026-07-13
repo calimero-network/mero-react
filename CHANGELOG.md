@@ -1,3 +1,5 @@
+## [4.3.2](https://github.com/calimero-network/mero-react/compare/mero-react-v4.3.1...mero-react-v4.3.2) (2026-07-13)
+
 ## [4.3.1](https://github.com/calimero-network/mero-react/compare/mero-react-v4.3.0...mero-react-v4.3.1) (2026-07-06)
 
 ### Bug Fixes
