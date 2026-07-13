@@ -181,14 +181,13 @@ describe('e2e — multi-context client token (the token real apps hold)', () => 
     await expect(client.admin.listBlobs()).resolves.toBeDefined();
   });
 
-  it('KNOWN GAP rc.11: blob info (HEAD /admin-api/blobs/:id) is still admin-only', async () => {
-    // getBlobInfo issues a HEAD request; core's rc.11 validator maps only
-    // GET (blob:get) and DELETE (blob:remove) on this path, so HEAD falls
-    // through to the /admin-api/* default-deny. One-line core fix pending —
-    // when a release maps HEAD to blob:get, FLIP this to `resolves`.
+  it('can read blob info (HEAD /admin-api/blobs/:id — blob:get since rc.13)', async () => {
+    // getBlobInfo issues a HEAD request; rc.13 (core#3203) maps HEAD to
+    // blob:get, closing the rc.11 gap where HEAD fell through to the
+    // /admin-api/* default-deny.
     const data = new TextEncoder().encode(`ct-blobinfo-${runId()}`);
     const { blobId } = await client.admin.uploadBlob({ data });
-    await expect(client.admin.getBlobInfo(blobId)).rejects.toMatchObject({ status: 403 });
+    await expect(client.admin.getBlobInfo(blobId)).resolves.toBeDefined();
   });
 
   it('can create + lookup a context alias (context:alias routes)', async () => {
