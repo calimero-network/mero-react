@@ -16,9 +16,12 @@ import {
 import { AppMode } from '../types';
 import type { AuthCallbackResult, TokenStore } from '@calimero-network/mero-js';
 import { resolveTrustedNodeUrl } from '../auth/node-trust';
+import { resolveTokenAdoption } from '../auth/token-adoption';
 import {
   getNodeUrl,
   setNodeUrl,
+  getTokenNodeUrl,
+  setTokenNodeUrl,
   getApplicationId,
   setApplicationId,
   getContextId,
@@ -68,23 +71,6 @@ export function getPermissionsForMode(mode: AppMode): string[] {
     default:
       throw new Error(`Unsupported application mode: ${mode}`);
   }
-}
-
-function parseJwtExpiry(token: string): number {
-  try {
-    const parts = token.split('.');
-    if (parts.length === 3) {
-      let b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-      while (b64.length % 4) b64 += '=';
-      const payload: { exp?: number } = JSON.parse(atob(b64));
-      if (payload.exp && payload.exp > 0) {
-        return payload.exp * 1000;
-      }
-    }
-  } catch {
-    // fall through
-  }
-  return Date.now() + 3_600_000;
 }
 
 export interface MeroProviderProps extends MeroProviderConfig {
@@ -211,12 +197,22 @@ export function MeroProvider({
       let nodeFromCallback: string | null = null;
 
       if (callback) {
+        // Read BEFORE the callback overwrites either of them.
+        //   - initiatedNodeUrl: the node login was initiated with — the trust anchor.
+        //   - tokenNodeUrl: the node that minted the bundle currently in the store.
+        // They differ exactly when the user is switching nodes: `connectToNode`
+        // points NODE_URL at the *target* node before redirecting, while the store
+        // still holds the *previous* node's bundle. Falling back to the initiated
+        // node keeps sessions that predate TOKEN_NODE_URL working.
+        const initiatedNodeUrl = getNodeUrl();
+        const tokenNodeUrl = getTokenNodeUrl() ?? initiatedNodeUrl;
+
         // The callback URL is attacker-influenceable, so validate its node_url
         // BEFORE storing tokens or connecting — otherwise a malicious node_url
         // would receive the freshly-minted tokens (exfiltration).
         const { url, rejected } = resolveTrustedNodeUrl({
           candidate: callback.nodeUrl,
-          initiated: getNodeUrl(),
+          initiated: initiatedNodeUrl,
           allowedNodeUrls,
         });
 
@@ -237,12 +233,33 @@ export function MeroProvider({
               'login was initiated with, nor `allowedNodeUrls`). Ignoring the callback; no tokens stored.',
           );
         } else if (url) {
-          // Trusted node → safe to persist the callback's tokens and identifiers.
-          tokenStore.setTokens({
-            access_token: callback.accessToken,
-            refresh_token: callback.refreshToken,
-            expires_at: parseJwtExpiry(callback.accessToken),
+          // Trusted node → the callback's tokens MAY be persisted. Whether they
+          // SHOULD be is a separate question: refresh tokens are single-use since
+          // core 0.11.0 (calimero-network/core#3083), so blindly writing the hash
+          // bundle over a bundle mero-js has already rotated resurrects a consumed
+          // refresh token — the node reads that as theft (`x-auth-error:
+          // token_reuse`) and revokes the entire token family, hard-logging out
+          // every holder. Adopt only a fresh, newer, or different-node bundle, and
+          // merge rather than replace so an access-only hash (hosts are dropping
+          // `refresh_token` from the hash) can never strip a live refresh token.
+          const decision = resolveTokenAdoption({
+            callbackAccessToken: callback.accessToken,
+            callbackRefreshToken: callback.refreshToken,
+            callbackNodeUrl: url,
+            stored: tokenStore.getTokens(),
+            storedNodeUrl: tokenNodeUrl,
           });
+
+          if (decision.adopt) {
+            tokenStore.setTokens(decision.tokens);
+            setTokenNodeUrl(url);
+          } else {
+            console.warn(
+              '[MeroProvider] Ignoring the SSO callback token bundle: it is stale (not newer than ' +
+                'the tokens already stored for this node). Adopting it would replay an already-rotated ' +
+                'refresh token, which the node revokes the whole token family for.',
+            );
+          }
 
           if (callback.applicationId) {
             setApplicationId(callback.applicationId);
@@ -307,6 +324,16 @@ export function MeroProvider({
     const onError = (err: Error) => {
       if (!active) return;
       setIsOnline(false);
+      // TODO(mero-js#67): surface a revoked token family as an explicit forced
+      // re-login rather than an opaque 401. Once a refresh token is replayed the
+      // node revokes the family and answers 401 with `x-auth-error: token_reuse`
+      // (or `token_revoked`) — a terminal state no retry can recover from, unlike
+      // `token_expired`. mero-js#67 adds an `AuthRevokedError` for exactly this;
+      // the mero-js pinned here (6.1.0) predates it — it neither exports that
+      // error nor reads `x-auth-error` beyond `token_expired` — so there is
+      // nothing to branch on yet. Bump mero-js past #67, then match on
+      // `AuthRevokedError` here and expose a distinct `sessionRevoked` reason to
+      // consumers instead of a silent logout.
       if (err.message.includes('401')) {
         logout();
       }
