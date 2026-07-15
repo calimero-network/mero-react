@@ -1,3 +1,9 @@
+## [4.3.4](https://github.com/calimero-network/mero-react/compare/mero-react-v4.3.3...mero-react-v4.3.4) (2026-07-15)
+
+### Bug Fixes
+
+* **auth:** don't let the SSO callback clobber a rotated token bundle ([#45](https://github.com/calimero-network/mero-react/issues/45)) ([07ec838](https://github.com/calimero-network/mero-react/commit/07ec838be480326d1bbafa8f6fb6d91fb757d6da)), closes [calimero-network/core#3083](https://github.com/calimero-network/core/issues/3083)
+
 ## [4.3.3](https://github.com/calimero-network/mero-react/compare/mero-react-v4.3.2...mero-react-v4.3.3) (2026-07-13)
 
 ## [4.3.2](https://github.com/calimero-network/mero-react/compare/mero-react-v4.3.1...mero-react-v4.3.2) (2026-07-13)
