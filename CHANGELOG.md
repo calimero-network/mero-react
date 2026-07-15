@@ -1,3 +1,9 @@
+## [4.4.0](https://github.com/calimero-network/mero-react/compare/mero-react-v4.3.4...mero-react-v4.4.0) (2026-07-15)
+
+### Features
+
+* **deps:** bump mero-js to ^7.0.1 for single-copy rotation hardening ([#46](https://github.com/calimero-network/mero-react/issues/46)) ([9383cd8](https://github.com/calimero-network/mero-react/commit/9383cd8e8896b13418cf7f3009026764e33d7e1b)), closes [calimero-network/mero-js#67](https://github.com/calimero-network/mero-js/issues/67) [calimero-network/mero-js#65](https://github.com/calimero-network/mero-js/issues/65) [calimero-network/mero-js#67](https://github.com/calimero-network/mero-js/issues/67) [calimero-network/mero-js#45](https://github.com/calimero-network/mero-js/issues/45)
+
 ## [4.3.4](https://github.com/calimero-network/mero-react/compare/mero-react-v4.3.3...mero-react-v4.3.4) (2026-07-15)
 
 ### Bug Fixes
