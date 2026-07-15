@@ -12,6 +12,13 @@ const STORAGE_KEYS = {
   REFRESH_TOKEN: 'mero:refresh_token',
   EXPIRES_AT: 'mero:expires_at',
   NODE_URL: 'mero:node_url',
+  // The node the token bundle currently in the TokenStore was issued by. Distinct
+  // from NODE_URL, which `connectToNode` overwrites with the *target* node before
+  // redirecting to login — so at callback time NODE_URL names where we are going,
+  // not who minted the tokens we still hold. Telling those apart is what lets the
+  // SSO callback re-seed on a node change without mistaking a different node's
+  // bundle for a rotated one (see auth/token-adoption.ts).
+  TOKEN_NODE_URL: 'mero:token_node_url',
   APPLICATION_ID: 'mero:application_id',
   CONTEXT_ID: 'mero:context_id',
   CONTEXT_IDENTITY: 'mero:context_identity',
@@ -113,6 +120,30 @@ export function setNodeUrl(url: string): void {
 export function clearNodeUrl(): void {
   if (!isLocalStorageAvailable()) return;
   localStorage.removeItem(STORAGE_KEYS.NODE_URL);
+}
+
+/**
+ * Get the node URL that minted the token bundle currently in the TokenStore.
+ */
+export function getTokenNodeUrl(): string | null {
+  if (!isLocalStorageAvailable()) return null;
+  return localStorage.getItem(STORAGE_KEYS.TOKEN_NODE_URL);
+}
+
+/**
+ * Record the node URL that minted the token bundle now in the TokenStore.
+ */
+export function setTokenNodeUrl(url: string): void {
+  if (!isLocalStorageAvailable()) return;
+  localStorage.setItem(STORAGE_KEYS.TOKEN_NODE_URL, url);
+}
+
+/**
+ * Clear the token bundle's node URL
+ */
+export function clearTokenNodeUrl(): void {
+  if (!isLocalStorageAvailable()) return;
+  localStorage.removeItem(STORAGE_KEYS.TOKEN_NODE_URL);
 }
 
 /**

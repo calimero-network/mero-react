@@ -181,6 +181,142 @@ describe('MeroProvider — OAuth callback node_url binding', () => {
   });
 });
 
+describe('MeroProvider — SSO callback must not clobber a rotated token bundle', () => {
+  // Refresh tokens are single-use since core 0.11.0 (calimero-network/core#3083):
+  // each refresh consumes the presented token. Writing the SSO hash bundle over a
+  // bundle mero-js has already rotated replays a consumed refresh token, which the
+  // node reads as theft (`x-auth-error: token_reuse`) and answers by revoking the
+  // whole family — every holder is hard-logged-out.
+
+  const NODE = 'https://node-a.example.com';
+  const secs = (offset: number) => Math.floor(Date.now() / 1000) + offset;
+
+  function jwt(claims: { iat?: number; exp?: number }): string {
+    const b64 = (o: unknown) =>
+      btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    return `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64(claims)}.sig`;
+  }
+
+  it('seeds from the hash on a fresh login (no stored bundle)', async () => {
+    localStorage.setItem('mero:node_url', NODE);
+    const access = jwt({ iat: secs(0), exp: secs(3600) });
+    mockParseAuthCallback.mockReturnValue({
+      accessToken: access,
+      refreshToken: 'r1',
+      nodeUrl: NODE,
+    } as never);
+    const store = makeStore(); // getTokens → null
+
+    render(
+      <MeroProvider mode={AppMode.MultiContext} tokenStore={store}>
+        <Consumer />
+      </MeroProvider>,
+    );
+    await settled();
+
+    expect(store.setTokens).toHaveBeenCalledWith({
+      access_token: access,
+      refresh_token: 'r1',
+      expires_at: secs(3600) * 1000,
+    });
+  });
+
+  it('does NOT overwrite a newer stored bundle with a stale hash bundle', async () => {
+    localStorage.setItem('mero:node_url', NODE);
+    mockParseAuthCallback.mockReturnValue({
+      accessToken: jwt({ iat: secs(-600), exp: secs(3000) }), // pre-rotation copy
+      refreshToken: 'consumed-refresh',
+      nodeUrl: NODE,
+    } as never);
+    const store = makeStore();
+    store.getTokens.mockReturnValue({
+      access_token: jwt({ iat: secs(-60), exp: secs(3540) }), // mero-js already rotated
+      refresh_token: 'rotated-refresh',
+      expires_at: secs(3540) * 1000,
+    });
+
+    render(
+      <MeroProvider mode={AppMode.MultiContext} tokenStore={store}>
+        <Consumer />
+      </MeroProvider>,
+    );
+    await settled();
+
+    expect(store.setTokens).not.toHaveBeenCalled();
+    // ...and the session is still restored against the trusted node
+    expect(constructedBaseUrls()).toContain(NODE);
+  });
+
+  it('re-seeds when the node changed, without carrying the old node\'s refresh token over', async () => {
+    // `connectToNode(node-b)` points NODE_URL at node-b before redirecting, while
+    // the store still holds node-a's bundle — TOKEN_NODE_URL is what tells them
+    // apart. The incoming access token is deliberately OLDER than the stored one:
+    // a different node means a different token family, so freshness is irrelevant
+    // and the callback must win outright.
+    const NODE_B = 'https://node-b.example.com';
+    localStorage.setItem('mero:node_url', NODE_B); // login initiated with node-b
+    localStorage.setItem('mero:token_node_url', NODE); // stored bundle is node-a's
+
+    const access = jwt({ iat: secs(-600), exp: secs(3000) });
+    mockParseAuthCallback.mockReturnValue({
+      accessToken: access,
+      refreshToken: 'node-b-refresh',
+      nodeUrl: NODE_B,
+    } as never);
+    const store = makeStore();
+    store.getTokens.mockReturnValue({
+      access_token: jwt({ iat: secs(-60), exp: secs(3540) }), // newer, but node-a's
+      refresh_token: 'node-a-refresh',
+      expires_at: secs(3540) * 1000,
+    });
+
+    render(
+      <MeroProvider mode={AppMode.MultiContext} tokenStore={store}>
+        <Consumer />
+      </MeroProvider>,
+    );
+    await settled();
+
+    expect(store.setTokens).toHaveBeenCalledWith({
+      access_token: access,
+      refresh_token: 'node-b-refresh', // node-a's refresh token is NOT carried over
+      expires_at: secs(3000) * 1000,
+    });
+    expect(localStorage.getItem('mero:token_node_url')).toBe(NODE_B);
+  });
+
+  it('does not wipe the stored refresh token when the hash bundle is access-only', async () => {
+    // Hosts are dropping `refresh_token` from the SSO hash; parseAuthCallback then
+    // yields ''. Adopting the newer access token must MERGE, not replace.
+    localStorage.setItem('mero:node_url', NODE);
+    const fresh = jwt({ iat: secs(60), exp: secs(3660) });
+    mockParseAuthCallback.mockReturnValue({
+      accessToken: fresh,
+      refreshToken: '',
+      nodeUrl: NODE,
+    } as never);
+    const store = makeStore();
+    store.getTokens.mockReturnValue({
+      access_token: jwt({ iat: secs(-60), exp: secs(3540) }),
+      refresh_token: 'rotated-refresh',
+      expires_at: secs(3540) * 1000,
+    });
+
+    render(
+      <MeroProvider mode={AppMode.MultiContext} tokenStore={store}>
+        <Consumer />
+      </MeroProvider>,
+    );
+    await settled();
+
+    expect(store.setTokens).toHaveBeenCalledWith({
+      access_token: fresh,
+      refresh_token: 'rotated-refresh', // preserved, NOT blanked
+      expires_at: secs(3660) * 1000,
+    });
+  });
+});
+
 describe('MeroProvider — checkAuth (scope-enforced cores, rc.9+)', () => {
   // Cores since 0.11.0-rc.9 enforce token permission scopes: GET /admin-api/contexts
   // requires Global `context:list`, which single-context and app-scoped tokens don't
