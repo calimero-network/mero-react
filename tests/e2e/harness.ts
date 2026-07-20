@@ -8,10 +8,11 @@
  *   MERO_E2E_USER   embedded-auth username (default dev)
  *   MERO_E2E_PASS   embedded-auth password (default dev-password — core#3081
  *                   enforces an 8-char minimum at account creation)
- *   MERO_AUTH_BOOTSTRAP_SECRET  first-login setup code for a FRESH node
- *                   (core#3221, core >= 0.11.0-rc.14). Set it on both the
- *                   merod process and this suite; mero-js authenticate()
- *                   picks it up from the environment automatically.
+ *   MERO_AUTH_ADMIN_USER / MERO_AUTH_ADMIN_PASSWORD  admin credentials the
+ *                   fresh node mints its root key from at `merod init`
+ *                   (core >= 0.11.0-rc.17; the bootstrap secret is gone). Set
+ *                   these to the same values as MERO_E2E_USER/PASS so the e2e
+ *                   login signs into the provisioned account.
  */
 import { resolve } from 'node:path';
 import { MeroJs } from '@calimero-network/mero-js';

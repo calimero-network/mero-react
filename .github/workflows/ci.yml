@@ -17,12 +17,14 @@ permissions:
 
 env:
   NODE_VERSION: '24'
-  # core >= 0.11.0-rc.14 gates the FIRST root-key bootstrap behind an
-  # out-of-band secret (core#3221) and enforces an 8-char minimum password at
-  # creation (core#3081). The merod boot step inherits this env and mero-js
-  # >= 7.0.2 authenticate() reads the same variable, so the first e2e login
-  # mints the root key transparently. CI-only value for an ephemeral node.
-  MERO_AUTH_BOOTSTRAP_SECRET: mero-react-e2e-bootstrap
+  # core >= 0.11.0-rc.17 removed the first-login bootstrap secret: the node mints
+  # its admin root key at `merod init` from these env vars, and enforces an
+  # 8-char minimum password at creation (core#3081). The merod boot step
+  # inherits this env, so the account exists before the node listens and the
+  # e2e login (same creds, via MERO_E2E_USER/PASS) signs straight in. CI-only
+  # values for an ephemeral node.
+  MERO_AUTH_ADMIN_USER: dev
+  MERO_AUTH_ADMIN_PASSWORD: dev-password
 
 jobs:
   build-and-test:
