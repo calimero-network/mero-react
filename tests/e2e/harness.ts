@@ -6,7 +6,13 @@
  * Env:
  *   NODE_URL        node base URL (default http://localhost:4001)
  *   MERO_E2E_USER   embedded-auth username (default dev)
- *   MERO_E2E_PASS   embedded-auth password (default dev)
+ *   MERO_E2E_PASS   embedded-auth password (default dev-password — core#3081
+ *                   enforces an 8-char minimum at account creation)
+ *   MERO_AUTH_ADMIN_USER / MERO_AUTH_ADMIN_PASSWORD  admin credentials the
+ *                   fresh node mints its root key from at `merod init`
+ *                   (core >= 0.11.0-rc.17; the bootstrap secret is gone). Set
+ *                   these to the same values as MERO_E2E_USER/PASS so the e2e
+ *                   login signs into the provisioned account.
  */
 import { resolve } from 'node:path';
 import { MeroJs } from '@calimero-network/mero-js';
@@ -20,7 +26,7 @@ export function resolveBaseUrl(): string {
 export function resolveCreds(): { username: string; password: string } {
   return {
     username: process.env.MERO_E2E_USER || 'dev',
-    password: process.env.MERO_E2E_PASS || 'dev',
+    password: process.env.MERO_E2E_PASS || 'dev-password',
   };
 }
 
