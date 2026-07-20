@@ -1,3 +1,9 @@
+## [4.4.1](https://github.com/calimero-network/mero-react/compare/mero-react-v4.4.0...mero-react-v4.4.1) (2026-07-20)
+
+### Bug Fixes
+
+* **e2e:** adapt CI to core rc.17 admin-creds-at-init ([#47](https://github.com/calimero-network/mero-react/issues/47)) ([0eb3f0c](https://github.com/calimero-network/mero-react/commit/0eb3f0c85b3542745ad09b15878fa5c4a2f54650)), closes [core#3221](https://github.com/calimero-network/core/issues/3221) [core#3081](https://github.com/calimero-network/core/issues/3081) [mero-js#68](https://github.com/calimero-network/mero-js/issues/68) [calimero-network/core#3276](https://github.com/calimero-network/core/issues/3276)
+
 ## [4.4.0](https://github.com/calimero-network/mero-react/compare/mero-react-v4.3.4...mero-react-v4.4.0) (2026-07-15)
 
 ### Features
