@@ -54,6 +54,8 @@ import {
   useMigrationStatus,
   useAppVersion,
   useLatestVersion,
+  useGroupAppVersion,
+  useInstallFromRegistry,
   useMyAuthoredMigration,
 } from './index';
 import { useMero } from '../context';
@@ -146,6 +148,19 @@ function createMero(
       getSubgroupVisibility: vi.fn().mockResolvedValue('open'),
       registerGroupSigningKey: vi.fn().mockResolvedValue({ publicKey: 'pk-1' }),
       upgradeGroup: vi.fn().mockResolvedValue({ groupId: 'group-1', status: 'in_progress' }),
+      installFromRegistry: vi.fn().mockResolvedValue({ applicationId: 'app-1' }),
+      getApplication: vi.fn().mockResolvedValue({
+        application: {
+          id: 'app-1',
+          blob: { bytecode: 'CVDFLCAjXhVWiPXH9nTCTpCgVzmDVoiPzNJYuccr1dqB', compiled: '' },
+          size: 0,
+          source: '',
+          metadata: [],
+          signer_id: '',
+          package: 'com.acme.app',
+          version: '1.0.0',
+        },
+      }),
       resyncContext: vi.fn().mockResolvedValue({ contextId: 'ctx-1', resyncStarted: true }),
       getGroupUpgradeStatus: vi.fn().mockResolvedValue(null),
       retryGroupUpgrade: vi.fn().mockResolvedValue({ groupId: 'group-1', status: 'in_progress' }),
@@ -1332,6 +1347,39 @@ describe('group and context hooks', () => {
     expect(upgradeGroup).toHaveBeenCalledWith('group-1', { targetApplicationId: 'app-2' });
   });
 
+  it('useInstallFromRegistry installs a package version and toggles loading', async () => {
+    let resolveInstall: (v: { applicationId: string }) => void = () => {};
+    const installFromRegistry = vi
+      .fn()
+      .mockReturnValue(new Promise<{ applicationId: string }>((r) => { resolveInstall = r; }));
+    const mero = createMero({ installFromRegistry });
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    const { result } = renderHook(() => useInstallFromRegistry());
+    expect(result.current.loading).toBe(false);
+
+    let installed: { applicationId: string } | null = null;
+    act(() => {
+      void result.current
+        .installFromRegistry('https://registry.example.com', 'com.acme.app', '2.0.0')
+        .then((v) => { installed = v; });
+    });
+    // loading flips true synchronously while the install is in flight
+    expect(result.current.loading).toBe(true);
+
+    await act(async () => {
+      resolveInstall({ applicationId: 'app-2' });
+    });
+
+    expect(installed).toEqual({ applicationId: 'app-2' });
+    expect(installFromRegistry).toHaveBeenCalledWith(
+      'https://registry.example.com',
+      'com.acme.app',
+      '2.0.0',
+    );
+    expect(result.current.loading).toBe(false);
+  });
+
   it('useResyncContext kicks off a context re-pull', async () => {
     const resyncContext = vi.fn().mockResolvedValue({ contextId: 'ctx-1', resyncStarted: true });
     const mero = createMero({ resyncContext });
@@ -1635,6 +1683,164 @@ describe('useLatestVersion', () => {
     expect(result.current.versions).toEqual([]);
     expect(result.current.latestVersion).toBeNull();
     expect(result.current.updateAvailable).toBe(false);
+  });
+});
+
+describe('useGroupAppVersion', () => {
+  // base58 blob ids for 32-byte 0xaa.. / 0xbb.. (see base58.test.ts vectors).
+  const BLOB_AA = 'CVDFLCAjXhVWiPXH9nTCTpCgVzmDVoiPzNJYuccr1dqB';
+  const BLOB_BB = 'DdqGmK5uamYN5vmuZrzpQhKeehLdwtPLVJdhu5P2iJKC';
+  const KEY_AA = 'aa'.repeat(32);
+
+  function namespace(appKey: string) {
+    return {
+      namespaceId: 'group-1',
+      appKey,
+      targetApplicationId: 'app-1',
+      upgradePolicy: 'LazyOnAccess',
+      createdAt: 1,
+      memberCount: 1,
+      contextCount: 0,
+      subgroupCount: 0,
+    };
+  }
+
+  function application(bytecode: string, version = '1.0.0') {
+    return {
+      application: {
+        id: 'app-1',
+        blob: { bytecode, compiled: '' },
+        size: 0,
+        source: '',
+        metadata: [],
+        signer_id: '',
+        package: 'com.acme.app',
+        version,
+      },
+    };
+  }
+
+  it('reports no pending apply when appKey matches the installed blob', async () => {
+    const mero = createMero(
+      {
+        listNamespaces: vi.fn().mockResolvedValue([namespace(KEY_AA)]),
+        getApplication: vi.fn().mockResolvedValue(application(BLOB_AA, '2.1.0')),
+      },
+      { events: { onAppVersionChanged: vi.fn(() => () => {}) } },
+    );
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    const { result } = renderHook(() => useGroupAppVersion('group-1'));
+
+    await waitFor(() => expect(result.current.version).toBe('2.1.0'));
+    expect(result.current.applicationId).toBe('app-1');
+    expect(result.current.upgradePolicy).toBe('LazyOnAccess');
+    expect(result.current.pendingApply).toBe(false);
+    expect(result.current.activeUpgrade).toBeNull();
+    expect(mero.admin.getApplication).toHaveBeenCalledWith('app-1');
+  });
+
+  it('reports a pending apply when appKey differs from the installed blob', async () => {
+    const mero = createMero(
+      {
+        listNamespaces: vi.fn().mockResolvedValue([namespace(KEY_AA)]),
+        getApplication: vi.fn().mockResolvedValue(application(BLOB_BB)),
+      },
+      { events: { onAppVersionChanged: vi.fn(() => () => {}) } },
+    );
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    const { result } = renderHook(() => useGroupAppVersion('group-1'));
+
+    await waitFor(() => expect(result.current.pendingApply).toBe(true));
+    expect(result.current.version).toBe('1.0.0');
+  });
+
+  it('treats a zeroed appKey as carrying no pending signal', async () => {
+    const mero = createMero(
+      {
+        listNamespaces: vi.fn().mockResolvedValue([namespace('00'.repeat(32))]),
+        getApplication: vi.fn().mockResolvedValue(application(BLOB_BB)),
+      },
+      { events: { onAppVersionChanged: vi.fn(() => () => {}) } },
+    );
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    const { result } = renderHook(() => useGroupAppVersion('group-1'));
+
+    await waitFor(() => expect(result.current.version).toBe('1.0.0'));
+    expect(result.current.pendingApply).toBe(false);
+  });
+
+  it('falls back to getGroupInfo when the id is not a namespace, surfacing activeUpgrade', async () => {
+    const activeUpgrade = {
+      fromVersion: '1.0.0',
+      toVersion: '2.0.0',
+      initiatedAt: 100,
+      initiatedBy: 'member-1',
+      status: 'in_progress',
+    };
+    const getGroupInfo = vi.fn().mockResolvedValue({
+      groupId: 'sub-1',
+      appKey: KEY_AA,
+      targetApplicationId: 'app-1',
+      upgradePolicy: 'Automatic',
+      memberCount: 2,
+      contextCount: 1,
+      defaultCapabilities: 7,
+      subgroupVisibility: 'open',
+      activeUpgrade,
+    });
+    const mero = createMero(
+      {
+        listNamespaces: vi.fn().mockResolvedValue([]),
+        getGroupInfo,
+        getApplication: vi.fn().mockResolvedValue(application(BLOB_AA)),
+      },
+      { events: { onAppVersionChanged: vi.fn(() => () => {}) } },
+    );
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    const { result } = renderHook(() => useGroupAppVersion('sub-1'));
+
+    await waitFor(() => expect(result.current.upgradePolicy).toBe('Automatic'));
+    expect(getGroupInfo).toHaveBeenCalledWith('sub-1');
+    expect(result.current.activeUpgrade).toEqual(activeUpgrade);
+    expect(result.current.pendingApply).toBe(false);
+  });
+
+  it('does not fetch when groupId is undefined', async () => {
+    const listNamespaces = vi.fn();
+    const mero = createMero(
+      { listNamespaces },
+      { events: { onAppVersionChanged: vi.fn(() => () => {}) } },
+    );
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    const { result } = renderHook(() => useGroupAppVersion(undefined));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(listNamespaces).not.toHaveBeenCalled();
+    expect(result.current.version).toBeNull();
+  });
+
+  it('refetches when an AppVersionChanged event fires', async () => {
+    let captured: (() => void) | null = null;
+    const listNamespaces = vi.fn().mockResolvedValue([namespace(KEY_AA)]);
+    const mero = createMero(
+      { listNamespaces, getApplication: vi.fn().mockResolvedValue(application(BLOB_AA)) },
+      { events: { onAppVersionChanged: vi.fn((cb: () => void) => { captured = cb; return () => {}; }) } },
+    );
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    const { result } = renderHook(() => useGroupAppVersion('group-1'));
+    await waitFor(() => expect(result.current.version).toBe('1.0.0'));
+    expect(listNamespaces).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      captured?.();
+    });
+
+    await waitFor(() => expect(listNamespaces).toHaveBeenCalledTimes(2));
   });
 });
 

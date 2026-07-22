@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { compareSemver } from '@calimero-network/mero-js';
 import { useMero } from '../context';
+import { base58ToHex } from '../utils/base58';
 import type {
   Context,
   CreateContextRequest,
@@ -1098,6 +1099,27 @@ export function useUpgradeGroup() {
 }
 
 /**
+ * Install a registry package version onto the node — the discrete "Download"
+ * step an Updates flow runs before an `upgradeGroup`. Resolves the installed
+ * application id (`InstallApplicationResponseData`). Downloading does not by
+ * itself change what any group runs; pair it with a subsequent upgrade.
+ */
+export function useInstallFromRegistry() {
+  const { mero } = useMero();
+  const { loading, error, run } = useAsyncMutation();
+
+  const installFromRegistry = useCallback(
+    async (registryUrl: string, packageName: string, version: string) => {
+      if (!mero) return null;
+      return run(() => mero.admin.installFromRegistry(registryUrl, packageName, version));
+    },
+    [mero, run],
+  );
+
+  return { installFromRegistry, loading, error };
+}
+
+/**
  * Kick off a full state re-pull for a context — operator recovery for a
  * context stranded mid-sync. `force` re-pulls even when the node does not
  * flag the context as stranded.
@@ -1473,6 +1495,144 @@ export function useLatestVersion(
     compareSemver(latestVersion, currentVersion) > 0;
 
   return { versions, latestVersion, currentVersion, updateAvailable, loading, error, refetch };
+}
+
+interface GroupAppVersion {
+  /** Semver of the application the group currently targets (`null` until loaded). */
+  version: string | null;
+  /** The group's `targetApplicationId`. */
+  applicationId: string | null;
+  /** The installed blob differs from the one the group targets (see hook doc). */
+  pendingApply: boolean;
+  upgradePolicy: string | null;
+  /** Only populated via the group-info path; `null` in the namespace path. */
+  activeUpgrade: GroupUpgradeStatusResponseData;
+}
+
+const EMPTY_GROUP_APP_VERSION: GroupAppVersion = {
+  version: null,
+  applicationId: null,
+  pendingApply: false,
+  upgradePolicy: null,
+  activeUpgrade: null,
+};
+
+/** An appKey carries no "pending" signal when it is absent or all-zero. */
+function isZeroAppKey(appKey?: string): boolean {
+  return !appKey || /^0+$/.test(appKey);
+}
+
+/**
+ * What app version does this group run, and is there a downloaded-but-not-yet-
+ * applied update? Replaces the appKey-vs-installed-blob comparison apps
+ * otherwise hand-roll: `pendingApply` is true when the group's `appKey` (the
+ * blob it targets) is present, non-zero, and differs from the blob actually
+ * installed for its `targetApplicationId`. Deciding whether to render or gate on
+ * that status (admin-only actions, etc.) is the call site's job.
+ *
+ * Resolution stays cheap: the group's record comes from `listNamespaces()` when
+ * the id is a namespace, else from `getGroupInfo()`; `getApplication()` then
+ * reads the installed version and blob. `activeUpgrade` is returned only when it
+ * arrives for free on the group-info path (it is not fetched separately).
+ * Subscribes to `AppVersionChanged` and refetches, since any version flip in the
+ * workspace can make the rollup stale.
+ */
+export function useGroupAppVersion(groupId?: string) {
+  const { mero } = useMero();
+  const [data, setData] = useState<GroupAppVersion>(EMPTY_GROUP_APP_VERSION);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+  const mountedRef = useMountedRef();
+  // Latest-request-wins token (see useMigrationStatus).
+  const reqRef = useRef(0);
+
+  const refetch = useCallback(async () => {
+    const seq = ++reqRef.current;
+    if (!mero || !groupId) {
+      if (mountedRef.current) {
+        setData(EMPTY_GROUP_APP_VERSION);
+        setError(null);
+        setLoading(false);
+      }
+      return;
+    }
+
+    if (mountedRef.current) {
+      setLoading(true);
+      setError(null);
+    }
+
+    try {
+      // Namespace-first resolution: a top-level group is a namespace; only
+      // subgroups need the getGroupInfo fallback (which also carries
+      // activeUpgrade, so we surface it without a third call).
+      const namespaces = await mero.admin.listNamespaces();
+      const namespace = namespaces.find((entry) => entry.namespaceId === groupId);
+
+      let appKey: string | undefined;
+      let applicationId: string | null;
+      let upgradePolicy: string | null;
+      let activeUpgrade: GroupUpgradeStatusResponseData = null;
+
+      if (namespace) {
+        appKey = namespace.appKey;
+        applicationId = namespace.targetApplicationId;
+        upgradePolicy = namespace.upgradePolicy;
+      } else {
+        const info = await mero.admin.getGroupInfo(groupId);
+        appKey = info.appKey;
+        applicationId = info.targetApplicationId;
+        upgradePolicy = info.upgradePolicy;
+        activeUpgrade = info.activeUpgrade ?? null;
+      }
+
+      let version: string | null = null;
+      let pendingApply = false;
+      if (applicationId) {
+        const { application } = await mero.admin.getApplication(applicationId);
+        version = application?.version ?? null;
+        if (application && !isZeroAppKey(appKey)) {
+          const installedHex = base58ToHex(application.blob.bytecode).toLowerCase();
+          pendingApply = appKey!.toLowerCase() !== installedHex;
+        }
+      }
+
+      if (mountedRef.current && seq === reqRef.current) {
+        setData({ version, applicationId, pendingApply, upgradePolicy, activeUpgrade });
+      }
+    } catch (err) {
+      const errorValue = toError(err);
+      if (mountedRef.current && seq === reqRef.current) {
+        setError(errorValue);
+      }
+    } finally {
+      if (mountedRef.current && seq === reqRef.current) {
+        setLoading(false);
+      }
+    }
+  }, [groupId, mero, mountedRef]);
+
+  // Clear stale state synchronously when the target group changes (and
+  // invalidate any in-flight refetch). Mirrors useGroupUpgradeStatus.
+  useEffect(() => {
+    reqRef.current += 1;
+    setData(EMPTY_GROUP_APP_VERSION);
+    setError(null);
+  }, [groupId]);
+
+  useEffect(() => {
+    void refetch();
+  }, [refetch]);
+
+  useEffect(() => {
+    if (!mero?.events || !groupId) return;
+    const off = mero.events.onAppVersionChanged(() => {
+      if (mountedRef.current) void refetch();
+    });
+    return off;
+  }, [mero, groupId, refetch, mountedRef]);
+
+  return { ...data, loading, error, refetch };
 }
 
 /**
