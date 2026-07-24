@@ -44,6 +44,7 @@ import type {
   MigrationStatusRollup,
   MigrateMyEntriesSummary,
   AppVersionChangedEvent,
+  GroupMembershipEventData,
 } from '@calimero-network/mero-js';
 import type {
   ApplicationContextRecord,
@@ -257,38 +258,60 @@ export function useExecute(contextId: string | null, executorId: string | null) 
   return { execute, loading, error };
 }
 
+/** Event payload delivered to a `useSubscription` callback. */
+export type SubscriptionEventData = SseEventData | GroupMembershipEventData;
+
+/** Ids to subscribe to. Either can be omitted, but not both. */
+export interface SubscriptionInput {
+  contextIds?: string[];
+  groupIds?: string[];
+}
+
 /**
- * Subscribe to SSE events for context IDs.
+ * Subscribe to SSE events for context and/or group IDs.
  * StrictMode-safe: tracks the SseClient instance in a ref to avoid
  * double-connect on mount/unmount/remount cycles.
  */
 export function useSubscription(
   contextIds: string[],
-  callback: (event: SseEventData) => void,
+  callback: (event: SubscriptionEventData) => void,
+): void;
+export function useSubscription(
+  input: SubscriptionInput,
+  callback: (event: SubscriptionEventData) => void,
+): void;
+export function useSubscription(
+  input: string[] | SubscriptionInput,
+  callback: (event: SubscriptionEventData) => void,
 ) {
   const { mero } = useMero();
   const callbackRef = useRef(callback);
   callbackRef.current = callback;
 
+  const { contextIds = [], groupIds = [] } = Array.isArray(input)
+    ? { contextIds: input, groupIds: [] as string[] }
+    : input;
+
   const contextIdsKey = JSON.stringify(contextIds);
+  const groupIdsKey = JSON.stringify(groupIds);
 
   useEffect(() => {
-    if (!mero || contextIds.length === 0) return;
+    if (!mero || (contextIds.length === 0 && groupIds.length === 0)) return;
 
     const sse = mero.events;
 
-    const handler = (event: SseEventData) => {
+    const handler = (event: SubscriptionEventData) => {
       callbackRef.current(event);
     };
 
     sse.on('event', handler);
     sse.connect().catch(() => {});
-    sse.subscribe(contextIds).catch(() => {});
+    sse.subscribe({ contextIds, groupIds }).catch(() => {});
 
     return () => {
       sse.off('event', handler);
     };
-  }, [mero, contextIdsKey]);
+  }, [mero, contextIdsKey, groupIdsKey]);
 }
 
 /**
