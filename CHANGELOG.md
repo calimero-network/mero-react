@@ -1,3 +1,9 @@
+## [4.6.0](https://github.com/calimero-network/mero-react/compare/mero-react-v4.5.0...mero-react-v4.6.0) (2026-07-24)
+
+### Features
+
+* **hooks:** support group-id subscriptions in useSubscription ([9120324](https://github.com/calimero-network/mero-react/commit/912032405d602b48226c764faafa84acff8ec098))
+
 ## [4.5.0](https://github.com/calimero-network/mero-react/compare/mero-react-v4.4.1...mero-react-v4.5.0) (2026-07-24)
 
 ### Features
