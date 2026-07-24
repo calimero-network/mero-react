@@ -102,7 +102,7 @@ export {
   useLatestVersion,
   useMyAuthoredMigration,
 } from './hooks';
-export type { SetMetadataInput } from './hooks';
+export type { SetMetadataInput, SubscriptionInput, SubscriptionEventData } from './hooks';
 
 // Types
 export {
