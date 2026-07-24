@@ -100,6 +100,8 @@ export {
   useMigrationStatus,
   useAppVersion,
   useLatestVersion,
+  useGroupAppVersion,
+  useInstallFromRegistry,
   useMyAuthoredMigration,
 } from './hooks';
 export type { SetMetadataInput } from './hooks';
