@@ -1,3 +1,9 @@
+## [4.5.0](https://github.com/calimero-network/mero-react/compare/mero-react-v4.4.1...mero-react-v4.5.0) (2026-07-24)
+
+### Features
+
+* add update-flow hooks useInstallFromRegistry and useGroupAppVersion ([d005804](https://github.com/calimero-network/mero-react/commit/d0058040759d162b0fb1ec3e5ee2ade81e58e68e))
+
 ## [4.4.1](https://github.com/calimero-network/mero-react/compare/mero-react-v4.4.0...mero-react-v4.4.1) (2026-07-20)
 
 ### Bug Fixes
