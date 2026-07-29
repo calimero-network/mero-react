@@ -1,3 +1,5 @@
+## [4.6.1](https://github.com/calimero-network/mero-react/compare/mero-react-v4.6.0...mero-react-v4.6.1) (2026-07-29)
+
 ## [4.6.0](https://github.com/calimero-network/mero-react/compare/mero-react-v4.5.0...mero-react-v4.6.0) (2026-07-24)
 
 ### Features
