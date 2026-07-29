@@ -32,8 +32,8 @@ export {
   localNodeUrl,
   nodeEndpoint,
   DEFAULT_LOCAL_NODE_PORTS,
-} from './utils/nodeDiscovery';
-export type { DiscoverLocalNodesOptions } from './utils/nodeDiscovery';
+} from '@calimero-network/mero-js';
+export type { DiscoverLocalNodesOptions } from '@calimero-network/mero-js';
 
 // Theme
 export {

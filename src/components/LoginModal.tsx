@@ -19,7 +19,7 @@ import {
   discoverLocalNodes,
   nodeEndpoint,
   DEFAULT_LOCAL_NODE_PORTS,
-} from '../utils/nodeDiscovery';
+} from '@calimero-network/mero-js';
 import {
   cssVar,
   resolveMeroTheme,
