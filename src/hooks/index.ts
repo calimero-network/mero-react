@@ -1341,7 +1341,9 @@ export function useMigrationStatus(
     void refetch();
   }, [refetch]);
 
-  const pollIntervalMs = options?.pollIntervalMs;
+  // 5s: migration facts arrive via heartbeat gossip, not push, and heartbeats
+  // are not sub-second, so faster polling adds load without fresher data.
+  const pollIntervalMs = options?.pollIntervalMs ?? 5000;
   useEffect(() => {
     if (!pollIntervalMs || !mero || !namespaceId) return;
     const handle = setInterval(() => void refetch(), pollIntervalMs);

@@ -1576,6 +1576,34 @@ describe('useMigrationStatus', () => {
     expect(result.current.status).toBeNull();
     expect(getMigrationStatus).not.toHaveBeenCalled();
   });
+
+  it('polls at the default interval when none is provided', async () => {
+    vi.useFakeTimers();
+    try {
+      const getMigrationStatus = vi.fn().mockResolvedValue({
+        targetVersion: 2,
+        expectedMembers: 1,
+        rollup: { migrated: 0, inProgress: 1, unknown: 0, failed: 0, total: 1, allMigrated: false, membersPendingSignature: 0 },
+        members: [],
+      });
+      const mero = createMero({ getMigrationStatus });
+      mockUseMero.mockReturnValue({ mero } as never);
+
+      renderHook(() => useMigrationStatus('ns1'));
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(getMigrationStatus).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5000);
+      });
+      expect(getMigrationStatus).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe('useAppVersion', () => {
