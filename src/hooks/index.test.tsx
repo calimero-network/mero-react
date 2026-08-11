@@ -44,7 +44,6 @@ import {
   useSetTeeAdmissionPolicy,
   useSubgroups,
   useSubgroupVisibility,
-  useUpdateGroupSettings,
   useUpdateMemberRole,
   useUpgradeGroup,
   useResyncContext,
@@ -1024,20 +1023,6 @@ describe('group and context hooks', () => {
     });
 
     expect(setTeeAdmissionPolicy).toHaveBeenCalledWith('group-1', policy);
-  });
-
-  it('useUpdateGroupSettings updates group settings', async () => {
-    const updateGroupSettings = vi.fn().mockResolvedValue(undefined);
-    const mero = createMero({ updateGroupSettings });
-    mockUseMero.mockReturnValue({ mero } as never);
-
-    const { result } = renderHook(() => useUpdateGroupSettings());
-
-    await act(async () => {
-      await result.current.updateGroupSettings('group-1', { upgradePolicy: 'auto' });
-    });
-
-    expect(updateGroupSettings).toHaveBeenCalledWith('group-1', { upgradePolicy: 'auto' });
   });
 
   // ---- Metadata Hooks ----

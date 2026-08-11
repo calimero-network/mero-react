@@ -89,7 +89,6 @@ export {
   useReparentGroup,
   useSubgroups,
   useSubgroupVisibility,
-  useUpdateGroupSettings,
   useUpdateMemberRole,
   useUpgradeGroup,
   useResyncContext,

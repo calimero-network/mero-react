@@ -35,7 +35,6 @@ import type {
   SubgroupEntry,
   SyncGroupRequest,
   SseEventData,
-  UpdateGroupSettingsRequest,
   UpdateMemberRoleRequest,
   UpgradeGroupRequest,
   ResyncContextRequest,
@@ -955,21 +954,6 @@ export function useSetTeeAdmissionPolicy() {
   );
 
   return { setTeeAdmissionPolicy, loading, error };
-}
-
-export function useUpdateGroupSettings() {
-  const { mero } = useMero();
-  const { loading, error, run } = useAsyncMutation();
-
-  const updateGroupSettings = useCallback(
-    async (groupId: string, request: UpdateGroupSettingsRequest) => {
-      if (!mero) return null;
-      return run(() => mero.admin.updateGroupSettings(groupId, request));
-    },
-    [mero, run],
-  );
-
-  return { updateGroupSettings, loading, error };
 }
 
 // ---- Metadata Hooks ----
