@@ -117,11 +117,11 @@ function createMero(
       createGroupInvitation: vi.fn().mockResolvedValue({
         invitation: {
           invitation: {
-            inviterIdentity: [],
-            groupId: [],
-            expirationTimestamp: 0,
+            inviter_identity: [],
+            group_id: [],
+            expiration_timestamp: 0,
           },
-          inviterSignature: 'sig-1',
+          inviter_signature: 'sig-1',
         },
       }),
       joinGroup: vi.fn().mockResolvedValue({ groupId: 'group-1', memberIdentity: 'member-1' }),
@@ -184,7 +184,7 @@ function createMero(
       createNamespace: vi.fn().mockResolvedValue({ namespaceId: 'ns-1' }),
       deleteNamespace: vi.fn().mockResolvedValue({ isDeleted: true }),
       createNamespaceInvitation: vi.fn().mockResolvedValue({
-        invitation: { invitation: { inviterIdentity: [], groupId: [], expirationTimestamp: 0, secretSalt: [] }, inviterSignature: 'sig-1' },
+        invitation: { invitation: { inviter_identity: [], group_id: [], expiration_timestamp: 0, secret_salt: [] }, inviter_signature: 'sig-1' },
         groupName: 'test-ns',
       }),
       joinNamespace: vi.fn().mockResolvedValue({ groupId: 'ns-1', memberIdentity: 'member-1', governanceOp: 'MemberAdded' }),
@@ -316,12 +316,12 @@ describe('group and context hooks', () => {
     const createGroupInvitation = vi.fn().mockResolvedValue({
       invitation: {
         invitation: {
-          inviterIdentity: [0],
-          groupId: [1],
-          expirationTimestamp: 123,
-          secretSalt: [42],
+          inviter_identity: [0],
+          group_id: [1],
+          expiration_timestamp: 123,
+          secret_salt: [42],
         },
-        inviterSignature: 'sig-1',
+        inviter_signature: 'sig-1',
       },
     });
     const mero = createMero({ createGroupInvitation });
@@ -337,7 +337,7 @@ describe('group and context hooks', () => {
         throw new Error('Expected invitation to be created');
       }
       if ('invitation' in response) {
-        expect(response.invitation.inviterSignature).toBe('sig-1');
+        expect(response.invitation.inviter_signature).toBe('sig-1');
       }
     });
 
@@ -357,13 +357,14 @@ describe('group and context hooks', () => {
       const joined = await result.current.joinGroup({
         invitation: {
           invitation: {
-            inviterIdentity: [0],
-            groupId: [1],
-            expirationTimestamp: 123,
-            secretSalt: [42],
+            inviter_identity: [0],
+            group_id: [1],
+            expiration_timestamp: 123,
+            secret_salt: [42],
+            invited_role: 0,
           },
-          inviterSignature: 'sig-1',
-        },
+          inviter_signature: 'sig-1',
+        } as never,
         groupName: 'Lobby',
       });
       if (!joined) {
@@ -860,7 +861,7 @@ describe('group and context hooks', () => {
 
   it('useCreateNamespaceInvitation creates an invitation', async () => {
     const invitation = {
-      invitation: { invitation: { inviterIdentity: [], groupId: [], expirationTimestamp: 123, secretSalt: [] }, inviterSignature: 'sig-1' },
+      invitation: { invitation: { inviter_identity: [], group_id: [], expiration_timestamp: 123, secret_salt: [] }, inviter_signature: 'sig-1' },
       groupName: 'test-ns',
     };
     const createNamespaceInvitation = vi.fn().mockResolvedValue(invitation);
@@ -887,9 +888,9 @@ describe('group and context hooks', () => {
     await act(async () => {
       const joined = await result.current.joinNamespace('ns-1', {
         invitation: {
-          invitation: { inviterIdentity: [], groupId: [], expirationTimestamp: 123, secretSalt: [] },
-          inviterSignature: 'sig-1',
-        },
+          invitation: { inviter_identity: [], group_id: [], expiration_timestamp: 123, secret_salt: [], invited_role: 0 },
+          inviter_signature: 'sig-1',
+        } as never,
       });
       if (!joined) {
         throw new Error('Expected namespace join result');
@@ -1534,8 +1535,8 @@ describe('useMigrationStatus', () => {
       expectedMembers: 3,
       rollup: { migrated: 2, inProgress: 0, unknown: 1, total: 3, allMigrated: false, membersPendingSignature: 1 },
       members: [
-        { peer: 'aa', report: { schemaVersion: 2, residueAuto: 0, residueIdentity: 0, syncedUpToHlc: 0, reportedAt: 0, authoredRemaining: 0 }, state: 'migrated' },
-        { peer: 'bb', report: { schemaVersion: 1, residueAuto: 0, residueIdentity: 0, syncedUpToHlc: 0, reportedAt: 0, authoredRemaining: 2 }, state: 'in_progress' },
+        { peer: 'aa', report: { schemaVersion: 2, residueAuto: 0, syncedUpToHlc: 0, reportedAt: 0, authoredRemaining: 0 }, state: 'migrated' },
+        { peer: 'bb', report: { schemaVersion: 1, residueAuto: 0, syncedUpToHlc: 0, reportedAt: 0, authoredRemaining: 2 }, state: 'in_progress' },
         { peer: 'cc', report: null, state: 'unknown' },
       ],
     });

@@ -17,10 +17,10 @@ describe('MigrationAdminPanel', () => {
       expectedMembers: 4,
       rollup: { migrated: 2, inProgress: 0, unknown: 1, failed: 1, total: 4, allMigrated: false, membersPendingSignature: 1 },
       members: [
-        { peer: 'aa', report: { schemaVersion: 2, residueAuto: 0, residueIdentity: 0, syncedUpToHlc: 0, reportedAt: 0, authoredRemaining: 0 }, state: 'migrated' },
-        { peer: 'bb', report: { schemaVersion: 1, residueAuto: 0, residueIdentity: 0, syncedUpToHlc: 0, reportedAt: 0, authoredRemaining: 2 }, state: 'in_progress' },
+        { peer: 'aa', report: { schemaVersion: 2, residueAuto: 0, syncedUpToHlc: 0, reportedAt: 0, authoredRemaining: 0 }, state: 'migrated' },
+        { peer: 'bb', report: { schemaVersion: 1, residueAuto: 0, syncedUpToHlc: 0, reportedAt: 0, authoredRemaining: 2 }, state: 'in_progress' },
         { peer: 'cc', report: null, state: 'unknown' },
-        { peer: 'dd', report: { schemaVersion: 1, residueAuto: 1, residueIdentity: 0, syncedUpToHlc: 0, reportedAt: 0, authoredRemaining: 0, migrationFailed: 'check_aborted' }, state: 'failed' },
+        { peer: 'dd', report: { schemaVersion: 1, residueAuto: 1, syncedUpToHlc: 0, reportedAt: 0, authoredRemaining: 0, migrationFailed: 'check_aborted' }, state: 'failed' },
       ],
     });
     const mero = { admin: { getMigrationStatus }, rpc: {}, events: {} };
