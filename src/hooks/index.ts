@@ -1513,7 +1513,6 @@ interface GroupAppVersion {
   applicationId: string | null;
   /** The installed blob differs from the one the group targets (see hook doc). */
   pendingApply: boolean;
-  upgradePolicy: string | null;
   /** Only populated via the group-info path; `null` in the namespace path. */
   activeUpgrade: GroupUpgradeStatusResponseData;
 }
@@ -1522,7 +1521,6 @@ const EMPTY_GROUP_APP_VERSION: GroupAppVersion = {
   version: null,
   applicationId: null,
   pendingApply: false,
-  upgradePolicy: null,
   activeUpgrade: null,
 };
 
@@ -1580,18 +1578,15 @@ export function useGroupAppVersion(groupId?: string) {
 
       let appKey: string | undefined;
       let applicationId: string | null;
-      let upgradePolicy: string | null;
       let activeUpgrade: GroupUpgradeStatusResponseData = null;
 
       if (namespace) {
         appKey = namespace.appKey;
         applicationId = namespace.targetApplicationId;
-        upgradePolicy = namespace.upgradePolicy;
       } else {
         const info = await mero.admin.getGroupInfo(groupId);
         appKey = info.appKey;
         applicationId = info.targetApplicationId;
-        upgradePolicy = info.upgradePolicy;
         activeUpgrade = info.activeUpgrade ?? null;
       }
 
@@ -1607,7 +1602,7 @@ export function useGroupAppVersion(groupId?: string) {
       }
 
       if (mountedRef.current && seq === reqRef.current) {
-        setData({ version, applicationId, pendingApply, upgradePolicy, activeUpgrade });
+        setData({ version, applicationId, pendingApply, activeUpgrade });
       }
     } catch (err) {
       const errorValue = toError(err);

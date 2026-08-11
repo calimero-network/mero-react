@@ -1747,7 +1747,6 @@ describe('useGroupAppVersion', () => {
 
     await waitFor(() => expect(result.current.version).toBe('2.1.0'));
     expect(result.current.applicationId).toBe('app-1');
-    expect(result.current.upgradePolicy).toBe('LazyOnAccess');
     expect(result.current.pendingApply).toBe(false);
     expect(result.current.activeUpgrade).toBeNull();
     expect(mero.admin.getApplication).toHaveBeenCalledWith('app-1');
@@ -1816,9 +1815,8 @@ describe('useGroupAppVersion', () => {
 
     const { result } = renderHook(() => useGroupAppVersion('sub-1'));
 
-    await waitFor(() => expect(result.current.upgradePolicy).toBe('Automatic'));
+    await waitFor(() => expect(result.current.activeUpgrade).toEqual(activeUpgrade));
     expect(getGroupInfo).toHaveBeenCalledWith('sub-1');
-    expect(result.current.activeUpgrade).toEqual(activeUpgrade);
     expect(result.current.pendingApply).toBe(false);
   });
 
