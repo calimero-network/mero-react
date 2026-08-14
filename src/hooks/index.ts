@@ -90,7 +90,18 @@ export interface UseEphemeralOptions<T> {
   throttleMs?: number;
   /** Include your own echoed presence in `peers`. Default false. */
   includeSelf?: boolean;
+  /**
+   * How often to re-read the authoritative snapshot, in ms. This is
+   * RECONCILIATION, not expiry: the node owns the 7s sweep, but core emits no
+   * event for an idle re-publish and a swept author never emits again, so a
+   * delta missed across an SSE reconnect would otherwise stay wrong forever.
+   * Defaults to `DEFAULT_RECONCILE_MS` (the presence TTL). Set `0` to disable.
+   */
+  reconcileMs?: number;
 }
+
+/** Default reconciliation cadence — matches the node's 7s presence TTL. */
+export const DEFAULT_RECONCILE_MS = 7000;
 
 /**
  * Observe and publish ephemeral presence (cursors, typing, online) for a
@@ -109,18 +120,32 @@ export function useEphemeral<T>(
   contextId: string | null,
   options: UseEphemeralOptions<T> = {},
 ) {
+  const { includeSelf = false, reconcileMs = DEFAULT_RECONCILE_MS } = options;
   const { mero } = useMero();
-  const { codec, includeSelf = false } = options;
   // Cast: the installed mero-js's `MeroJs` type predates `ephemeral` (see
   // `EphemeralClient` above), though it exists at runtime.
   const ephemeral = mero
-    ? (mero as unknown as { ephemeral: EphemeralClient }).ephemeral
+    ? ((mero as unknown as { ephemeral?: EphemeralClient }).ephemeral ?? null)
     : null;
 
   const [peers, setPeers] = useState<Map<string, T>>(new Map());
   const [error, setError] = useState<Error | null>(null);
   // author -> local ms timestamp the entry is considered current as of.
   const receivedAtRef = useRef<Map<string, number>>(new Map());
+  // author -> local ms timestamp of the most recent DELTA (upsert or removal).
+  // Unlike `receivedAtRef` this survives a removal, which is what makes a
+  // back-dated snapshot unable to resurrect a peer the node already swept.
+  const eventAtRef = useRef<Map<string, number>>(new Map());
+  // `codec` and `initial` are held in refs, never in a dependency array:
+  // `jsonCodec()` is a FACTORY, so `{ codec: jsonCodec() }` at the call site is
+  // a fresh identity every render. As a dep it would re-run the read effect on
+  // every render — and since applying a snapshot always sets a new Map (a new
+  // render), that is an unbounded `get_ephemeral` storm. A codec swapped
+  // mid-flight is not a real use case.
+  const codecRef = useRef<Codec<T> | undefined>(options.codec);
+  codecRef.current = options.codec;
+  const initialRef = useRef<T | undefined>(options.initial);
+  initialRef.current = options.initial;
   // This node's own context member key (device-level), resolved async. Never
   // compare this against an account id — that comparison silently never
   // matches, which is the classic self-echo bug.
@@ -139,13 +164,39 @@ export function useEphemeral<T>(
     return at === undefined ? undefined : Date.now() - at;
   }, []);
 
-  // Clear presence synchronously the instant the target context changes, so a
-  // previous context's peers don't keep rendering until the new context's
-  // `get()` resolves (cross-context leakage into the UI).
+  // Clear ALL per-context state synchronously the instant the target context
+  // changes. Read state, so a previous context's peers don't keep rendering
+  // until the new context's `get()` resolves — and write state, because a
+  // queued publish would otherwise fire into the PREVIOUS context (its
+  // `setTimeout` closure captured the old `publish`), and `lastLocalRef` would
+  // shallow-merge the old context's fields into the first slice published in
+  // the new one. Presence is app-defined data (cursor position, typing target),
+  // so both are genuine cross-context writes, not cosmetic leaks.
   useEffect(() => {
     setPeers(new Map());
     receivedAtRef.current = new Map();
+    eventAtRef.current = new Map();
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    pendingRef.current = undefined;
+    lastLocalRef.current = initialRef.current;
+    selfRef.current = null;
   }, [contextId]);
+
+  // The client predates `mero.ephemeral` (mero-js < 9.1.0). Without this the
+  // hook degrades to an empty `peers` and a no-op `setPresence` with
+  // `error: null` — zero diagnostic for the consumer.
+  useEffect(() => {
+    if (mero && !ephemeral) {
+      setError(new Error(
+        'useEphemeral: this client has no `mero.ephemeral` surface. Ephemeral ' +
+        'presence requires @calimero-network/mero-js >= 9.1.0; upgrade the ' +
+        'installed @calimero-network/mero-js (and any lockfile pin) to use it.',
+      ));
+    }
+  }, [mero, ephemeral]);
 
   // Resolve THIS node's context member key — the same value the node stamps
   // as `author` on ephemeral entries.
@@ -205,52 +256,120 @@ export function useEphemeral<T>(
     const remove = (author: string) => {
       receivedAtRef.current.delete(author);
       setPeers(prev => {
+        if (!prev.has(author)) return prev;
         const next = new Map(prev);
         next.delete(author);
         return next;
       });
     };
 
-    ephemeral
-      .get<T>(contextId, codec)
-      .then(entries => {
-        if (cancelled) return;
-        for (const e of entries) {
-          // Back-date by the node-reported age so a snapshot entry and a delta
-          // share one notion of freshness.
-          upsert(e.author, e.state, Date.now() - e.ageMs);
+    /**
+     * Apply an authoritative snapshot on top of whatever the deltas already
+     * built. `issuedAt` is when the `get()` was ISSUED, which is what makes
+     * this safe against the snapshot/delta race: any delta stamped after a
+     * snapshot entry's back-dated time is strictly newer than that entry and
+     * wins. Without this, a removal arriving while the snapshot is in flight
+     * is a no-op (the author is not in the map yet) and the older snapshot
+     * then re-adds a peer the node has already swept — a permanent ghost,
+     * because a swept author never emits again.
+     */
+    const applySnapshot = (
+      entries: Array<{ author: string; state: T; ageMs: number }>,
+      issuedAt: number,
+    ) => {
+      const now = Date.now();
+      const present = new Set(entries.map(e => e.author));
+
+      // Reconciliation: drop peers the snapshot no longer lists, unless a
+      // delta for them landed after this snapshot was issued. Covers a peer
+      // swept while the SSE stream was disconnected, whose removal event we
+      // never saw and will never see again.
+      setPeers(prev => {
+        let next: Map<string, T> | null = null;
+        for (const author of prev.keys()) {
+          if (present.has(author)) continue;
+          const at = receivedAtRef.current.get(author);
+          if (at !== undefined && at > issuedAt) continue;
+          if (!next) next = new Map(prev);
+          next.delete(author);
+          receivedAtRef.current.delete(author);
         }
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setError(err instanceof Error ? err : new Error(String(err)));
+        return next ?? prev;
       });
+
+      for (const e of entries) {
+        // Back-date by the node-reported age so a snapshot entry and a delta
+        // share one notion of freshness.
+        const at = now - e.ageMs;
+        const lastEvent = eventAtRef.current.get(e.author);
+        // Skip when a delta is strictly newer than this entry — either by the
+        // entry's own back-dated stamp, or because the delta landed after the
+        // whole snapshot was requested (so it post-dates everything in it).
+        if (lastEvent !== undefined && (lastEvent > at || lastEvent > issuedAt)) continue;
+        upsert(e.author, e.state, at);
+      }
+    };
+
+    // Clear only an error THIS effect raised, so a recovered snapshot read
+    // can't silently swallow the identity-resolution or publish error.
+    let getFailed = false;
+    const reconcile = () => {
+      const issuedAt = Date.now();
+      ephemeral
+        .get<T>(contextId, codecRef.current)
+        .then(entries => {
+          if (cancelled) return;
+          applySnapshot(entries, issuedAt);
+          if (getFailed) {
+            getFailed = false;
+            setError(null);
+          }
+        })
+        .catch((err: unknown) => {
+          if (cancelled) return;
+          getFailed = true;
+          setError(err instanceof Error ? err : new Error(String(err)));
+        });
+    };
+
+    reconcile();
 
     const unsubscribe = ephemeral.subscribe<T>(
       contextId,
       entry => {
+        eventAtRef.current.set(entry.author, Date.now());
         if (entry.removed || entry.state === undefined) remove(entry.author);
         else upsert(entry.author, entry.state, Date.now());
       },
-      codec,
+      codecRef.current,
     );
+
+    // Low-rate re-seed. `SseClient` auto-reconnects and re-subscribes, but a
+    // single mount-time `get()` leaves anyone who joined or changed during the
+    // disconnect wrong indefinitely (core emits nothing on an idle
+    // re-publish), and a failed initial `get()` would never be retried. This
+    // is reconciliation only — the node still owns expiry; there is no
+    // client-side TTL here.
+    const handle = reconcileMs > 0 ? setInterval(reconcile, reconcileMs) : null;
 
     return () => {
       cancelled = true;
+      if (handle) clearInterval(handle);
       unsubscribe();
     };
     // `ephemeral` itself is a dep on purpose — see the identity-resolution
     // effect above. A replaced client must re-subscribe against the new
     // client, not keep reading/writing through the old (possibly closed)
-    // one.
-  }, [ephemeral, contextId, codec, includeSelf]);
+    // one. `codec` is deliberately NOT a dep — see `codecRef`.
+  }, [ephemeral, contextId, includeSelf, reconcileMs]);
 
   const publish = useCallback((value: T) => {
     if (!ephemeral || !contextId) return;
     lastSentAtRef.current = Date.now();
-    void ephemeral.set<T>(contextId, value, codec).catch((err: unknown) => {
+    void ephemeral.set<T>(contextId, value, codecRef.current).catch((err: unknown) => {
       setError(err instanceof Error ? err : new Error(String(err)));
     });
-  }, [ephemeral, contextId, codec]);
+  }, [ephemeral, contextId]);
 
   /**
    * Publish your own presence.
