@@ -103,6 +103,26 @@ export interface UseEphemeralOptions<T> {
 /** Default reconciliation cadence — matches the node's 7s presence TTL. */
 export const DEFAULT_RECONCILE_MS = 7000;
 
+/** Shape returned by {@link useEphemeral}. */
+export interface UseEphemeralResult<T> {
+  peers: Map<string, T>;
+  setPresence: (partial: Partial<T>) => void;
+  ageOf: (author: string) => number | undefined;
+  error: Error | null;
+}
+
+/**
+ * Which independent producer most recently set `error`. There is one
+ * `error` slot but several producers (missing `ephemeral` surface, identity
+ * resolution, snapshot reads, publish failures) that can raise into it. Each
+ * producer only clears the error it itself raised — tagged via this ref —
+ * so a recovery in one producer can never clobber a still-live error from
+ * another. The one exception is the context-switch reset effect, which
+ * clears unconditionally: a context switch invalidates every producer's
+ * state at once.
+ */
+type ErrorSource = 'surface' | 'identity' | 'snapshot' | 'publish';
+
 /**
  * Observe and publish ephemeral presence (cursors, typing, online) for a
  * context.
@@ -119,7 +139,7 @@ export const DEFAULT_RECONCILE_MS = 7000;
 export function useEphemeral<T>(
   contextId: string | null,
   options: UseEphemeralOptions<T> = {},
-) {
+): UseEphemeralResult<T> {
   const { includeSelf = false, reconcileMs = DEFAULT_RECONCILE_MS } = options;
   const { mero } = useMero();
   // Cast: the installed mero-js's `MeroJs` type predates `ephemeral` (see
@@ -130,6 +150,19 @@ export function useEphemeral<T>(
 
   const [peers, setPeers] = useState<Map<string, T>>(new Map());
   const [error, setError] = useState<Error | null>(null);
+  // See `ErrorSource` above: tags which producer currently owns `error`, so
+  // each producer's clear only fires when it still owns the slot.
+  const errorSourceRef = useRef<ErrorSource | null>(null);
+  const setSourceError = useCallback((source: ErrorSource, err: Error) => {
+    errorSourceRef.current = source;
+    setError(err);
+  }, []);
+  const clearSourceError = useCallback((source: ErrorSource) => {
+    if (errorSourceRef.current === source) {
+      errorSourceRef.current = null;
+      setError(null);
+    }
+  }, []);
   // author -> local ms timestamp the entry is considered current as of.
   const receivedAtRef = useRef<Map<string, number>>(new Map());
   // author -> local ms timestamp of the most recent DELTA (upsert or removal).
@@ -172,6 +205,11 @@ export function useEphemeral<T>(
   // shallow-merge the old context's fields into the first slice published in
   // the new one. Presence is app-defined data (cursor position, typing target),
   // so both are genuine cross-context writes, not cosmetic leaks.
+  //
+  // `error` is cleared here too, and UNCONDITIONALLY (not through
+  // `clearSourceError`) — every producer's state is being reset by this same
+  // effect, so an error raised for the previous context is never still valid
+  // for the new one, regardless of which producer raised it.
   useEffect(() => {
     setPeers(new Map());
     receivedAtRef.current = new Map();
@@ -183,6 +221,8 @@ export function useEphemeral<T>(
     pendingRef.current = undefined;
     lastLocalRef.current = initialRef.current;
     selfRef.current = null;
+    errorSourceRef.current = null;
+    setError(null);
   }, [contextId]);
 
   // The client predates `mero.ephemeral` (mero-js < 9.1.0). Without this the
@@ -190,13 +230,18 @@ export function useEphemeral<T>(
   // `error: null` — zero diagnostic for the consumer.
   useEffect(() => {
     if (mero && !ephemeral) {
-      setError(new Error(
+      setSourceError('surface', new Error(
         'useEphemeral: this client has no `mero.ephemeral` surface. Ephemeral ' +
         'presence requires @calimero-network/mero-js >= 9.1.0; upgrade the ' +
         'installed @calimero-network/mero-js (and any lockfile pin) to use it.',
       ));
+    } else if (ephemeral) {
+      // A client swap (e.g. MeroProvider upgrading to one that exposes
+      // `mero.ephemeral`) can make this go from missing to present without a
+      // context switch resetting the shared error slot.
+      clearSourceError('surface');
     }
-  }, [mero, ephemeral]);
+  }, [mero, ephemeral, setSourceError, clearSourceError]);
 
   // Resolve THIS node's context member key — the same value the node stamps
   // as `author` on ephemeral entries.
@@ -211,13 +256,17 @@ export function useEphemeral<T>(
         selfRef.current = self;
         if (!self) {
           if (!includeSelf) {
-            setError(new Error(
+            setSourceError('identity', new Error(
               'useEphemeral: could not resolve a local context identity, so your own ' +
               'presence cannot be filtered out. Pass includeSelf: true to accept this.',
             ));
           }
           return;
         }
+        // A later run of this effect (contextId change, includeSelf toggle)
+        // resolved a self identity where an earlier run didn't — clear the
+        // "could not resolve" error this effect itself raised.
+        clearSourceError('identity');
         // Ordering race: the identity lookup and the snapshot resolve
         // independently, so a self entry can already be seeded in `peers`.
         // Retroactively drop it now that we know which author is "self".
@@ -232,7 +281,9 @@ export function useEphemeral<T>(
         }
       })
       .catch((err: unknown) => {
-        if (!cancelled) setError(err instanceof Error ? err : new Error(String(err)));
+        if (!cancelled) {
+          setSourceError('identity', err instanceof Error ? err : new Error(String(err)));
+        }
       });
     return () => { cancelled = true; };
     // `mero` itself is a dep on purpose: a real MeroProvider memoizes its
@@ -242,7 +293,7 @@ export function useEphemeral<T>(
     // local identity against the new client. Keying on presence alone
     // (`Boolean(mero)`) would silently keep resolving against a closed,
     // stale client instance.
-  }, [mero, contextId, includeSelf]);
+  }, [mero, contextId, includeSelf, setSourceError, clearSourceError]);
 
   useEffect(() => {
     if (!ephemeral || !contextId) return;
@@ -310,9 +361,9 @@ export function useEphemeral<T>(
       }
     };
 
-    // Clear only an error THIS effect raised, so a recovered snapshot read
-    // can't silently swallow the identity-resolution or publish error.
-    let getFailed = false;
+    // Clear only an error THIS effect raised (via the shared `'snapshot'`
+    // source tag), so a recovered snapshot read can't silently swallow the
+    // surface/identity/publish error.
     const reconcile = () => {
       const issuedAt = Date.now();
       ephemeral
@@ -320,15 +371,11 @@ export function useEphemeral<T>(
         .then(entries => {
           if (cancelled) return;
           applySnapshot(entries, issuedAt);
-          if (getFailed) {
-            getFailed = false;
-            setError(null);
-          }
+          clearSourceError('snapshot');
         })
         .catch((err: unknown) => {
           if (cancelled) return;
-          getFailed = true;
-          setError(err instanceof Error ? err : new Error(String(err)));
+          setSourceError('snapshot', err instanceof Error ? err : new Error(String(err)));
         });
     };
 
@@ -361,15 +408,15 @@ export function useEphemeral<T>(
     // effect above. A replaced client must re-subscribe against the new
     // client, not keep reading/writing through the old (possibly closed)
     // one. `codec` is deliberately NOT a dep — see `codecRef`.
-  }, [ephemeral, contextId, includeSelf, reconcileMs]);
+  }, [ephemeral, contextId, includeSelf, reconcileMs, setSourceError, clearSourceError]);
 
   const publish = useCallback((value: T) => {
     if (!ephemeral || !contextId) return;
     lastSentAtRef.current = Date.now();
     void ephemeral.set<T>(contextId, value, codecRef.current).catch((err: unknown) => {
-      setError(err instanceof Error ? err : new Error(String(err)));
+      setSourceError('publish', err instanceof Error ? err : new Error(String(err)));
     });
-  }, [ephemeral, contextId]);
+  }, [ephemeral, contextId, setSourceError]);
 
   /**
    * Publish your own presence.

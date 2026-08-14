@@ -110,6 +110,7 @@ export type {
   Codec,
   EphemeralClient,
   UseEphemeralOptions,
+  UseEphemeralResult,
 } from './hooks';
 
 // Types

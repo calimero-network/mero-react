@@ -282,3 +282,95 @@ describe('useEphemeral write path', () => {
     vi.useRealTimers();
   });
 });
+
+describe('useEphemeral error clearing', () => {
+  it('clears an error raised for the previous context after switching to a healthy one', async () => {
+    // ctx-1: identity resolution fails outright.
+    mockGetContextIdentitiesOwned.mockRejectedValueOnce(new Error('identity boom'));
+    const { result, rerender } = renderHook(
+      ({ ctx }) => useEphemeral<{ x: number }>(ctx),
+      { initialProps: { ctx: 'ctx-1' } },
+    );
+    await waitFor(() => expect(result.current.error?.message).toBe('identity boom'));
+
+    // ctx-2: everything resolves cleanly.
+    mockGetContextIdentitiesOwned.mockResolvedValue({ identities: ['SELF'] });
+    rerender({ ctx: 'ctx-2' });
+
+    // The reset effect clears synchronously, before the new context's async
+    // work even resolves.
+    expect(result.current.error).toBeNull();
+    await act(async () => { await Promise.resolve(); });
+    expect(result.current.error).toBeNull();
+  });
+
+  it('clears the missing-ephemeral-surface error once a client exposing it arrives', async () => {
+    currentMero = { admin: { getContextIdentitiesOwned: mockGetContextIdentitiesOwned } };
+    const { result, rerender } = renderHook(() => useEphemeral<{ x: number }>('ctx-1'));
+
+    await waitFor(() => expect(result.current.error?.message).toMatch(/mero\.ephemeral/));
+
+    // MeroProvider swaps in an upgraded client that DOES expose `mero.ephemeral`.
+    currentMero = mockMero;
+    rerender();
+
+    await waitFor(() => expect(result.current.error).toBeNull());
+  });
+
+  it('clears an identity-resolution failure once a later run resolves successfully', async () => {
+    mockGetContextIdentitiesOwned.mockResolvedValueOnce({ identities: [] });
+    const { result, rerender } = renderHook(
+      ({ includeSelf }) => useEphemeral<{ x: number }>('ctx-1', { includeSelf }),
+      { initialProps: { includeSelf: false } },
+    );
+    await waitFor(() =>
+      expect(result.current.error?.message).toMatch(/could not resolve a local context identity/),
+    );
+
+    // Toggling includeSelf re-runs the identity effect; this time it resolves.
+    mockGetContextIdentitiesOwned.mockResolvedValue({ identities: ['SELF'] });
+    rerender({ includeSelf: true });
+
+    await waitFor(() => expect(result.current.error).toBeNull());
+  });
+
+  it('does not let a recovered snapshot read clobber a still-live identity error', async () => {
+    // Identity resolution is held pending until AFTER the snapshot read has
+    // already failed once, so the identity error becomes the LAST (and thus
+    // current) owner of the error slot — the case the shared/tagged design
+    // exists for: a same-tick producer must not clobber a different one.
+    let resolveIdentity!: (v: { identities: string[] }) => void;
+    mockGetContextIdentitiesOwned.mockImplementation(
+      () => new Promise(res => { resolveIdentity = res; }),
+    );
+    vi.useFakeTimers();
+    mockGet
+      .mockRejectedValueOnce(new Error('snapshot boom'))
+      .mockResolvedValue([{ author: 'A', state: { x: 1 }, ageMs: 0 }]);
+
+    const { result } = renderHook(() =>
+      useEphemeral<{ x: number }>('ctx-1', { reconcileMs: 1000 }),
+    );
+
+    // Let the initial (failing) snapshot read settle first.
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(result.current.error?.message).toBe('snapshot boom');
+
+    // NOW identity resolution fails to find a self — it becomes the current
+    // owner of the error slot, overwriting the snapshot error.
+    await act(async () => {
+      resolveIdentity({ identities: [] });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(result.current.error?.message).toMatch(/could not resolve a local context identity/);
+
+    // The reconciliation interval fires and this time the snapshot read
+    // succeeds — but the identity error is a DIFFERENT producer and must
+    // still be showing.
+    await act(async () => { vi.advanceTimersByTime(1100); await Promise.resolve(); });
+    expect(result.current.peers.get('A')).toEqual({ x: 1 });
+    expect(result.current.error?.message).toMatch(/could not resolve a local context identity/);
+    vi.useRealTimers();
+  });
+});
