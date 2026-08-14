@@ -60,6 +60,7 @@ export {
   useDeleteGroup,
   useDeleteNamespace,
   useDetachContextFromGroup,
+  useEphemeral,
   useExecute,
   useGroupCapabilities,
   useGroupContexts,
@@ -102,7 +103,14 @@ export {
   useInstallFromRegistry,
   useMyAuthoredMigration,
 } from './hooks';
-export type { SetMetadataInput, SubscriptionInput, SubscriptionEventData } from './hooks';
+export type {
+  SetMetadataInput,
+  SubscriptionInput,
+  SubscriptionEventData,
+  Codec,
+  EphemeralClient,
+  UseEphemeralOptions,
+} from './hooks';
 
 // Types
 export {

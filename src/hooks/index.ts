@@ -78,6 +78,7 @@ export interface EphemeralClient {
     handler: (entry: { author: string; state?: T; removed?: boolean }) => void,
     codec?: Codec<T>,
   ): () => void;
+  set<T>(contextId: string, state: T, codec?: Codec<T>): Promise<void>;
 }
 
 export interface UseEphemeralOptions<T> {
@@ -120,17 +121,81 @@ export function useEphemeral<T>(
   const [error, setError] = useState<Error | null>(null);
   // author -> local ms timestamp the entry is considered current as of.
   const receivedAtRef = useRef<Map<string, number>>(new Map());
+  // This node's own context member key (device-level), resolved async. Never
+  // compare this against an account id — that comparison silently never
+  // matches, which is the classic self-echo bug.
+  const selfRef = useRef<string | null>(null);
+  const lastLocalRef = useRef<T | undefined>(options.initial);
+  const pendingRef = useRef<T | undefined>(undefined);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Seeded to the mount time (not 0) so an isolated call shortly after mount
+  // is correctly treated as part of the initial "burst" and trailing-edge
+  // throttled, rather than bypassing the throttle because it looks like it's
+  // arriving long after a (nonexistent) previous publish.
+  const lastSentAtRef = useRef<number>(Date.now());
 
   const ageOf = useCallback((author: string): number | undefined => {
     const at = receivedAtRef.current.get(author);
     return at === undefined ? undefined : Date.now() - at;
   }, []);
 
+  // Clear presence synchronously the instant the target context changes, so a
+  // previous context's peers don't keep rendering until the new context's
+  // `get()` resolves (cross-context leakage into the UI).
+  useEffect(() => {
+    setPeers(new Map());
+    receivedAtRef.current = new Map();
+  }, [contextId]);
+
+  // Resolve THIS node's context member key — the same value the node stamps
+  // as `author` on ephemeral entries.
+  useEffect(() => {
+    if (!mero || !contextId) return;
+    let cancelled = false;
+    mero.admin
+      .getContextIdentitiesOwned(contextId)
+      .then(res => {
+        if (cancelled) return;
+        const self = res.identities?.[0] ?? null;
+        selfRef.current = self;
+        if (!self) {
+          if (!includeSelf) {
+            setError(new Error(
+              'useEphemeral: could not resolve a local context identity, so your own ' +
+              'presence cannot be filtered out. Pass includeSelf: true to accept this.',
+            ));
+          }
+          return;
+        }
+        // Ordering race: the identity lookup and the snapshot resolve
+        // independently, so a self entry can already be seeded in `peers`.
+        // Retroactively drop it now that we know which author is "self".
+        if (!includeSelf) {
+          receivedAtRef.current.delete(self);
+          setPeers(prev => {
+            if (!prev.has(self)) return prev;
+            const next = new Map(prev);
+            next.delete(self);
+            return next;
+          });
+        }
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setError(err instanceof Error ? err : new Error(String(err)));
+      });
+    return () => { cancelled = true; };
+    // `mero` is intentionally not in the deps array: only ITS PRESENCE (not
+    // its object identity) should trigger a re-run. A context whose value
+    // object isn't referentially stable across renders would otherwise make
+    // this effect (and the read effect below) re-fire every render.
+  }, [Boolean(mero), contextId, includeSelf]);
+
   useEffect(() => {
     if (!ephemeral || !contextId) return;
     let cancelled = false;
 
     const upsert = (author: string, state: T, at: number) => {
+      if (!includeSelf && author === selfRef.current) return;
       receivedAtRef.current.set(author, at);
       setPeers(prev => new Map(prev).set(author, state));
     };
@@ -170,9 +235,59 @@ export function useEphemeral<T>(
       cancelled = true;
       unsubscribe();
     };
-  }, [ephemeral, contextId, codec, includeSelf]);
+    // `ephemeral` deliberately excluded — see the identity-resolution effect
+    // above for why object identity (vs. presence) is the correct trigger.
+  }, [Boolean(ephemeral), contextId, codec, includeSelf]);
 
-  return { peers, ageOf, error };
+  const publish = useCallback((value: T) => {
+    if (!ephemeral || !contextId) return;
+    lastSentAtRef.current = Date.now();
+    void ephemeral.set<T>(contextId, value, codec).catch((err: unknown) => {
+      setError(err instanceof Error ? err : new Error(String(err)));
+    });
+  }, [ephemeral, contextId, codec]);
+
+  /**
+   * Publish your own presence.
+   *
+   * SHALLOW merge over the last locally-set value (starting from `initial`):
+   * presence is one slot per author, so fields are not independent channels
+   * and a bare replace would silently drop whatever you did not mention.
+   * Nested objects are replaced wholesale, not deep-merged —
+   * `setPresence({ cursor: { x: 1 } })` DROPS `cursor.y` if it was set
+   * separately.
+   *
+   * Throttled on the trailing edge: rapid calls collapse into one publish
+   * carrying the newest value, never the oldest queued one.
+   */
+  const setPresence = useCallback((partial: Partial<T>) => {
+    const next = { ...(lastLocalRef.current ?? ({} as T)), ...partial } as T;
+    lastLocalRef.current = next;
+
+    const throttleMs = options.throttleMs ?? 30;
+    if (throttleMs <= 0) {
+      publish(next);
+      return;
+    }
+
+    pendingRef.current = next;
+    if (timerRef.current) return;
+    const elapsed = Date.now() - lastSentAtRef.current;
+    const delay = Math.max(throttleMs - elapsed, 0);
+    timerRef.current = setTimeout(() => {
+      timerRef.current = null;
+      const queued = pendingRef.current;
+      pendingRef.current = undefined;
+      if (queued !== undefined) publish(queued);
+    }, delay);
+  }, [publish, options.throttleMs]);
+
+  // Cancel a queued publish on unmount.
+  useEffect(() => () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+  }, []);
+
+  return { peers, setPresence, ageOf, error };
 }
 
 /**
