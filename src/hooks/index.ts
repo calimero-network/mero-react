@@ -53,6 +53,128 @@ import type {
 
 export { useMero } from '../context';
 
+/** Structural copy of `mero-js`'s `Codec`. Declared locally rather than
+ * imported: the installed `@calimero-network/mero-js` is `^7.3.0`, which does
+ * not export it, and bumping that dependency is out of scope. Structural typing
+ * makes a `mero-js` codec assignable to this without a nominal dependency. */
+export interface Codec<T> {
+  encode(value: T): number[];
+  decode(bytes: number[]): T;
+}
+
+/** Structural copy of `mero-js`'s `mero.ephemeral` surface (Tasks 1-2 of the
+ * ephemeral-presence plan). Declared locally for the same reason as `Codec`
+ * above: the installed `@calimero-network/mero-js` is `^7.3.0`, whose
+ * `MeroJs` type predates this surface, so `mero.ephemeral` does not
+ * typecheck against it even though it exists at runtime. Cast through this
+ * interface rather than widening `MeroJs` itself or bumping the dependency. */
+export interface EphemeralClient {
+  get<T>(
+    contextId: string,
+    codec?: Codec<T>,
+  ): Promise<Array<{ author: string; state: T; ageMs: number }>>;
+  subscribe<T>(
+    contextId: string,
+    handler: (entry: { author: string; state?: T; removed?: boolean }) => void,
+    codec?: Codec<T>,
+  ): () => void;
+}
+
+export interface UseEphemeralOptions<T> {
+  /** Encoding for the presence slice. Defaults to JSON. */
+  codec?: Codec<T>;
+  /** Base value for the first `setPresence` merge. */
+  initial?: T;
+  /** Minimum ms between publishes. Trailing edge — the latest value wins. */
+  throttleMs?: number;
+  /** Include your own echoed presence in `peers`. Default false. */
+  includeSelf?: boolean;
+}
+
+/**
+ * Observe and publish ephemeral presence (cursors, typing, online) for a
+ * context.
+ *
+ * Reconciles the two shapes core emits — an author-keyed snapshot carrying
+ * `ageMs`, and per-author deltas that carry no age — into one `peers` map plus
+ * a uniform `ageOf`. Freshness is computed entirely from local clock deltas: a
+ * snapshot entry is back-dated by its `ageMs`, a delta is stamped at receipt.
+ * No cross-machine clock comparison is ever performed.
+ *
+ * No client-side TTL or heartbeat: the node sweeps at 7s and emits removals,
+ * and re-publishes on your behalf every 2.5s.
+ */
+export function useEphemeral<T>(
+  contextId: string | null,
+  options: UseEphemeralOptions<T> = {},
+) {
+  const { mero } = useMero();
+  const { codec, includeSelf = false } = options;
+  // Cast: the installed mero-js's `MeroJs` type predates `ephemeral` (see
+  // `EphemeralClient` above), though it exists at runtime.
+  const ephemeral = mero
+    ? (mero as unknown as { ephemeral: EphemeralClient }).ephemeral
+    : null;
+
+  const [peers, setPeers] = useState<Map<string, T>>(new Map());
+  const [error, setError] = useState<Error | null>(null);
+  // author -> local ms timestamp the entry is considered current as of.
+  const receivedAtRef = useRef<Map<string, number>>(new Map());
+
+  const ageOf = useCallback((author: string): number | undefined => {
+    const at = receivedAtRef.current.get(author);
+    return at === undefined ? undefined : Date.now() - at;
+  }, []);
+
+  useEffect(() => {
+    if (!ephemeral || !contextId) return;
+    let cancelled = false;
+
+    const upsert = (author: string, state: T, at: number) => {
+      receivedAtRef.current.set(author, at);
+      setPeers(prev => new Map(prev).set(author, state));
+    };
+    const remove = (author: string) => {
+      receivedAtRef.current.delete(author);
+      setPeers(prev => {
+        const next = new Map(prev);
+        next.delete(author);
+        return next;
+      });
+    };
+
+    ephemeral
+      .get<T>(contextId, codec)
+      .then(entries => {
+        if (cancelled) return;
+        for (const e of entries) {
+          // Back-date by the node-reported age so a snapshot entry and a delta
+          // share one notion of freshness.
+          upsert(e.author, e.state, Date.now() - e.ageMs);
+        }
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setError(err instanceof Error ? err : new Error(String(err)));
+      });
+
+    const unsubscribe = ephemeral.subscribe<T>(
+      contextId,
+      entry => {
+        if (entry.removed || entry.state === undefined) remove(entry.author);
+        else upsert(entry.author, entry.state, Date.now());
+      },
+      codec,
+    );
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [ephemeral, contextId, codec, includeSelf]);
+
+  return { peers, ageOf, error };
+}
+
 /**
  * Shape accepted by the metadata-setter hooks — re-exported from mero-js so
  * callers have one canonical type. A `set*Metadata` call **replaces the whole
