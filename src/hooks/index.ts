@@ -184,11 +184,14 @@ export function useEphemeral<T>(
         if (!cancelled) setError(err instanceof Error ? err : new Error(String(err)));
       });
     return () => { cancelled = true; };
-    // `mero` is intentionally not in the deps array: only ITS PRESENCE (not
-    // its object identity) should trigger a re-run. A context whose value
-    // object isn't referentially stable across renders would otherwise make
-    // this effect (and the read effect below) re-fire every render.
-  }, [Boolean(mero), contextId, includeSelf]);
+    // `mero` itself is a dep on purpose: a real MeroProvider memoizes its
+    // context value, so `mero` only changes identity when the underlying
+    // client is actually replaced (e.g. `allowedNodeUrls` changes) — and
+    // that replacement is exactly when this effect must re-resolve the
+    // local identity against the new client. Keying on presence alone
+    // (`Boolean(mero)`) would silently keep resolving against a closed,
+    // stale client instance.
+  }, [mero, contextId, includeSelf]);
 
   useEffect(() => {
     if (!ephemeral || !contextId) return;
@@ -235,9 +238,11 @@ export function useEphemeral<T>(
       cancelled = true;
       unsubscribe();
     };
-    // `ephemeral` deliberately excluded — see the identity-resolution effect
-    // above for why object identity (vs. presence) is the correct trigger.
-  }, [Boolean(ephemeral), contextId, codec, includeSelf]);
+    // `ephemeral` itself is a dep on purpose — see the identity-resolution
+    // effect above. A replaced client must re-subscribe against the new
+    // client, not keep reading/writing through the old (possibly closed)
+    // one.
+  }, [ephemeral, contextId, codec, includeSelf]);
 
   const publish = useCallback((value: T) => {
     if (!ephemeral || !contextId) return;

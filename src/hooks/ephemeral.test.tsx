@@ -9,23 +9,29 @@ const mockGet = vi.fn();
 const mockSet = vi.fn();
 const mockGetContextIdentitiesOwned = vi.fn();
 
-vi.mock('../context', () => ({
-  useMero: () => ({
-    mero: {
-      ephemeral: {
-        get: mockGet,
-        subscribe: (_ctx: string, handler: (e: unknown) => void) => {
-          listeners.push(handler);
-          return () => {
-            const i = listeners.indexOf(handler);
-            if (i >= 0) listeners.splice(i, 1);
-          };
-        },
-        set: mockSet,
-      },
-      admin: { getContextIdentitiesOwned: mockGetContextIdentitiesOwned },
+// A real MeroProvider memoizes its context value (useMemo over a `useState`
+// client instance), so `mero` is referentially STABLE across re-renders
+// unless the underlying client is actually replaced. Building this object
+// once at module scope — rather than as a fresh literal inside `useMero()`
+// — mirrors that and avoids a test-double-only churn the production
+// effects were never meant to tolerate.
+const mockMero = {
+  ephemeral: {
+    get: mockGet,
+    subscribe: (_ctx: string, handler: (e: unknown) => void) => {
+      listeners.push(handler);
+      return () => {
+        const i = listeners.indexOf(handler);
+        if (i >= 0) listeners.splice(i, 1);
+      };
     },
-  }),
+    set: mockSet,
+  },
+  admin: { getContextIdentitiesOwned: mockGetContextIdentitiesOwned },
+};
+
+vi.mock('../context', () => ({
+  useMero: () => ({ mero: mockMero }),
 }));
 
 const emit = (e: unknown) => act(() => { listeners.forEach(h => h(e)); });
