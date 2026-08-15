@@ -5,7 +5,7 @@ import { renderHook, act, waitFor } from '@testing-library/react';
 import { useEphemeral } from './index.js';
 
 const listeners: Array<(e: unknown) => void> = [];
-const mockGet = vi.fn();
+const subscribeCalls: string[] = [];
 const mockSet = vi.fn();
 const mockGetContextIdentitiesOwned = vi.fn();
 
@@ -19,8 +19,12 @@ let currentMero: unknown;
 
 const mockMero = {
   ephemeral: {
-    get: mockGet,
-    subscribe: (_ctx: string, handler: (e: unknown) => void) => {
+    // The node replays current presence over the subscription itself, so this
+    // double records the subscribe and hands back the handler; a test drives
+    // both the replayed seed (entries carrying `ageMs`) and the live deltas
+    // (no `ageMs`) through it.
+    subscribe: (ctx: string, handler: (e: unknown) => void) => {
+      subscribeCalls.push(ctx);
       listeners.push(handler);
       return () => {
         const i = listeners.indexOf(handler);
@@ -44,47 +48,56 @@ const emit = (e: unknown) => act(() => { listeners.forEach(h => h(e)); });
 beforeEach(() => {
   currentMero = mockMero;
   listeners.length = 0;
-  mockGet.mockReset().mockResolvedValue([]);
+  subscribeCalls.length = 0;
   mockSet.mockReset().mockResolvedValue(undefined);
   mockGetContextIdentitiesOwned.mockReset().mockResolvedValue({ identities: ['SELF'] });
 });
 
 describe('useEphemeral read path', () => {
-  it('seeds peers from the snapshot', async () => {
-    mockGet.mockResolvedValue([{ author: 'A', state: { x: 1 }, ageMs: 100 }]);
+  it('seeds peers from a replayed entry', async () => {
     const { result } = renderHook(() => useEphemeral<{ x: number }>('ctx-1'));
-    await waitFor(() => expect(result.current.peers.get('A')).toEqual({ x: 1 }));
+    await waitFor(() => expect(listeners.length).toBe(1));
+    emit({ author: 'A', state: { x: 1 }, ageMs: 100 });
+    expect(result.current.peers.get('A')).toEqual({ x: 1 });
   });
 
   it('applies an upsert delta', async () => {
     const { result } = renderHook(() => useEphemeral<{ x: number }>('ctx-1'));
-    await waitFor(() => expect(result.current.peers.size).toBe(0));
+    await waitFor(() => expect(listeners.length).toBe(1));
     emit({ author: 'B', state: { x: 2 }, removed: false });
     expect(result.current.peers.get('B')).toEqual({ x: 2 });
   });
 
   it('deletes an entry on a removal delta', async () => {
-    mockGet.mockResolvedValue([{ author: 'A', state: { x: 1 }, ageMs: 0 }]);
     const { result } = renderHook(() => useEphemeral<{ x: number }>('ctx-1'));
-    await waitFor(() => expect(result.current.peers.has('A')).toBe(true));
+    await waitFor(() => expect(listeners.length).toBe(1));
+    emit({ author: 'A', state: { x: 1 }, ageMs: 0 });
+    expect(result.current.peers.has('A')).toBe(true);
     emit({ author: 'A', removed: true });
     expect(result.current.peers.has('A')).toBe(false);
   });
 
-  it('reports age seeded from the snapshot ageMs, not from zero', async () => {
-    // A snapshot entry that is already 5s old must not read as fresh — the
-    // hook back-dates it so both sources share one notion of freshness.
-    mockGet.mockResolvedValue([{ author: 'A', state: { x: 1 }, ageMs: 5000 }]);
+  it('reports age seeded from a replayed entry ageMs, not from zero', async () => {
+    // A replayed entry that is already 5s old must not read as fresh — it is
+    // back-dated so replay and live deltas share one notion of freshness.
     const { result } = renderHook(() => useEphemeral<{ x: number }>('ctx-1'));
-    await waitFor(() => expect(result.current.peers.has('A')).toBe(true));
+    await waitFor(() => expect(listeners.length).toBe(1));
+    emit({ author: 'A', state: { x: 1 }, ageMs: 5000 });
     expect(result.current.ageOf('A')).toBeGreaterThanOrEqual(5000);
   });
 
-  it('reports a near-zero age for an entry that arrived as a delta', async () => {
+  it('reports a near-zero age for a live delta carrying no ageMs', async () => {
     const { result } = renderHook(() => useEphemeral<{ x: number }>('ctx-1'));
-    await waitFor(() => expect(result.current.peers.size).toBe(0));
+    await waitFor(() => expect(listeners.length).toBe(1));
     emit({ author: 'B', state: { x: 2 }, removed: false });
     expect(result.current.ageOf('B')).toBeLessThan(1000);
+  });
+
+  it('treats an explicit ageMs of 0 as fresh, not as missing', async () => {
+    const { result } = renderHook(() => useEphemeral<{ x: number }>('ctx-1'));
+    await waitFor(() => expect(listeners.length).toBe(1));
+    emit({ author: 'A', state: { x: 1 }, ageMs: 0 });
+    expect(result.current.ageOf('A')).toBeLessThan(1000);
   });
 
   it('unsubscribes on unmount', async () => {
@@ -97,89 +110,31 @@ describe('useEphemeral read path', () => {
   it('does nothing when contextId is null', () => {
     const { result } = renderHook(() => useEphemeral(null));
     expect(result.current.peers.size).toBe(0);
-    expect(mockGet).not.toHaveBeenCalled();
+    expect(subscribeCalls).toEqual([]);
   });
 
-  it('does not resurrect a peer swept while the snapshot was in flight', async () => {
-    // The node sweeps X at 7s and emits its removal BEFORE the mount-time
-    // get() resolves. The removal is a no-op (X is not in the map yet), so a
-    // naive apply of the older snapshot re-adds X — permanently, because a
-    // swept author never emits again and an idle re-publish emits nothing.
-    let resolveGet!: (entries: unknown) => void;
-    mockGet.mockImplementation(() => new Promise(res => { resolveGet = res; }));
-
-    const { result } = renderHook(() => useEphemeral<{ x: number }>('ctx-1'));
-    await waitFor(() => expect(listeners.length).toBe(1));
-
-    emit({ author: 'X', removed: true });
-
-    await act(async () => {
-      resolveGet([{ author: 'X', state: { x: 1 }, ageMs: 6900 }]);
-      await Promise.resolve();
-    });
-
-    expect(result.current.peers.has('X')).toBe(false);
-  });
-
-  it('drops a peer the reconciliation snapshot no longer lists', async () => {
-    // A peer swept while the SSE stream was disconnected: we never saw the
-    // removal and never will, so only the snapshot can retire it.
-    vi.useFakeTimers();
-    mockGet
-      .mockResolvedValueOnce([{ author: 'A', state: { x: 1 }, ageMs: 0 }])
-      .mockResolvedValue([]);
-    const { result } = renderHook(() =>
-      useEphemeral<{ x: number }>('ctx-1', { reconcileMs: 1000 }),
-    );
-    await act(async () => { await Promise.resolve(); });
-    expect(result.current.peers.has('A')).toBe(true);
-
-    await act(async () => { vi.advanceTimersByTime(1100); await Promise.resolve(); });
-    expect(result.current.peers.has('A')).toBe(false);
-    vi.useRealTimers();
-  });
-
-  it('re-seeds on the reconciliation interval after a failed initial get', async () => {
-    vi.useFakeTimers();
-    mockGet
-      .mockRejectedValueOnce(new Error('boom'))
-      .mockResolvedValue([{ author: 'A', state: { x: 1 }, ageMs: 0 }]);
-
-    const { result } = renderHook(() =>
-      useEphemeral<{ x: number }>('ctx-1', { reconcileMs: 1000 }),
-    );
-    await act(async () => { await Promise.resolve(); });
-    expect(result.current.error?.message).toBe('boom');
-    expect(result.current.peers.size).toBe(0);
-
-    await act(async () => { vi.advanceTimersByTime(1100); await Promise.resolve(); });
-    expect(result.current.peers.get('A')).toEqual({ x: 1 });
-    expect(result.current.error).toBeNull();
-    vi.useRealTimers();
-  });
-
-  it('does not refetch when an unstable codec identity is passed every render', async () => {
+  it('does not resubscribe when an unstable codec identity is passed every render', async () => {
     // `jsonCodec()` is a FACTORY — `{ codec: jsonCodec() }` at the call site is
     // a fresh object per render. As an effect dep that is an unbounded
-    // get_ephemeral storm, since every snapshot apply itself re-renders.
+    // resubscribe storm, since every applied entry itself re-renders.
     const makeCodec = () => ({
       encode: (v: unknown) => Array.from(new TextEncoder().encode(JSON.stringify(v))),
       decode: (b: number[]) => JSON.parse(new TextDecoder().decode(new Uint8Array(b))),
     });
-    mockGet.mockResolvedValue([{ author: 'A', state: { x: 1 }, ageMs: 0 }]);
 
     const { result, rerender } = renderHook(() =>
       useEphemeral<{ x: number }>('ctx-1', { codec: makeCodec() }),
     );
-    await waitFor(() => expect(result.current.peers.size).toBe(1));
-    const callsAfterSeed = mockGet.mock.calls.length;
-    expect(callsAfterSeed).toBe(1);
+    await waitFor(() => expect(listeners.length).toBe(1));
+    emit({ author: 'A', state: { x: 1 }, ageMs: 0 });
+    expect(result.current.peers.size).toBe(1);
+    expect(subscribeCalls.length).toBe(1);
 
     rerender();
     rerender();
     await act(async () => { await Promise.resolve(); });
 
-    expect(mockGet.mock.calls.length).toBe(callsAfterSeed);
+    expect(subscribeCalls.length).toBe(1);
     expect(listeners.length).toBe(1);
   });
 
@@ -193,7 +148,7 @@ describe('useEphemeral read path', () => {
     await waitFor(() => expect(result.current.error).not.toBeNull());
     expect(result.current.error?.message).toMatch(/mero\.ephemeral/);
     expect(result.current.error?.message).toMatch(/mero-js/);
-    expect(mockGet).not.toHaveBeenCalled();
+    expect(subscribeCalls).toEqual([]);
   });
 });
 
@@ -236,21 +191,50 @@ describe('useEphemeral write path', () => {
   });
 
   it('excludes your own echoed presence by default', async () => {
-    mockGet.mockResolvedValue([
-      { author: 'SELF', state: { x: 1 }, ageMs: 0 },
-      { author: 'OTHER', state: { x: 2 }, ageMs: 0 },
-    ]);
     const { result } = renderHook(() => useEphemeral<{ x: number }>('ctx-1'));
-    await waitFor(() => expect(result.current.peers.has('OTHER')).toBe(true));
+    // Wait for the identity to resolve, so `selfRef` is populated before the
+    // entries land (the retroactive-drop case is covered separately below).
+    await waitFor(() => expect(mockGetContextIdentitiesOwned).toHaveBeenCalled());
+    await act(async () => { await Promise.resolve(); });
+
+    emit({ author: 'SELF', state: { x: 1 }, ageMs: 0 });
+    emit({ author: 'OTHER', state: { x: 2 }, ageMs: 0 });
+
+    expect(result.current.peers.has('OTHER')).toBe(true);
     expect(result.current.peers.has('SELF')).toBe(false);
   });
 
   it('includes self when includeSelf is true', async () => {
-    mockGet.mockResolvedValue([{ author: 'SELF', state: { x: 1 }, ageMs: 0 }]);
     const { result } = renderHook(() =>
       useEphemeral<{ x: number }>('ctx-1', { includeSelf: true }),
     );
-    await waitFor(() => expect(result.current.peers.has('SELF')).toBe(true));
+    await waitFor(() => expect(listeners.length).toBe(1));
+    emit({ author: 'SELF', state: { x: 1 }, ageMs: 0 });
+    expect(result.current.peers.has('SELF')).toBe(true);
+  });
+
+  it('retroactively drops self when the identity resolves after the entry arrives', async () => {
+    // The identity lookup and the subscription's presence replay land
+    // independently, so a self entry can already be in `peers` by the time we
+    // learn which author is "self".
+    let resolveIdentity!: (v: { identities: string[] }) => void;
+    mockGetContextIdentitiesOwned.mockImplementation(
+      () => new Promise(res => { resolveIdentity = res; }),
+    );
+
+    const { result } = renderHook(() => useEphemeral<{ x: number }>('ctx-1'));
+    await waitFor(() => expect(listeners.length).toBe(1));
+
+    emit({ author: 'SELF', state: { x: 1 }, ageMs: 0 });
+    expect(result.current.peers.has('SELF')).toBe(true);
+
+    await act(async () => {
+      resolveIdentity({ identities: ['SELF'] });
+      await Promise.resolve();
+    });
+
+    expect(result.current.peers.has('SELF')).toBe(false);
+    expect(result.current.ageOf('SELF')).toBeUndefined();
   });
 
   it('never publishes a queued slice into the PREVIOUS context after a switch', async () => {
@@ -280,6 +264,21 @@ describe('useEphemeral write path', () => {
     expect(mockSet.mock.calls[0][0]).toBe('ctx-2');
     expect(mockSet.mock.calls[0][1]).toEqual({ x: 2 });
     vi.useRealTimers();
+  });
+
+  it('resets peers when the context changes', async () => {
+    const { result, rerender } = renderHook(
+      ({ ctx }) => useEphemeral<{ x: number }>(ctx, { includeSelf: true }),
+      { initialProps: { ctx: 'ctx-1' } },
+    );
+    await waitFor(() => expect(listeners.length).toBe(1));
+    emit({ author: 'A', state: { x: 1 }, ageMs: 0 });
+    expect(result.current.peers.has('A')).toBe(true);
+
+    rerender({ ctx: 'ctx-2' });
+    expect(result.current.peers.size).toBe(0);
+    expect(result.current.ageOf('A')).toBeUndefined();
+    await waitFor(() => expect(subscribeCalls).toEqual(['ctx-1', 'ctx-2']));
   });
 });
 
@@ -334,43 +333,32 @@ describe('useEphemeral error clearing', () => {
     await waitFor(() => expect(result.current.error).toBeNull());
   });
 
-  it('does not let a recovered snapshot read clobber a still-live identity error', async () => {
-    // Identity resolution is held pending until AFTER the snapshot read has
-    // already failed once, so the identity error becomes the LAST (and thus
-    // current) owner of the error slot — the case the shared/tagged design
-    // exists for: a same-tick producer must not clobber a different one.
-    let resolveIdentity!: (v: { identities: string[] }) => void;
-    mockGetContextIdentitiesOwned.mockImplementation(
-      () => new Promise(res => { resolveIdentity = res; }),
-    );
-    vi.useFakeTimers();
-    mockGet
-      .mockRejectedValueOnce(new Error('snapshot boom'))
-      .mockResolvedValue([{ author: 'A', state: { x: 1 }, ageMs: 0 }]);
+  it('does not let a recovered identity lookup clobber a still-live publish error', async () => {
+    // The case the tagged/shared error slot exists for: `identity` and
+    // `publish` are different producers, and a recovery in one must not clear
+    // the other's error.
+    mockGetContextIdentitiesOwned.mockResolvedValueOnce({ identities: [] });
+    mockSet.mockRejectedValue(new Error('publish boom'));
 
-    const { result } = renderHook(() =>
-      useEphemeral<{ x: number }>('ctx-1', { reconcileMs: 1000 }),
+    const { result, rerender } = renderHook(
+      ({ includeSelf }) =>
+        useEphemeral<{ x: number }>('ctx-1', { includeSelf, throttleMs: 0 }),
+      { initialProps: { includeSelf: false } },
+    );
+    await waitFor(() =>
+      expect(result.current.error?.message).toMatch(/could not resolve a local context identity/),
     );
 
-    // Let the initial (failing) snapshot read settle first.
+    // A failed publish takes ownership of the error slot.
+    act(() => { result.current.setPresence({ x: 1 }); });
+    await waitFor(() => expect(result.current.error?.message).toBe('publish boom'));
+
+    // The identity effect re-runs and this time resolves — it clears only the
+    // error IT raised, so the live publish error must survive.
+    mockGetContextIdentitiesOwned.mockResolvedValue({ identities: ['SELF'] });
+    rerender({ includeSelf: true });
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
-    expect(result.current.error?.message).toBe('snapshot boom');
 
-    // NOW identity resolution fails to find a self — it becomes the current
-    // owner of the error slot, overwriting the snapshot error.
-    await act(async () => {
-      resolveIdentity({ identities: [] });
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-    expect(result.current.error?.message).toMatch(/could not resolve a local context identity/);
-
-    // The reconciliation interval fires and this time the snapshot read
-    // succeeds — but the identity error is a DIFFERENT producer and must
-    // still be showing.
-    await act(async () => { vi.advanceTimersByTime(1100); await Promise.resolve(); });
-    expect(result.current.peers.get('A')).toEqual({ x: 1 });
-    expect(result.current.error?.message).toMatch(/could not resolve a local context identity/);
-    vi.useRealTimers();
+    expect(result.current.error?.message).toBe('publish boom');
   });
 });

@@ -109,6 +109,7 @@ export type {
   SubscriptionEventData,
   Codec,
   EphemeralClient,
+  EphemeralEntry,
   UseEphemeralOptions,
   UseEphemeralResult,
 } from './hooks';
