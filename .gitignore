@@ -42,3 +42,6 @@ example/logic/target/
 # pnpm
 .pnpm-store/
 storybook-static
+
+# Agent scratch workspace — never commit
+.superpowers/
