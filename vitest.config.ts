@@ -9,6 +9,10 @@ export default defineConfig({
       '**/dist/**',
       '**/.{idea,git,cache,output,temp}/**',
       'tests/e2e/**',
+      // Playwright specs, not vitest ones: `example/**/e2e` is driven by
+      // `playwright test` against live nodes and a browser. Vitest would
+      // otherwise collect them and fail on Playwright-only APIs.
+      'example/**/e2e/**',
     ],
   },
 });

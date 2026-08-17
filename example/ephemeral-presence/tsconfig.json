@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": ["vite/client"],
+    "paths": {
+      "@calimero-network/mero-react": ["../../src/index.ts"],
+      // TYPES come from the INSTALLED ^7.3.0, while Vite's alias resolves the
+      // RUNTIME import to the sibling mero-js build. That split is deliberate
+      // and is the same one `useEphemeral` documents: `^7.3.0` has no ephemeral
+      // surface to typecheck against, so the app reaches `mero.ephemeral`
+      // through an explicit structural cast. Pointing these types at the
+      // sibling checkout instead would also drag in unrelated drift between
+      // mero-react's imports and mero-js 9.x.
+      "@calimero-network/mero-js": ["../../node_modules/@calimero-network/mero-js"]
+    }
+  },
+  "include": ["src", "e2e", "vite.config.ts", "playwright.config.ts"]
+}
