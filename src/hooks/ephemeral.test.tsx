@@ -282,6 +282,80 @@ describe('useEphemeral write path', () => {
   });
 });
 
+describe('useEphemeral replay reconciliation', () => {
+  // A replay is authoritative: it lists exactly who is present. The dangerous
+  // case is a peer swept by the node while the SSE connection was down — its
+  // removal event reached nobody, and the reconnect's replay, listing only
+  // survivors, never mentions it again. Without reconciling `peers` down to the
+  // replay it is a permanent ghost.
+  it('drops a peer that a later replay no longer mentions', async () => {
+    vi.useFakeTimers();
+    const { result } = renderHook(() => useEphemeral<{ x: number }>('ctx-1'));
+    await act(async () => { await Promise.resolve(); });
+
+    // First replay: A and B are present.
+    emit({ author: 'A', state: { x: 1 }, ageMs: 10 });
+    emit({ author: 'B', state: { x: 2 }, ageMs: 10 });
+    act(() => { vi.advanceTimersByTime(60); });
+    expect(result.current.peers.has('A')).toBe(true);
+    expect(result.current.peers.has('B')).toBe(true);
+
+    // SseClient reconnects internally (no resubscribe visible to the hook) and
+    // the node replays only A — B was swept during the gap.
+    emit({ author: 'A', state: { x: 3 }, ageMs: 20 });
+    act(() => { vi.advanceTimersByTime(60); });
+
+    expect(result.current.peers.get('A')).toEqual({ x: 3 });
+    expect(result.current.peers.has('B')).toBe(false);
+    expect(result.current.ageOf('B')).toBeUndefined();
+    vi.useRealTimers();
+  });
+
+  it('keeps a peer that arrives live while a replay window is open', async () => {
+    vi.useFakeTimers();
+    const { result } = renderHook(() => useEphemeral<{ x: number }>('ctx-1'));
+    await act(async () => { await Promise.resolve(); });
+
+    emit({ author: 'A', state: { x: 1 }, ageMs: 10 });
+    // A live delta (no ageMs) mid-replay: this peer is present by definition
+    // and must not be swept when the window closes.
+    emit({ author: 'C', state: { x: 9 } });
+    act(() => { vi.advanceTimersByTime(60); });
+
+    expect(result.current.peers.has('A')).toBe(true);
+    expect(result.current.peers.has('C')).toBe(true);
+    vi.useRealTimers();
+  });
+
+  it('does not sweep peers when only live deltas arrive', async () => {
+    // No replayed entry means no replay window: live deltas alone must never
+    // trigger a reconcile pass.
+    vi.useFakeTimers();
+    const { result } = renderHook(() => useEphemeral<{ x: number }>('ctx-1'));
+    await act(async () => { await Promise.resolve(); });
+
+    emit({ author: 'A', state: { x: 1 } });
+    emit({ author: 'B', state: { x: 2 } });
+    act(() => { vi.advanceTimersByTime(500); });
+
+    expect(result.current.peers.size).toBe(2);
+    vi.useRealTimers();
+  });
+
+  it('treats a replayed removal as a removal, not as presence', async () => {
+    vi.useFakeTimers();
+    const { result } = renderHook(() => useEphemeral<{ x: number }>('ctx-1'));
+    await act(async () => { await Promise.resolve(); });
+
+    emit({ author: 'A', state: { x: 1 }, ageMs: 10 });
+    emit({ author: 'A', removed: true, ageMs: 10 });
+    act(() => { vi.advanceTimersByTime(60); });
+
+    expect(result.current.peers.has('A')).toBe(false);
+    vi.useRealTimers();
+  });
+});
+
 describe('useEphemeral error clearing', () => {
   it('clears an error raised for the previous context after switching to a healthy one', async () => {
     // ctx-1: identity resolution fails outright.
@@ -331,6 +405,118 @@ describe('useEphemeral error clearing', () => {
     rerender({ includeSelf: true });
 
     await waitFor(() => expect(result.current.error).toBeNull());
+  });
+
+  it('keeps reporting the missing-surface error across a context switch', async () => {
+    // The surface condition is a standing property of the client, not an event:
+    // switching context does not install an `ephemeral` surface, so the error
+    // must survive the per-context reset (it is re-derived, not latched).
+    currentMero = { admin: { getContextIdentitiesOwned: mockGetContextIdentitiesOwned } };
+    const { result, rerender } = renderHook(
+      ({ ctx }) => useEphemeral<{ x: number }>(ctx),
+      { initialProps: { ctx: 'ctx-1' } },
+    );
+    await waitFor(() => expect(result.current.error?.message).toMatch(/mero\.ephemeral/));
+
+    rerender({ ctx: 'ctx-2' });
+
+    expect(result.current.error?.message).toMatch(/mero\.ephemeral/);
+    await act(async () => { await Promise.resolve(); });
+    expect(result.current.error?.message).toMatch(/mero\.ephemeral/);
+  });
+
+  it('stops reporting an identity failure once includeSelf is opted into', async () => {
+    // Resolution keeps failing, but with includeSelf: true nothing in the hook
+    // needs the local identity — the error is about self-FILTERING, which the
+    // caller just opted out of.
+    mockGetContextIdentitiesOwned.mockResolvedValue({ identities: [] });
+    const { result, rerender } = renderHook(
+      ({ includeSelf }) => useEphemeral<{ x: number }>('ctx-1', { includeSelf }),
+      { initialProps: { includeSelf: false } },
+    );
+    await waitFor(() =>
+      expect(result.current.error?.message).toMatch(/could not resolve a local context identity/),
+    );
+
+    rerender({ includeSelf: true });
+
+    // Derived at read time, so it clears on the very next render — no waiting
+    // for the effect to re-run and re-resolve.
+    expect(result.current.error).toBeNull();
+    await act(async () => { await Promise.resolve(); });
+    expect(result.current.error).toBeNull();
+
+    // ...and it comes back if the caller opts out again while still unresolved.
+    rerender({ includeSelf: false });
+    await waitFor(() =>
+      expect(result.current.error?.message).toMatch(/could not resolve a local context identity/),
+    );
+  });
+
+  it('clears a publish error once a later publish succeeds', async () => {
+    mockSet.mockRejectedValueOnce(new Error('publish boom'));
+    const { result } = renderHook(() =>
+      useEphemeral<{ x: number }>('ctx-1', { throttleMs: 0 }),
+    );
+    await act(async () => { await Promise.resolve(); });
+
+    act(() => { result.current.setPresence({ x: 1 }); });
+    await waitFor(() => expect(result.current.error?.message).toBe('publish boom'));
+
+    // The blip was transient; the next publish goes through.
+    act(() => { result.current.setPresence({ x: 2 }); });
+    await waitFor(() => expect(result.current.error).toBeNull());
+  });
+
+  it('does not leak a publish rejection from a context that was left', async () => {
+    let rejectPublish!: (err: Error) => void;
+    mockSet.mockImplementation(() => new Promise((_res, rej) => { rejectPublish = rej; }));
+
+    const { result, rerender } = renderHook(
+      ({ ctx }) => useEphemeral<{ x: number }>(ctx, { throttleMs: 0 }),
+      { initialProps: { ctx: 'ctx-1' } },
+    );
+    await act(async () => { await Promise.resolve(); });
+
+    act(() => { result.current.setPresence({ x: 1 }); });
+    expect(mockSet).toHaveBeenCalledWith('ctx-1', { x: 1 }, undefined);
+
+    // Switch away while ctx-1's publish is still in flight, then let it fail.
+    rerender({ ctx: 'ctx-2' });
+    await act(async () => {
+      rejectPublish(new Error('stale publish boom'));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(result.current.error).toBeNull();
+  });
+
+  it('does not let a stale publish success clear the new context\'s publish error', async () => {
+    // Mirror image of the leak: an old context's RESOLUTION must not clear an
+    // error that belongs to the context we are now in.
+    let resolveStale!: () => void;
+    mockSet.mockImplementationOnce(() => new Promise<void>(res => { resolveStale = res; }));
+
+    const { result, rerender } = renderHook(
+      ({ ctx }) => useEphemeral<{ x: number }>(ctx, { throttleMs: 0 }),
+      { initialProps: { ctx: 'ctx-1' } },
+    );
+    await act(async () => { await Promise.resolve(); });
+    act(() => { result.current.setPresence({ x: 1 }); });
+
+    rerender({ ctx: 'ctx-2' });
+    mockSet.mockRejectedValue(new Error('ctx-2 boom'));
+    act(() => { result.current.setPresence({ x: 2 }); });
+    await waitFor(() => expect(result.current.error?.message).toBe('ctx-2 boom'));
+
+    await act(async () => {
+      resolveStale();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(result.current.error?.message).toBe('ctx-2 boom');
   });
 
   it('does not let a recovered identity lookup clobber a still-live publish error', async () => {

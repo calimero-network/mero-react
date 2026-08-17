@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { compareSemver } from '@calimero-network/mero-js';
 import { useMero } from '../context';
 import { base58ToHex } from '../utils/base58';
@@ -118,16 +118,51 @@ export interface UseEphemeralResult<T> {
 }
 
 /**
- * Which independent producer most recently set `error`. There is one
- * `error` slot but several producers (missing `ephemeral` surface, identity
- * resolution, publish failures) that can raise into it. Each producer only
- * clears the error it itself raised — tagged via this ref — so a recovery in
- * one producer can never clobber a still-live error from another. The one
- * exception is the context-switch reset effect, which clears
- * unconditionally: a context switch invalidates every producer's state at
- * once.
+ * Which asynchronous producer currently owns the latched error slot.
+ *
+ * Only genuinely ASYNCHRONOUS failures are latched — an event happened once,
+ * in the past, and nothing about the current render can re-derive it. Anything
+ * that is a standing property of the current props/client (notably "this
+ * client has no `mero.ephemeral` surface") is NOT latched: it is recomputed
+ * every render, so it can neither go stale nor be accidentally cleared.
+ *
+ * The slot is shared, so each producer only clears what it itself raised.
  */
-type ErrorSource = 'surface' | 'identity' | 'publish';
+type ErrorSource = 'identity' | 'publish';
+
+/**
+ * The latched async error, tagged with its producer AND with the context it
+ * belongs to.
+ *
+ * `contextKey` is what makes cross-context leaks structurally impossible
+ * rather than a matter of remembering to clear: a write whose key is no longer
+ * the current context is dropped on the way in (a publish that was in flight
+ * across a context switch), and a latch whose key no longer matches is not
+ * read on the way out. Neither path depends on some other effect having run a
+ * clear first.
+ */
+interface LatchedEphemeralError {
+  contextKey: string | null;
+  source: ErrorSource;
+  error: Error;
+}
+
+const NO_EPHEMERAL_SURFACE_MESSAGE =
+  'useEphemeral: this client has no `mero.ephemeral` surface. Ephemeral ' +
+  'presence requires @calimero-network/mero-js >= 9.1.0; upgrade the ' +
+  'installed @calimero-network/mero-js (and any lockfile pin) to use it.';
+
+const COULD_NOT_RESOLVE_IDENTITY_MESSAGE =
+  'useEphemeral: could not resolve a local context identity, so your own ' +
+  'presence cannot be filtered out. Pass includeSelf: true to accept this.';
+
+/**
+ * How long after the last replayed entry (one carrying `ageMs`) the replay
+ * window stays open before `peers` is reconciled down to what the replay
+ * contained. Long enough to absorb a replay burst split across several SSE
+ * frames/ticks, short enough that a swept peer does not linger.
+ */
+const REPLAY_RECONCILE_MS = 50;
 
 /**
  * Observe and publish ephemeral presence (cursors, typing, online) for a
@@ -145,7 +180,15 @@ type ErrorSource = 'surface' | 'identity' | 'publish';
  * cross-machine clock comparison is ever performed.
  *
  * No client-side TTL or heartbeat: the node sweeps at 7s and emits removals,
- * and re-publishes on your behalf every 2.5s.
+ * and re-publishes on your behalf every 2.5s. A replay is treated as
+ * AUTHORITATIVE — see the replay-reconcile pass in the read effect — so a peer
+ * swept while the SSE connection was down does not survive the reconnect.
+ *
+ * `error` is derived, not accumulated: standing conditions (no `ephemeral`
+ * surface) are recomputed every render, one-shot async failures are latched
+ * keyed by the context they happened in, and whether a latched failure is even
+ * relevant (an unresolved identity when `includeSelf` is true) is decided at
+ * read time. Nothing survives a context switch.
  */
 export function useEphemeral<T>(
   contextId: string | null,
@@ -160,20 +203,53 @@ export function useEphemeral<T>(
     : null;
 
   const [peers, setPeers] = useState<Map<string, T>>(new Map());
-  const [error, setError] = useState<Error | null>(null);
-  // See `ErrorSource` above: tags which producer currently owns `error`, so
-  // each producer's clear only fires when it still owns the slot.
-  const errorSourceRef = useRef<ErrorSource | null>(null);
-  const setSourceError = useCallback((source: ErrorSource, err: Error) => {
-    errorSourceRef.current = source;
-    setError(err);
+  // The one latched async error (see `LatchedEphemeralError`). Not read
+  // directly — `error` below derives what is actually reported from it.
+  const [latchedError, setLatchedError] = useState<LatchedEphemeralError | null>(null);
+  // The context the CURRENT render targets. Read by `setSourceError` so a
+  // callback that resolves after a context switch can tell that its result is
+  // no longer wanted without closing over anything but its own captured key.
+  const contextKeyRef = useRef<string | null>(contextId);
+  contextKeyRef.current = contextId;
+  // `key` is the contextId captured when the failing operation was STARTED,
+  // not when it settled. A late write from a context we have already left is
+  // dropped here rather than being written and then hopefully cleared.
+  const setSourceError = useCallback(
+    (source: ErrorSource, err: Error, key: string | null) => {
+      if (key !== contextKeyRef.current) return;
+      setLatchedError({ contextKey: key, source, error: err });
+    },
+    [],
+  );
+  const clearSourceError = useCallback((source: ErrorSource, key: string | null) => {
+    setLatchedError(prev =>
+      prev && prev.source === source && prev.contextKey === key ? null : prev,
+    );
   }, []);
-  const clearSourceError = useCallback((source: ErrorSource) => {
-    if (errorSourceRef.current === source) {
-      errorSourceRef.current = null;
-      setError(null);
-    }
-  }, []);
+
+  // DERIVED, never latched: "this client has no `mero.ephemeral` surface" is a
+  // standing property of the current client, not an event. Recomputing it every
+  // render is what makes it impossible to (a) leave it set after an upgraded
+  // client arrives or (b) lose it to some other effect's clear — a context
+  // switch, for instance, cannot hide a client that still has no surface.
+  // Memoised only so the Error identity is stable while the condition holds.
+  const surfaceError = useMemo(
+    () => (mero && !ephemeral ? new Error(NO_EPHEMERAL_SURFACE_MESSAGE) : null),
+    [mero, ephemeral],
+  );
+
+  // A latch is reported only if it belongs to the context being rendered, and
+  // only if it is still MEANINGFUL: an unresolved local identity is an error
+  // solely because self-filtering needs it, so opting into `includeSelf` makes
+  // it a non-event — decided here, at read time, rather than by racing an
+  // effect to clear it.
+  const error =
+    surfaceError ??
+    (latchedError &&
+    latchedError.contextKey === contextId &&
+    !(latchedError.source === 'identity' && includeSelf)
+      ? latchedError.error
+      : null);
   // author -> local ms timestamp the entry is considered current as of.
   const receivedAtRef = useRef<Map<string, number>>(new Map());
   // `codec` and `initial` are held in refs, never in a dependency array:
@@ -199,6 +275,10 @@ export function useEphemeral<T>(
   // throttled, rather than bypassing the throttle because it looks like it's
   // arriving long after a (nonexistent) previous publish.
   const lastSentAtRef = useRef<number>(Date.now());
+  // Open replay window: the authors seen since a replayed entry (one carrying
+  // `ageMs`) last arrived. Null when no replay is in progress.
+  const replaySeenRef = useRef<Set<string> | null>(null);
+  const replayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const ageOf = useCallback((author: string): number | undefined => {
     const at = receivedAtRef.current.get(author);
@@ -214,10 +294,12 @@ export function useEphemeral<T>(
   // the new one. Presence is app-defined data (cursor position, typing target),
   // so both are genuine cross-context writes, not cosmetic leaks.
   //
-  // `error` is cleared here too, and UNCONDITIONALLY (not through
-  // `clearSourceError`) — every producer's state is being reset by this same
-  // effect, so an error raised for the previous context is never still valid
-  // for the new one, regardless of which producer raised it.
+  // The latched error is dropped here as well, but purely as housekeeping (it
+  // is what makes A -> B -> A not resurrect A's old failure). Correctness does
+  // not rest on it: the latch carries its own `contextKey`, so an error from a
+  // context we have left is neither written nor read regardless of whether this
+  // effect ran. The standing surface condition is untouched — it is derived, so
+  // it re-reports itself on the very next render if it is still true.
   useEffect(() => {
     setPeers(new Map());
     receivedAtRef.current = new Map();
@@ -225,35 +307,25 @@ export function useEphemeral<T>(
       clearTimeout(timerRef.current);
       timerRef.current = null;
     }
+    if (replayTimerRef.current) {
+      clearTimeout(replayTimerRef.current);
+      replayTimerRef.current = null;
+    }
+    replaySeenRef.current = null;
     pendingRef.current = undefined;
     lastLocalRef.current = initialRef.current;
     selfRef.current = null;
-    errorSourceRef.current = null;
-    setError(null);
+    setLatchedError(null);
   }, [contextId]);
-
-  // The client predates `mero.ephemeral` (mero-js < 9.1.0). Without this the
-  // hook degrades to an empty `peers` and a no-op `setPresence` with
-  // `error: null` — zero diagnostic for the consumer.
-  useEffect(() => {
-    if (mero && !ephemeral) {
-      setSourceError('surface', new Error(
-        'useEphemeral: this client has no `mero.ephemeral` surface. Ephemeral ' +
-        'presence requires @calimero-network/mero-js >= 9.1.0; upgrade the ' +
-        'installed @calimero-network/mero-js (and any lockfile pin) to use it.',
-      ));
-    } else if (ephemeral) {
-      // A client swap (e.g. MeroProvider upgrading to one that exposes
-      // `mero.ephemeral`) can make this go from missing to present without a
-      // context switch resetting the shared error slot.
-      clearSourceError('surface');
-    }
-  }, [mero, ephemeral, setSourceError, clearSourceError]);
 
   // Resolve THIS node's context member key — the same value the node stamps
   // as `author` on ephemeral entries.
   useEffect(() => {
     if (!mero || !contextId) return;
+    // Captured at START. Everything this effect reports is tagged with it, so
+    // a slow lookup that lands after a context switch cannot write into the
+    // context we switched to.
+    const key = contextId;
     let cancelled = false;
     mero.admin
       .getContextIdentitiesOwned(contextId)
@@ -262,18 +334,18 @@ export function useEphemeral<T>(
         const self = res.identities?.[0] ?? null;
         selfRef.current = self;
         if (!self) {
-          if (!includeSelf) {
-            setSourceError('identity', new Error(
-              'useEphemeral: could not resolve a local context identity, so your own ' +
-              'presence cannot be filtered out. Pass includeSelf: true to accept this.',
-            ));
-          }
+          // Latched unconditionally — `includeSelf` is NOT consulted here.
+          // Whether an unresolved identity matters is a question about the
+          // CURRENT props, so it is answered where `error` is derived; asking
+          // it here is what previously left the error stranded when
+          // `includeSelf` flipped to true while resolution still failed.
+          setSourceError('identity', new Error(COULD_NOT_RESOLVE_IDENTITY_MESSAGE), key);
           return;
         }
         // A later run of this effect (contextId change, includeSelf toggle)
         // resolved a self identity where an earlier run didn't — clear the
         // "could not resolve" error this effect itself raised.
-        clearSourceError('identity');
+        clearSourceError('identity', key);
         // Ordering race: the identity lookup and the subscription's presence
         // replay land independently, so a self entry can already be seeded in
         // `peers`. Retroactively drop it now that we know who "self" is.
@@ -289,7 +361,7 @@ export function useEphemeral<T>(
       })
       .catch((err: unknown) => {
         if (!cancelled) {
-          setSourceError('identity', toError(err));
+          setSourceError('identity', toError(err), key);
         }
       });
     return () => { cancelled = true; };
@@ -306,14 +378,57 @@ export function useEphemeral<T>(
   // current presence to this connection as ordinary entries, then stream live
   // deltas — so this one handler both seeds and updates, and an SSE reconnect
   // (which re-subscribes) re-seeds without any extra machinery.
+  //
+  // A REPLAY IS AUTHORITATIVE. The node replays exactly who is present right
+  // now; anything we still hold that the replay does not mention is gone.
+  // Without reconciling against it, a peer swept while the connection was down
+  // is a permanent ghost: its removal event was delivered to nobody, and the
+  // replay — which lists only survivors — will never mention it again. That
+  // sweep happens inside `SseClient`'s auto-reconnect, so it does NOT re-run
+  // this effect; reconciliation has to be driven by the entries themselves,
+  // which is why it keys off `ageMs` (present only on replayed entries) rather
+  // than off subscribe/unsubscribe. Clearing `peers` eagerly on subscribe would
+  // also miss the reconnect case entirely — and would blank the UI on every
+  // `includeSelf` toggle.
+  //
+  // The window closes `REPLAY_RECONCILE_MS` after the last replayed entry, and
+  // live entries arriving while it is open count as present too, so a peer that
+  // publishes mid-replay is never swept. A replayed entry that somehow arrives
+  // after the window closed re-adds its author immediately — the failure mode
+  // is a flicker, never a resurrected ghost or a permanent loss.
   useEffect(() => {
     if (!ephemeral || !contextId) return;
+
+    const closeReplayWindow = () => {
+      replayTimerRef.current = null;
+      const seen = replaySeenRef.current;
+      replaySeenRef.current = null;
+      if (!seen) return;
+      setPeers(prev => {
+        let next: Map<string, T> | null = null;
+        for (const author of prev.keys()) {
+          if (seen.has(author)) continue;
+          if (!next) next = new Map(prev);
+          next.delete(author);
+          receivedAtRef.current.delete(author);
+        }
+        return next ?? prev;
+      });
+    };
 
     const unsubscribe = ephemeral.subscribe<T>(
       contextId,
       entry => {
         const { author, state } = entry;
+        if (entry.ageMs !== undefined) {
+          // A replayed entry: (re)open the reconcile window and debounce its
+          // close, so a replay burst split across frames counts as one replay.
+          if (!replaySeenRef.current) replaySeenRef.current = new Set();
+          if (replayTimerRef.current) clearTimeout(replayTimerRef.current);
+          replayTimerRef.current = setTimeout(closeReplayWindow, REPLAY_RECONCILE_MS);
+        }
         if (entry.removed || state === undefined) {
+          replaySeenRef.current?.delete(author);
           receivedAtRef.current.delete(author);
           setPeers(prev => {
             if (!prev.has(author)) return prev;
@@ -324,6 +439,7 @@ export function useEphemeral<T>(
           return;
         }
         if (!includeSelf && author === selfRef.current) return;
+        replaySeenRef.current?.add(author);
         // `ageMs` is absent on a live delta (current as of now) and present on
         // a replayed entry (current as of `now - ageMs`). `?? 0` — never a
         // truthiness test: an `ageMs` of 0 is a real, meaningful value.
@@ -333,7 +449,14 @@ export function useEphemeral<T>(
       codecRef.current,
     );
 
-    return unsubscribe;
+    return () => {
+      if (replayTimerRef.current) {
+        clearTimeout(replayTimerRef.current);
+        replayTimerRef.current = null;
+      }
+      replaySeenRef.current = null;
+      unsubscribe();
+    };
     // `ephemeral` itself is a dep on purpose — see the identity-resolution
     // effect above. A replaced client must re-subscribe against the new
     // client, not keep reading/writing through the old (possibly closed)
@@ -342,11 +465,17 @@ export function useEphemeral<T>(
 
   const publish = useCallback((value: T) => {
     if (!ephemeral || !contextId) return;
+    // Captured at START, like the identity lookup's `key`: `ephemeral.set` is
+    // not cancellable, so a rejection can land long after a context switch.
+    // Tagging the write with the context it was issued for is what keeps that
+    // failure out of the new context's error slot.
+    const key = contextId;
     lastSentAtRef.current = Date.now();
-    void ephemeral.set<T>(contextId, value, codecRef.current).catch((err: unknown) => {
-      setSourceError('publish', toError(err));
-    });
-  }, [ephemeral, contextId, setSourceError]);
+    void ephemeral.set<T>(key, value, codecRef.current).then(
+      () => clearSourceError('publish', key),
+      (err: unknown) => setSourceError('publish', toError(err), key),
+    );
+  }, [ephemeral, contextId, setSourceError, clearSourceError]);
 
   /**
    * Publish your own presence.
