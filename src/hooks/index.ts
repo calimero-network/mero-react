@@ -289,7 +289,7 @@ export function useEphemeral<T>(
       })
       .catch((err: unknown) => {
         if (!cancelled) {
-          setSourceError('identity', err instanceof Error ? err : new Error(String(err)));
+          setSourceError('identity', toError(err));
         }
       });
     return () => { cancelled = true; };
@@ -344,7 +344,7 @@ export function useEphemeral<T>(
     if (!ephemeral || !contextId) return;
     lastSentAtRef.current = Date.now();
     void ephemeral.set<T>(contextId, value, codecRef.current).catch((err: unknown) => {
-      setSourceError('publish', err instanceof Error ? err : new Error(String(err)));
+      setSourceError('publish', toError(err));
     });
   }, [ephemeral, contextId, setSourceError]);
 
