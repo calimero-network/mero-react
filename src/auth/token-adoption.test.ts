@@ -14,8 +14,19 @@ function jwt(claims: { iat?: number; exp?: number; sub?: string }): string {
 const NODE = 'https://node-a.example.com';
 const OTHER_NODE = 'https://node-b.example.com';
 
-/** Seconds-since-epoch helpers, kept far from `now` so nothing is flaky. */
-const t = (offsetSec: number) => Math.floor(Date.now() / 1000) + offsetSec;
+/**
+ * Seconds-since-epoch helpers, pinned to ONE clock reading for the whole file.
+ *
+ * `Date.now()` used to be sampled inside `t()`, so every call re-read the
+ * clock. A test that builds a JWT with `exp: t(3660)` and then asserts
+ * `expires_at: t(3660) * SEC` therefore compared two independent readings: if
+ * the wall clock crossed a second boundary between them the values differed by
+ * exactly one second and the deep-equal failed. Keeping the offsets far from
+ * `now` never helped — the flake came from reading the clock twice, not from
+ * being close to it. Rare on an idle machine, likelier on a loaded CI runner.
+ */
+const NOW_SEC = Math.floor(Date.now() / 1000);
+const t = (offsetSec: number) => NOW_SEC + offsetSec;
 
 function storedBundle(over: Partial<TokenData> = {}): TokenData {
   const access = jwt({ iat: t(-60), exp: t(3540) });
