@@ -153,7 +153,13 @@ afterAll(() => {
   }
 });
 
-describe('ephemeral presence — real merod, real mero-js, real hook', () => {
+// Requires BOTH the sibling mero-js build (aliased in by vitest.e2e.config.ts)
+// and the two demo nodes. Neither exists in the released-merod CI job, and the
+// published mero-js has no `ephemeral` surface at all, so skip rather than
+// fail there. Locally, see tests/e2e/README.md for the three commands.
+const hasLocalMeroJs = process.env.MERO_E2E_LOCAL_MEROJS === '1';
+
+describe.skipIf(!hasLocalMeroJs)('ephemeral presence — real merod, real mero-js, real hook', () => {
   it('1. publishes from a hook on node 1 and observes it in a hook on node 2 (cross-node, over gossip)', async () => {
     const a = renderHook(() => useEphemeral<Cursor>(CONTEXT_ID), {
       wrapper: wrapperFor(client(NODE1)),

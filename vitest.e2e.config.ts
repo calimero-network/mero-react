@@ -25,19 +25,27 @@ import react from '@vitejs/plugin-react';
  * package.json edit, no lockfile churn.
  */
 const localMeroJs = fileURLToPath(new URL('../mero-js/dist/index.mjs', import.meta.url));
-if (!existsSync(localMeroJs)) {
-  throw new Error(
-    `e2e: local mero-js build not found at ${localMeroJs}. ` +
-      'Build it first: (cd ../mero-js && npm run build)',
-  );
-}
+
+/**
+ * The sibling checkout is a LOCAL developer affordance, not a CI one: the
+ * "E2E (hooks vs released merod)" job checks out this repo alone and runs the
+ * other suites against a *released* merod. Throwing here would fail the whole
+ * config at load time and take those suites down with it, which is exactly
+ * what happened. Absent build => no alias, and the presence suite skips
+ * itself (see MERO_E2E_LOCAL_MEROJS below) rather than failing against a
+ * published mero-js that has no `ephemeral` surface.
+ */
+const hasLocalMeroJs = existsSync(localMeroJs);
 
 export default defineConfig({
   plugins: [react()],
   resolve: {
-    alias: [{ find: /^@calimero-network\/mero-js$/, replacement: localMeroJs }],
+    alias: hasLocalMeroJs
+      ? [{ find: /^@calimero-network\/mero-js$/, replacement: localMeroJs }]
+      : [],
   },
   test: {
+    env: { MERO_E2E_LOCAL_MEROJS: hasLocalMeroJs ? '1' : '' },
     include: ['tests/e2e/**/*.test.{ts,tsx}'],
     environment: 'jsdom',
     globals: true,
