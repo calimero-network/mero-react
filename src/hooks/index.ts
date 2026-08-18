@@ -25,6 +25,7 @@ import type {
   ListGroupMembersResponseData,
   Namespace,
   NamespaceIdentity,
+  NodeIdentity,
   ReparentGroupRequest,
   AddGroupMembersRequest,
   RemoveGroupMembersRequest,
@@ -1212,6 +1213,28 @@ export function useNamespace(namespaceId?: string | null) {
   return { namespace: data, loading, error, refetch };
 }
 
+/**
+ * Who this node is: `accountId` is what member-addressing takes and what
+ * `useGroupMembers` rows are keyed by — `publicKey` is the signing key and
+ * addresses nobody. Both are 32-byte strings, so a swap fails silently.
+ */
+export function useNodeIdentity() {
+  const { mero } = useMero();
+  const { data, loading, error, refetch } = useAsyncResource<NodeIdentity | null>(
+    mero ? () => mero.admin.getNodeIdentity() : null,
+    null,
+    [mero],
+  );
+  return { identity: data, loading, error, refetch };
+}
+
+/**
+ * @deprecated Use {@link useNodeIdentity}. Identity is per-node, not
+ * per-namespace, and this no longer gates on participation: it answers for a
+ * namespace this node never joined, so `identity != null` is not "am I a
+ * member?" — ask `useNamespaces` for that. Its `publicKey` is the signing key,
+ * NOT the account member-addressing wants.
+ */
 export function useNamespaceIdentity(namespaceId?: string | null) {
   const { mero } = useMero();
   const { data, loading, error, refetch } = useAsyncResource<NamespaceIdentity | null>(
@@ -1694,9 +1717,41 @@ export function useDetachContextFromGroup() {
 }
 
 /**
- * Migration-status rollup for a namespace (skew #3). Migration facts arrive via
- * heartbeat gossip (no SSE), so liveness is polling: pass `pollIntervalMs` to
- * re-fetch on an interval. Derived counters are null-safe before the first load.
+ * Subscribe to a namespace's `GroupMigration` events, invoking `onEvent` per
+ * frame and unsubscribing on unmount.
+ *
+ * A non-admin subscriber never sees `CascadeProgress`; core delivers that to
+ * namespace admins only, so a UI must not wait on it to decide progress.
+ */
+export function useMigrationEvents(
+  namespaceId: string | null | undefined,
+  onEvent: (event: GroupMigrationEventData) => void,
+) {
+  const { mero } = useMero();
+  // Held in a ref so a caller passing an inline arrow does not resubscribe on
+  // every render - the subscription's lifetime is the namespace's, not the
+  // callback identity's.
+  const handlerRef = useRef(onEvent);
+  handlerRef.current = onEvent;
+
+  useEffect(() => {
+    if (!mero || !namespaceId) return;
+    const sse = mero.events;
+    const unsubscribe = sse.onMigrationEvent((event) => handlerRef.current(event));
+    sse.connect().catch(() => {});
+    sse.subscribe({ groupIds: [namespaceId] }).catch(() => {});
+    return unsubscribe;
+  }, [mero, namespaceId]);
+}
+
+/**
+ * Migration-status rollup for a namespace (skew #3).
+ *
+ * Live: subscribes to the `GroupMigration` event family and re-reads on each
+ * frame. It re-READS rather than folding the event's counters in, because the
+ * rollup is recomputed from raw member rows and is the authoritative answer.
+ * `pollIntervalMs` stays as the fallback when SSE is unavailable.
+ * Derived counters are null-safe before the first load.
  */
 export function useMigrationStatus(
   namespaceId?: string | null,
@@ -1763,6 +1818,12 @@ export function useMigrationStatus(
     return () => clearInterval(handle);
   }, [pollIntervalMs, mero, namespaceId, refetch]);
 
+  // Live updates. The frame is a signal, not the answer: it says something
+  // moved, and the re-read is what stays authoritative. Subscribing does not
+  // retire the poll above - SSE may be unavailable (no token, proxy, older
+  // node), and then the interval is the only liveness there is.
+  useMigrationEvents(namespaceId, () => void refetch());
+
   const rollup: MigrationStatusRollup | null = status?.rollup ?? null;
   const members: MemberMigrationStatusEntry[] = status?.members ?? [];
 
@@ -1771,6 +1832,12 @@ export function useMigrationStatus(
     rollup,
     members,
     allMigrated: rollup?.allMigrated ?? false,
+    /**
+     * When this node watched the fleet converge, or `null`. Durable, unlike
+     * `allMigrated`, which is recomputed from in-TTL heartbeats and lapses back
+     * to false when a member simply goes quiet.
+     */
+    fleetCompletedAt: status?.fleetCompletedAt ?? null,
     membersPendingSignature: rollup?.membersPendingSignature ?? 0,
     /** Members whose migrate aborted (migration-check failed or apply errored). */
     failed: rollup?.failed ?? 0,
@@ -1942,7 +2009,6 @@ interface GroupAppVersion {
   applicationId: string | null;
   /** The installed blob differs from the one the group targets (see hook doc). */
   pendingApply: boolean;
-  upgradePolicy: string | null;
   /** Only populated via the group-info path; `null` in the namespace path. */
   activeUpgrade: GroupUpgradeStatusResponseData;
 }
@@ -1951,7 +2017,6 @@ const EMPTY_GROUP_APP_VERSION: GroupAppVersion = {
   version: null,
   applicationId: null,
   pendingApply: false,
-  upgradePolicy: null,
   activeUpgrade: null,
 };
 
@@ -2009,18 +2074,15 @@ export function useGroupAppVersion(groupId?: string) {
 
       let appKey: string | undefined;
       let applicationId: string | null;
-      let upgradePolicy: string | null;
       let activeUpgrade: GroupUpgradeStatusResponseData = null;
 
       if (namespace) {
         appKey = namespace.appKey;
         applicationId = namespace.targetApplicationId;
-        upgradePolicy = namespace.upgradePolicy ?? null;
       } else {
         const info = await mero.admin.getGroupInfo(groupId);
         appKey = info.appKey;
         applicationId = info.targetApplicationId;
-        upgradePolicy = info.upgradePolicy ?? null;
         activeUpgrade = info.activeUpgrade ?? null;
       }
 
@@ -2036,7 +2098,7 @@ export function useGroupAppVersion(groupId?: string) {
       }
 
       if (mountedRef.current && seq === reqRef.current) {
-        setData({ version, applicationId, pendingApply, upgradePolicy, activeUpgrade });
+        setData({ version, applicationId, pendingApply, activeUpgrade });
       }
     } catch (err) {
       const errorValue = toError(err);

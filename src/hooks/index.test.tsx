@@ -190,6 +190,18 @@ function createMero(
       listNamespaceGroups: vi.fn().mockResolvedValue([]),
       ...adminOverrides,
     },
+    // The SDK's event client. Modelled by default because hooks now subscribe
+    // for liveness - a mock without it fails on the subscribe, not on anything
+    // the test is about. `extra` still overrides it per case.
+    events: {
+      onMigrationEvent: vi.fn(() => () => {}),
+      onAppVersionChanged: vi.fn(() => () => {}),
+      on: vi.fn(),
+      off: vi.fn(),
+      connect: vi.fn().mockResolvedValue(undefined),
+      subscribe: vi.fn().mockResolvedValue(undefined),
+      unsubscribe: vi.fn().mockResolvedValue(undefined),
+    },
     ...extra,
   };
 }
@@ -1517,6 +1529,46 @@ describe('group and context hooks', () => {
 });
 
 describe('useMigrationStatus', () => {
+  it('re-reads on a live migration event rather than folding its counters in', async () => {
+    // The rollup is recomputed from raw member rows, so the frame is only a
+    // signal that something moved - trusting its counters would let the panel
+    // disagree with the authoritative read.
+    const getMigrationStatus = vi.fn().mockResolvedValue({
+      targetVersion: 2,
+      expectedMembers: 1,
+      rollup: {
+        migrated: 0, inProgress: 1, unknown: 0, failed: 0,
+        total: 1, allMigrated: false, membersPendingSignature: 0,
+      },
+      members: [],
+    });
+    let fire: ((e: unknown) => void) | undefined;
+    const mero = createMero(
+      { getMigrationStatus },
+      {
+        events: {
+          onMigrationEvent: vi.fn((cb: (e: unknown) => void) => {
+            fire = cb;
+            return () => {};
+          }),
+          connect: vi.fn().mockResolvedValue(undefined),
+          subscribe: vi.fn().mockResolvedValue(undefined),
+        },
+      },
+    );
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    const { result } = renderHook(() => useMigrationStatus('ns-1'));
+    await waitFor(() => expect(result.current.rollup).not.toBeNull());
+    expect(getMigrationStatus).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      fire?.({ groupId: 'ns-1', type: 'MigrationProgress', data: {} });
+    });
+
+    await waitFor(() => expect(getMigrationStatus).toHaveBeenCalledTimes(2));
+  });
+
   it('exposes the rollup, members, and derived counters', async () => {
     const getMigrationStatus = vi.fn().mockResolvedValue({
       targetVersion: 2,
@@ -1556,7 +1608,7 @@ describe('useAppVersion', () => {
   it('reports stale when the installed version differs from expected', async () => {
     const mero = createMero(
       { getContext: vi.fn().mockResolvedValue({ id: 'ctx1', applicationId: 'a', rootHash: 'r', dagHeads: [], applicationVersion: '1.0.0' }) },
-      { events: { onAppVersionChanged: vi.fn(() => () => {}) } },
+      { events: { onAppVersionChanged: vi.fn(() => () => {}), onMigrationEvent: vi.fn(() => () => {}), connect: vi.fn().mockResolvedValue(undefined), subscribe: vi.fn().mockResolvedValue(undefined) } },
     );
     mockUseMero.mockReturnValue({ mero } as never);
 
@@ -1568,7 +1620,7 @@ describe('useAppVersion', () => {
   it('is not stale when versions match', async () => {
     const mero = createMero(
       { getContext: vi.fn().mockResolvedValue({ id: 'ctx1', applicationId: 'a', rootHash: 'r', dagHeads: [], applicationVersion: '2.0.0' }) },
-      { events: { onAppVersionChanged: vi.fn(() => () => {}) } },
+      { events: { onAppVersionChanged: vi.fn(() => () => {}), onMigrationEvent: vi.fn(() => () => {}), connect: vi.fn().mockResolvedValue(undefined), subscribe: vi.fn().mockResolvedValue(undefined) } },
     );
     mockUseMero.mockReturnValue({ mero } as never);
 
@@ -1581,7 +1633,7 @@ describe('useAppVersion', () => {
     let captured: ((e: { contextId: string; toVersion?: string }) => void) | null = null;
     const mero = createMero(
       { getContext: vi.fn().mockResolvedValue({ id: 'ctx1', applicationId: 'a', rootHash: 'r', dagHeads: [], applicationVersion: '1.0.0' }) },
-      { events: { onAppVersionChanged: vi.fn((cb: (e: { contextId: string; toVersion?: string }) => void) => { captured = cb; return () => {}; }) } },
+      { events: { onAppVersionChanged: vi.fn((cb: (e: { contextId: string; toVersion?: string }) => void) => { captured = cb; return () => {}; }), onMigrationEvent: vi.fn(() => () => {}), connect: vi.fn().mockResolvedValue(undefined), subscribe: vi.fn().mockResolvedValue(undefined) } },
     );
     mockUseMero.mockReturnValue({ mero } as never);
 
@@ -1700,7 +1752,7 @@ describe('useGroupAppVersion', () => {
         listNamespaces: vi.fn().mockResolvedValue([namespace(KEY_AA)]),
         getApplication: vi.fn().mockResolvedValue(application(BLOB_AA, '2.1.0')),
       },
-      { events: { onAppVersionChanged: vi.fn(() => () => {}) } },
+      { events: { onAppVersionChanged: vi.fn(() => () => {}), onMigrationEvent: vi.fn(() => () => {}), connect: vi.fn().mockResolvedValue(undefined), subscribe: vi.fn().mockResolvedValue(undefined) } },
     );
     mockUseMero.mockReturnValue({ mero } as never);
 
@@ -1708,7 +1760,6 @@ describe('useGroupAppVersion', () => {
 
     await waitFor(() => expect(result.current.version).toBe('2.1.0'));
     expect(result.current.applicationId).toBe('app-1');
-    expect(result.current.upgradePolicy).toBe('LazyOnAccess');
     expect(result.current.pendingApply).toBe(false);
     expect(result.current.activeUpgrade).toBeNull();
     expect(mero.admin.getApplication).toHaveBeenCalledWith('app-1');
@@ -1720,7 +1771,7 @@ describe('useGroupAppVersion', () => {
         listNamespaces: vi.fn().mockResolvedValue([namespace(KEY_AA)]),
         getApplication: vi.fn().mockResolvedValue(application(BLOB_BB)),
       },
-      { events: { onAppVersionChanged: vi.fn(() => () => {}) } },
+      { events: { onAppVersionChanged: vi.fn(() => () => {}), onMigrationEvent: vi.fn(() => () => {}), connect: vi.fn().mockResolvedValue(undefined), subscribe: vi.fn().mockResolvedValue(undefined) } },
     );
     mockUseMero.mockReturnValue({ mero } as never);
 
@@ -1736,7 +1787,7 @@ describe('useGroupAppVersion', () => {
         listNamespaces: vi.fn().mockResolvedValue([namespace('00'.repeat(32))]),
         getApplication: vi.fn().mockResolvedValue(application(BLOB_BB)),
       },
-      { events: { onAppVersionChanged: vi.fn(() => () => {}) } },
+      { events: { onAppVersionChanged: vi.fn(() => () => {}), onMigrationEvent: vi.fn(() => () => {}), connect: vi.fn().mockResolvedValue(undefined), subscribe: vi.fn().mockResolvedValue(undefined) } },
     );
     mockUseMero.mockReturnValue({ mero } as never);
 
@@ -1771,13 +1822,13 @@ describe('useGroupAppVersion', () => {
         getGroupInfo,
         getApplication: vi.fn().mockResolvedValue(application(BLOB_AA)),
       },
-      { events: { onAppVersionChanged: vi.fn(() => () => {}) } },
+      { events: { onAppVersionChanged: vi.fn(() => () => {}), onMigrationEvent: vi.fn(() => () => {}), connect: vi.fn().mockResolvedValue(undefined), subscribe: vi.fn().mockResolvedValue(undefined) } },
     );
     mockUseMero.mockReturnValue({ mero } as never);
 
     const { result } = renderHook(() => useGroupAppVersion('sub-1'));
 
-    await waitFor(() => expect(result.current.upgradePolicy).toBe('Automatic'));
+    await waitFor(() => expect(result.current.applicationId).toBe('app-1'));
     expect(getGroupInfo).toHaveBeenCalledWith('sub-1');
     expect(result.current.activeUpgrade).toEqual(activeUpgrade);
     expect(result.current.pendingApply).toBe(false);
@@ -1787,7 +1838,7 @@ describe('useGroupAppVersion', () => {
     const listNamespaces = vi.fn();
     const mero = createMero(
       { listNamespaces },
-      { events: { onAppVersionChanged: vi.fn(() => () => {}) } },
+      { events: { onAppVersionChanged: vi.fn(() => () => {}), onMigrationEvent: vi.fn(() => () => {}), connect: vi.fn().mockResolvedValue(undefined), subscribe: vi.fn().mockResolvedValue(undefined) } },
     );
     mockUseMero.mockReturnValue({ mero } as never);
 

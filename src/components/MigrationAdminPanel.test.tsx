@@ -23,7 +23,15 @@ describe('MigrationAdminPanel', () => {
         { peer: 'dd', report: { schemaVersion: 1, residueAuto: 1, syncedUpToHlc: 0, reportedAt: 0, authoredRemaining: 0, migrationFailed: 'check_aborted' }, state: 'failed' },
       ],
     });
-    const mero = { admin: { getMigrationStatus }, rpc: {}, events: {} };
+    const mero = {
+      admin: { getMigrationStatus },
+      rpc: {},
+      events: {
+        onMigrationEvent: vi.fn(() => () => {}),
+        connect: vi.fn().mockResolvedValue(undefined),
+        subscribe: vi.fn().mockResolvedValue(undefined),
+      },
+    };
     mockUseMero.mockReturnValue({ mero } as never);
 
     render(<MigrationAdminPanel namespaceId="ns1" />);
