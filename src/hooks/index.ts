@@ -845,6 +845,11 @@ export function useJoinGroup() {
   return { joinGroup, loading, error };
 }
 
+/**
+ * Takes the member's ACCOUNT (64 hex), as `useGroupMembers` rows are keyed by
+ * and `useNodeIdentity().identity?.accountId` returns - NOT a signing key.
+ * Both are 32-byte strings, so passing a key names nobody and raises nothing.
+ */
 export function useGroupCapabilities(groupId?: string | null, memberId?: string | null) {
   const { mero } = useMero();
   const [capabilities, setCapabilitiesState] = useState<number | null>(null);
@@ -1161,6 +1166,12 @@ export function useSyncGroup() {
   return { syncGroup, loading, error };
 }
 
+/**
+ * Takes the invitee's signing KEY (bs58) - the one call on this resource that
+ * does, because someone being added may have no account here yet. Every other
+ * member call, including `useRemoveGroupMembers`, takes the ACCOUNT, so a value
+ * round-tripped from an add is the wrong one to remove with.
+ */
 export function useAddGroupMembers() {
   const { mero } = useMero();
   const { loading, error, run } = useAsyncMutation();
@@ -1176,6 +1187,11 @@ export function useAddGroupMembers() {
   return { addGroupMembers, loading, error };
 }
 
+/**
+ * Takes the member's ACCOUNT (64 hex), as `useGroupMembers` rows are keyed by
+ * and `useNodeIdentity().identity?.accountId` returns - NOT a signing key.
+ * Both are 32-byte strings, so passing a key names nobody and raises nothing.
+ */
 export function useRemoveGroupMembers() {
   const { mero } = useMero();
   const { loading, error, run } = useAsyncMutation();
@@ -1345,6 +1361,11 @@ export function useNamespaceGroups(namespaceId?: string | null) {
 
 // ---- Group Settings & Role Management ----
 
+/**
+ * Takes the member's ACCOUNT (64 hex), as `useGroupMembers` rows are keyed by
+ * and `useNodeIdentity().identity?.accountId` returns - NOT a signing key.
+ * Both are 32-byte strings, so passing a key names nobody and raises nothing.
+ */
 export function useUpdateMemberRole() {
   const { mero } = useMero();
   const { loading, error, run } = useAsyncMutation();
@@ -1442,6 +1463,11 @@ export function useSetGroupMetadata() {
   return { setGroupMetadata, loading, error };
 }
 
+/**
+ * Takes the member's ACCOUNT (64 hex), as `useGroupMembers` rows are keyed by
+ * and `useNodeIdentity().identity?.accountId` returns - NOT a signing key.
+ * Both are 32-byte strings, so passing a key names nobody and raises nothing.
+ */
 export function useSetMemberMetadata() {
   const { mero } = useMero();
   const { loading, error, run } = useAsyncMutation();
