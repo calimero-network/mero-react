@@ -1,3 +1,24 @@
+## [6.0.0](https://github.com/calimero-network/mero-react/compare/mero-react-v5.1.0...mero-react-v6.0.0) (2026-08-19)
+
+### ⚠ BREAKING CHANGES
+
+* **migration:** align with mero-js 13 and surface the live event stream
+* **migration:** `useGroupAppVersion` no longer returns `upgradePolicy`. The
+field carried no information — mero-js documents it as absent on nodes that
+dropped the concept and always "LazyOnAccess" on every released one — and the
+SDK's own guidance is to delete it. Callers reading it should drop the read;
+there is no replacement because there was never any signal to replace.
+
+### Features
+
+* **migration:** align with mero-js 13 and surface the live event stream ([c3f738a](https://github.com/calimero-network/mero-react/commit/c3f738a1f03caae4807b3c5e84cbf31c68604a5a))
+* **migration:** align with mero-js 13 and surface the live event stream ([57597d6](https://github.com/calimero-network/mero-react/commit/57597d6278fdd64adcd88246be1bde185eff10f6))
+
+### Bug Fixes
+
+* **ci:** update the pnpm lockfile and drop the npm one ([07ec9bc](https://github.com/calimero-network/mero-react/commit/07ec9bc167968b1b11e528ce10161fde4837f21e))
+* **migration:** poll while the SSE stream is down, and mark the breaking removal ([01c077d](https://github.com/calimero-network/mero-react/commit/01c077df39021e85cfabd76a250caf902abcacff)), closes [#51](https://github.com/calimero-network/mero-react/issues/51)
+
 ## [5.1.0](https://github.com/calimero-network/mero-react/compare/mero-react-v5.0.0...mero-react-v5.1.0) (2026-08-19)
 
 ### Features
