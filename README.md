@@ -352,7 +352,6 @@ useGroupInfo, useGroupMembers, useGroupContexts, useGroupInvitations, useGroupCa
 useJoinGroup, useDeleteGroup, useAddGroupMembers, useRemoveGroupMembers
 useSyncGroup, useReparentGroup, useSubgroups
 useUpgradeGroup, useGroupUpgradeStatus, useRetryGroupUpgrade
-useRegisterGroupSigningKey, useUpdateGroupSettings
 useSetGroupMetadata, useSetMemberMetadata, useSetContextMetadata
 useGroupMetadata, useMemberMetadata, useUpdateMemberRole
 useSetDefaultCapabilities, useDefaultCapabilities

@@ -34,7 +34,6 @@ import {
   useNamespaces,
   useNamespacesForApplication,
   useReparentGroup,
-  useRegisterGroupSigningKey,
   useRetryGroupUpgrade,
   useSetContextMetadata,
   useSetDefaultCapabilities,
@@ -44,7 +43,6 @@ import {
   useSetTeeAdmissionPolicy,
   useSubgroups,
   useSubgroupVisibility,
-  useUpdateGroupSettings,
   useUpdateMemberRole,
   useUpgradeGroup,
   useResyncContext,
@@ -58,6 +56,7 @@ import {
   useInstallFromRegistry,
   useMyAuthoredMigration,
 } from './index';
+import type { SignedGroupOpenInvitation } from '@calimero-network/mero-js';
 import { useMero } from '../context';
 
 vi.mock('../context', () => ({
@@ -118,11 +117,11 @@ function createMero(
       createGroupInvitation: vi.fn().mockResolvedValue({
         invitation: {
           invitation: {
-            inviterIdentity: [],
-            groupId: [],
-            expirationTimestamp: 0,
+            inviter_identity: [],
+            group_id: [],
+            expiration_timestamp: 0,
           },
-          inviterSignature: 'sig-1',
+          inviter_signature: 'sig-1',
         },
       }),
       joinGroup: vi.fn().mockResolvedValue({ groupId: 'group-1', memberIdentity: 'member-1' }),
@@ -137,7 +136,6 @@ function createMero(
       setDefaultCapabilities: vi.fn().mockResolvedValue(undefined),
       setSubgroupVisibility: vi.fn().mockResolvedValue(undefined),
       setTeeAdmissionPolicy: vi.fn().mockResolvedValue(undefined),
-      updateGroupSettings: vi.fn().mockResolvedValue(undefined),
       setGroupMetadata: vi.fn().mockResolvedValue(undefined),
       getGroupMetadata: vi.fn().mockResolvedValue(null),
       setMemberMetadata: vi.fn().mockResolvedValue(undefined),
@@ -146,7 +144,6 @@ function createMero(
       getContextMetadata: vi.fn().mockResolvedValue(null),
       getDefaultCapabilities: vi.fn().mockResolvedValue(7),
       getSubgroupVisibility: vi.fn().mockResolvedValue('open'),
-      registerGroupSigningKey: vi.fn().mockResolvedValue({ publicKey: 'pk-1' }),
       upgradeGroup: vi.fn().mockResolvedValue({ groupId: 'group-1', status: 'in_progress' }),
       installFromRegistry: vi.fn().mockResolvedValue({ applicationId: 'app-1' }),
       getApplication: vi.fn().mockResolvedValue({
@@ -185,10 +182,10 @@ function createMero(
       createNamespace: vi.fn().mockResolvedValue({ namespaceId: 'ns-1' }),
       deleteNamespace: vi.fn().mockResolvedValue({ isDeleted: true }),
       createNamespaceInvitation: vi.fn().mockResolvedValue({
-        invitation: { invitation: { inviterIdentity: [], groupId: [], expirationTimestamp: 0, secretSalt: [] }, inviterSignature: 'sig-1' },
+        invitation: { invitation: { inviter_identity: [], group_id: [], expiration_timestamp: 0, secret_salt: [] }, inviter_signature: 'sig-1' },
         groupName: 'test-ns',
       }),
-      joinNamespace: vi.fn().mockResolvedValue({ groupId: 'ns-1', memberIdentity: 'member-1', governanceOp: 'MemberAdded' }),
+      joinNamespace: vi.fn().mockResolvedValue({ groupId: 'ns-1', memberIdentity: 'member-1', memberAccount: 'acct-1' }),
       createGroupInNamespace: vi.fn().mockResolvedValue({ groupId: 'group-1' }),
       listNamespaceGroups: vi.fn().mockResolvedValue([]),
       ...adminOverrides,
@@ -243,7 +240,6 @@ describe('group and context hooks', () => {
     const mero = createMero({
       listGroupMembers: vi.fn().mockResolvedValue({
         members: [{ identity: 'member-1', role: 'Admin' }],
-        selfIdentity: 'member-1',
       }),
     });
     mockUseMero.mockReturnValue({ mero } as never);
@@ -252,7 +248,6 @@ describe('group and context hooks', () => {
 
     await waitFor(() => {
       expect(result.current.members).toEqual([{ identity: 'member-1', role: 'Admin' }]);
-      expect(result.current.selfIdentity).toBe('member-1');
     });
   });
 
@@ -317,12 +312,12 @@ describe('group and context hooks', () => {
     const createGroupInvitation = vi.fn().mockResolvedValue({
       invitation: {
         invitation: {
-          inviterIdentity: [0],
-          groupId: [1],
-          expirationTimestamp: 123,
-          secretSalt: [42],
+          inviter_identity: [0],
+          group_id: [1],
+          expiration_timestamp: 123,
+          secret_salt: [42],
         },
-        inviterSignature: 'sig-1',
+        inviter_signature: 'sig-1',
       },
     });
     const mero = createMero({ createGroupInvitation });
@@ -338,7 +333,7 @@ describe('group and context hooks', () => {
         throw new Error('Expected invitation to be created');
       }
       if ('invitation' in response) {
-        expect(response.invitation.inviterSignature).toBe('sig-1');
+        expect(response.invitation.inviter_signature).toBe('sig-1');
       }
     });
 
@@ -356,15 +351,18 @@ describe('group and context hooks', () => {
 
     await act(async () => {
       const joined = await result.current.joinGroup({
+        // `SignedGroupOpenInvitation` carries a phantom `__nodeSigned` brand so
+        // only a node can mint one; a fixture has to cast past it.
         invitation: {
           invitation: {
-            inviterIdentity: [0],
-            groupId: [1],
-            expirationTimestamp: 123,
-            secretSalt: [42],
+            inviter_identity: [0],
+            group_id: [1],
+            expiration_timestamp: 123,
+            secret_salt: [42],
+            invited_role: 0,
           },
-          inviterSignature: 'sig-1',
-        },
+          inviter_signature: 'sig-1',
+        } as unknown as SignedGroupOpenInvitation,
         groupName: 'Lobby',
       });
       if (!joined) {
@@ -831,7 +829,6 @@ describe('group and context hooks', () => {
     await act(async () => {
       const created = await result.current.createNamespace({
         applicationId: 'app-1',
-        upgradePolicy: 'LazyOnAccess',
         name: 'My Namespace',
       });
       expect(created).toEqual({ namespaceId: 'ns-9' });
@@ -839,7 +836,6 @@ describe('group and context hooks', () => {
 
     expect(createNamespace).toHaveBeenCalledWith({
       applicationId: 'app-1',
-      upgradePolicy: 'LazyOnAccess',
       name: 'My Namespace',
     });
   });
@@ -861,7 +857,7 @@ describe('group and context hooks', () => {
 
   it('useCreateNamespaceInvitation creates an invitation', async () => {
     const invitation = {
-      invitation: { invitation: { inviterIdentity: [], groupId: [], expirationTimestamp: 123, secretSalt: [] }, inviterSignature: 'sig-1' },
+      invitation: { invitation: { inviter_identity: [], group_id: [], expiration_timestamp: 123, secret_salt: [] }, inviter_signature: 'sig-1' },
       groupName: 'test-ns',
     };
     const createNamespaceInvitation = vi.fn().mockResolvedValue(invitation);
@@ -879,7 +875,7 @@ describe('group and context hooks', () => {
   });
 
   it('useJoinNamespace joins a namespace', async () => {
-    const joinNamespace = vi.fn().mockResolvedValue({ groupId: 'ns-1', memberIdentity: 'member-2', governanceOp: 'MemberAdded' });
+    const joinNamespace = vi.fn().mockResolvedValue({ groupId: 'ns-1', memberIdentity: 'member-2', memberAccount: 'acct-2' });
     const mero = createMero({ joinNamespace });
     mockUseMero.mockReturnValue({ mero } as never);
 
@@ -887,10 +883,17 @@ describe('group and context hooks', () => {
 
     await act(async () => {
       const joined = await result.current.joinNamespace('ns-1', {
+        // See the `__nodeSigned` note in the useJoinGroup test above.
         invitation: {
-          invitation: { inviterIdentity: [], groupId: [], expirationTimestamp: 123, secretSalt: [] },
-          inviterSignature: 'sig-1',
-        },
+          invitation: {
+            inviter_identity: [],
+            group_id: [],
+            expiration_timestamp: 123,
+            secret_salt: [],
+            invited_role: 0,
+          },
+          inviter_signature: 'sig-1',
+        } as unknown as SignedGroupOpenInvitation,
       });
       if (!joined) {
         throw new Error('Expected namespace join result');
@@ -1024,20 +1027,6 @@ describe('group and context hooks', () => {
     });
 
     expect(setTeeAdmissionPolicy).toHaveBeenCalledWith('group-1', policy);
-  });
-
-  it('useUpdateGroupSettings updates group settings', async () => {
-    const updateGroupSettings = vi.fn().mockResolvedValue(undefined);
-    const mero = createMero({ updateGroupSettings });
-    mockUseMero.mockReturnValue({ mero } as never);
-
-    const { result } = renderHook(() => useUpdateGroupSettings());
-
-    await act(async () => {
-      await result.current.updateGroupSettings('group-1', { upgradePolicy: 'auto' });
-    });
-
-    expect(updateGroupSettings).toHaveBeenCalledWith('group-1', { upgradePolicy: 'auto' });
   });
 
   // ---- Metadata Hooks ----
@@ -1317,21 +1306,6 @@ describe('group and context hooks', () => {
 
   // ---- Group Signing Key, Upgrades & Hierarchy ----
 
-  it('useRegisterGroupSigningKey registers a signing key', async () => {
-    const registerGroupSigningKey = vi.fn().mockResolvedValue({ publicKey: 'pk-new' });
-    const mero = createMero({ registerGroupSigningKey });
-    mockUseMero.mockReturnValue({ mero } as never);
-
-    const { result } = renderHook(() => useRegisterGroupSigningKey());
-
-    await act(async () => {
-      const res = await result.current.registerGroupSigningKey('group-1', { signingKey: 'sk-1' });
-      expect(res).toEqual({ publicKey: 'pk-new' });
-    });
-
-    expect(registerGroupSigningKey).toHaveBeenCalledWith('group-1', { signingKey: 'sk-1' });
-  });
-
   it('useUpgradeGroup initiates a group upgrade', async () => {
     const upgradeGroup = vi.fn().mockResolvedValue({ groupId: 'group-1', status: 'in_progress', total: 3 });
     const mero = createMero({ upgradeGroup });
@@ -1416,8 +1390,8 @@ describe('group and context hooks', () => {
       initiatedAt: 100,
       initiatedBy: 'member-1',
       status: 'in_progress',
-      total: 3,
-      completed: 1,
+      localContextsTotal: 3,
+      localContextsSwapped: 1,
     });
     const mero = createMero({ getGroupUpgradeStatus });
     mockUseMero.mockReturnValue({ mero } as never);
@@ -1426,7 +1400,7 @@ describe('group and context hooks', () => {
 
     await waitFor(() => {
       expect(result.current.upgradeStatus?.status).toBe('in_progress');
-      expect(result.current.upgradeStatus?.total).toBe(3);
+      expect(result.current.upgradeStatus?.localContextsTotal).toBe(3);
     });
 
     expect(getGroupUpgradeStatus).toHaveBeenCalledWith('group-1');
@@ -1549,8 +1523,8 @@ describe('useMigrationStatus', () => {
       expectedMembers: 3,
       rollup: { migrated: 2, inProgress: 0, unknown: 1, total: 3, allMigrated: false, membersPendingSignature: 1 },
       members: [
-        { peer: 'aa', report: { schemaVersion: 2, residueAuto: 0, residueIdentity: 0, syncedUpToHlc: 0, reportedAt: 0, authoredRemaining: 0 }, state: 'migrated' },
-        { peer: 'bb', report: { schemaVersion: 1, residueAuto: 0, residueIdentity: 0, syncedUpToHlc: 0, reportedAt: 0, authoredRemaining: 2 }, state: 'in_progress' },
+        { peer: 'aa', report: { schemaVersion: 2, residueAuto: 0, syncedUpToHlc: 0, reportedAt: 0, authoredRemaining: 0 }, state: 'migrated' },
+        { peer: 'bb', report: { schemaVersion: 1, residueAuto: 0, syncedUpToHlc: 0, reportedAt: 0, authoredRemaining: 2 }, state: 'in_progress' },
         { peer: 'cc', report: null, state: 'unknown' },
       ],
     });

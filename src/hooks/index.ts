@@ -25,7 +25,6 @@ import type {
   NamespaceIdentity,
   ReparentGroupRequest,
   AddGroupMembersRequest,
-  RegisterGroupSigningKeyRequest,
   RemoveGroupMembersRequest,
   RetryGroupUpgradeRequest,
   SetDefaultCapabilitiesRequest,
@@ -35,7 +34,6 @@ import type {
   SubgroupEntry,
   SyncGroupRequest,
   SseEventData,
-  UpdateGroupSettingsRequest,
   UpdateMemberRoleRequest,
   UpgradeGroupRequest,
   ResyncContextRequest,
@@ -45,6 +43,7 @@ import type {
   MigrateMyEntriesSummary,
   AppVersionChangedEvent,
   GroupMembershipEventData,
+  GroupMigrationEventData,
 } from '@calimero-network/mero-js';
 import type {
   ApplicationContextRecord,
@@ -259,7 +258,10 @@ export function useExecute(contextId: string | null, executorId: string | null) 
 }
 
 /** Event payload delivered to a `useSubscription` callback. */
-export type SubscriptionEventData = SseEventData | GroupMembershipEventData;
+export type SubscriptionEventData =
+  | SseEventData
+  | GroupMembershipEventData
+  | GroupMigrationEventData;
 
 /** Ids to subscribe to. Either can be omitted, but not both. */
 export interface SubscriptionInput {
@@ -348,7 +350,6 @@ export function useGroupMembers(groupId?: string | null) {
   // `members` is a guaranteed array on the wire; `?? []` guards mocks / drift.
   return {
     members: data?.members ?? [],
-    selfIdentity: data?.selfIdentity ?? null,
     loading,
     error,
     refetch,
@@ -957,21 +958,6 @@ export function useSetTeeAdmissionPolicy() {
   return { setTeeAdmissionPolicy, loading, error };
 }
 
-export function useUpdateGroupSettings() {
-  const { mero } = useMero();
-  const { loading, error, run } = useAsyncMutation();
-
-  const updateGroupSettings = useCallback(
-    async (groupId: string, request: UpdateGroupSettingsRequest) => {
-      if (!mero) return null;
-      return run(() => mero.admin.updateGroupSettings(groupId, request));
-    },
-    [mero, run],
-  );
-
-  return { updateGroupSettings, loading, error };
-}
-
 // ---- Metadata Hooks ----
 
 export function useSetGroupMetadata() {
@@ -1090,21 +1076,6 @@ export function useMemberMetadata(groupId?: string | null, identity?: string | n
 }
 
 // ---- Group Signing Key, Upgrades & Hierarchy ----
-
-export function useRegisterGroupSigningKey() {
-  const { mero } = useMero();
-  const { loading, error, run } = useAsyncMutation();
-
-  const registerGroupSigningKey = useCallback(
-    async (groupId: string, request: RegisterGroupSigningKeyRequest) => {
-      if (!mero) return null;
-      return run(() => mero.admin.registerGroupSigningKey(groupId, request));
-    },
-    [mero, run],
-  );
-
-  return { registerGroupSigningKey, loading, error };
-}
 
 export function useUpgradeGroup() {
   const { mero } = useMero();
@@ -1600,12 +1571,12 @@ export function useGroupAppVersion(groupId?: string) {
       if (namespace) {
         appKey = namespace.appKey;
         applicationId = namespace.targetApplicationId;
-        upgradePolicy = namespace.upgradePolicy;
+        upgradePolicy = namespace.upgradePolicy ?? null;
       } else {
         const info = await mero.admin.getGroupInfo(groupId);
         appKey = info.appKey;
         applicationId = info.targetApplicationId;
-        upgradePolicy = info.upgradePolicy;
+        upgradePolicy = info.upgradePolicy ?? null;
         activeUpgrade = info.activeUpgrade ?? null;
       }
 
