@@ -107,11 +107,11 @@ describe('Phase 1 — read hooks vs live node', () => {
     const r = await settle(() => renderHookWithMero(fx.mero, () => useGroupMembers(fx.groupId)));
     expect(r.error).toBeNull();
     expect(r.members.length).toBeGreaterThan(0);
-    expect(r.members.some((m) => m.identity === fx.identity)).toBe(true);
+    expect(r.members.some((m) => m.identity === fx.account)).toBe(true);
   });
 
   it('useGroupCapabilities(groupId, identity)', async () => {
-    const r = await settle(() => renderHookWithMero(fx.mero, () => useGroupCapabilities(fx.groupId, fx.identity)));
+    const r = await settle(() => renderHookWithMero(fx.mero, () => useGroupCapabilities(fx.groupId, fx.account)));
     expect(r.error).toBeNull();
   });
 
@@ -133,7 +133,7 @@ describe('Phase 1 — read hooks vs live node', () => {
   });
 
   it('useMemberMetadata(groupId, identity)', async () => {
-    const r = await settle(() => renderHookWithMero(fx.mero, () => useMemberMetadata(fx.groupId, fx.identity)));
+    const r = await settle(() => renderHookWithMero(fx.mero, () => useMemberMetadata(fx.groupId, fx.account)));
     expect(r.error).toBeNull();
   });
 

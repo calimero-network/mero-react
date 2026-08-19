@@ -66,6 +66,13 @@ export interface E2eFixture {
   contextId: string;
   /** The creator's member public key (executor identity for the context). */
   identity: string;
+  /**
+   * The creator's ACCOUNT, 64 hex characters. Distinct from `identity`: member-
+   * addressing endpoints (capabilities, member metadata) take the account, and
+   * `listGroupMembers` entries are keyed by it. `identity` is the base58 signing
+   * key and is only right for executor positions such as `useExecute`.
+   */
+  account: string;
   run: string;
 }
 
@@ -75,11 +82,11 @@ export async function setupFixture(): Promise<E2eFixture> {
   const applicationId = await ensureApplication(mero);
   const ns = await mero.admin.createNamespace({
     applicationId,
-    upgradePolicy: 'LazyOnAccess',
     name: `rt-${run}`,
   });
   const namespaceId = ns.namespaceId;
   const ctx = await mero.admin.createContext({ applicationId, groupId: namespaceId });
+  const node = await mero.admin.getNodeIdentity();
   return {
     mero,
     applicationId,
@@ -87,6 +94,7 @@ export async function setupFixture(): Promise<E2eFixture> {
     groupId: namespaceId,
     contextId: ctx.contextId,
     identity: ctx.memberPublicKey,
+    account: node.accountId,
     run,
   };
 }
