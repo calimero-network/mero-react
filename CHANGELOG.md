@@ -1,3 +1,21 @@
+## [5.0.0](https://github.com/calimero-network/mero-react/compare/mero-react-v4.6.1...mero-react-v5.0.0) (2026-08-19)
+
+### ⚠ BREAKING CHANGES
+
+* stabilise against mero-js 13
+* **hooks:** useUpdateGroupSettings and useRegisterGroupSigningKey
+are removed, and useGroupMembers no longer returns selfIdentity. The
+underlying node endpoints no longer exist.
+
+### Features
+
+* **hooks:** migrate to the mero-js 13 admin API ([8c3e78a](https://github.com/calimero-network/mero-react/commit/8c3e78a6b4561e01722b9b9951dddf47a71e4cef))
+
+### Bug Fixes
+
+* stabilise against mero-js 13 ([bb12f4e](https://github.com/calimero-network/mero-react/commit/bb12f4e25c5f0854e77762775c7a7af42679a7bc))
+* **test:** pin the token-adoption clock to one reading ([0fc8bbc](https://github.com/calimero-network/mero-react/commit/0fc8bbcedc0c98f93ad463be2a8d5105790f8515))
+
 ## [4.6.1](https://github.com/calimero-network/mero-react/compare/mero-react-v4.6.0...mero-react-v4.6.1) (2026-07-29)
 
 ## [4.6.0](https://github.com/calimero-network/mero-react/compare/mero-react-v4.5.0...mero-react-v4.6.0) (2026-07-24)
