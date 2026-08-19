@@ -1,3 +1,20 @@
+## [5.1.0](https://github.com/calimero-network/mero-react/compare/mero-react-v5.0.0...mero-react-v5.1.0) (2026-08-19)
+
+### Features
+
+* **useEphemeral:** add ephemeral presence hook ([b90d5d7](https://github.com/calimero-network/mero-react/commit/b90d5d765886e31923c17f5979414fb0a812dfc0))
+* **useEphemeral:** add throttled shallow-merge setPresence and self-filtering ([908be7f](https://github.com/calimero-network/mero-react/commit/908be7f46b5002146578f08eeac881e6e8e039d8))
+* **useEphemeral:** seed from snapshot, apply deltas, report age ([0bf052c](https://github.com/calimero-network/mero-react/commit/0bf052c96a37208714c21ed9f1119bd1fe2bf0a9))
+
+### Bug Fixes
+
+* **e2e:** do not fail the whole e2e config when the sibling mero-js build is absent ([940e478](https://github.com/calimero-network/mero-react/commit/940e478d2dee9a07d8f828cce45957770e25d130))
+* **useEphemeral:** clear per-source errors instead of leaving them stuck ([4085954](https://github.com/calimero-network/mero-react/commit/40859542f70e28cc241304cf3df7e71834abb49d))
+* **useEphemeral:** close the snapshot/delta race, reconcile, and stop cross-context writes ([9b4fd60](https://github.com/calimero-network/mero-react/commit/9b4fd6078a241aa7f6b4c4328ddab70532a1eed0))
+* **useEphemeral:** derive error state, key it by context, reconcile on replay ([681aed0](https://github.com/calimero-network/mero-react/commit/681aed03b66e43033e28a9feec8b2063cb3a0536))
+* **useEphemeral:** revert effect deps to real client identity; stabilize test mock instead ([4a7790d](https://github.com/calimero-network/mero-react/commit/4a7790d3df2915f85fd158d98fe0a129ce9ffba9))
+* **useEphemeral:** route caught errors through toError ([c593035](https://github.com/calimero-network/mero-react/commit/c59303528ab15219835b48dfb80a35f37baf6f42))
+
 ## [5.0.0](https://github.com/calimero-network/mero-react/compare/mero-react-v4.6.1...mero-react-v5.0.0) (2026-08-19)
 
 ### ⚠ BREAKING CHANGES
