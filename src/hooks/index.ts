@@ -613,13 +613,21 @@ function useAsyncResource<T>(
     }
   }, deps);
 
-  // Invalidate any in-flight request and clear stale data synchronously when
-  // the inputs change, so a pending response for old deps can't land later.
-  useEffect(() => {
+  // Invalidate any in-flight request and drop the previous key's data DURING
+  // RENDER, not in an effect. An effect leaves one render where `data` still
+  // answers for the old inputs, and a consumer that persists what it sees
+  // (a "this member already has a name" marker, say) makes that transient
+  // staleness permanent.
+  const prevDeps = useRef(deps);
+  if (
+    deps.length !== prevDeps.current.length ||
+    deps.some((d, i) => !Object.is(d, prevDeps.current[i]))
+  ) {
+    prevDeps.current = deps;
     reqRef.current += 1;
     setData(initialRef.current);
     setError(null);
-  }, deps);
+  }
 
   useEffect(() => {
     void refetch();
@@ -1513,6 +1521,18 @@ export function useMemberMetadata(groupId?: string | null, identity?: string | n
   const [metadata, setMetadata] = useState<MetadataRecord | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+
+  // Drop the previous (group, member)'s record DURING RENDER. Clearing in an
+  // effect leaves one render where `metadata` answers for the pair that was
+  // asked about last, and a consumer that persists what it sees turns that
+  // transient staleness into a permanent wrong answer.
+  const prevKey = useRef<string | null>(null);
+  const key = `${groupId ?? ''}:${identity ?? ''}`;
+  if (prevKey.current !== null && prevKey.current !== key) {
+    setMetadata(null);
+    setError(null);
+  }
+  prevKey.current = key;
 
   // Shared fetch logic for the auto-mount effect and the explicit
   // refetch callable. The per-invocation `signal.aborted` flag covers
