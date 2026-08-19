@@ -50,6 +50,7 @@ import {
   useRemoveGroupMembers,
   useSyncGroup,
   useMigrationStatus,
+  DEFAULT_MIGRATION_POLL_INTERVAL_MS,
   useAppVersion,
   useLatestVersion,
   useGroupAppVersion,
@@ -1567,6 +1568,94 @@ describe('useMigrationStatus', () => {
     });
 
     await waitFor(() => expect(getMigrationStatus).toHaveBeenCalledTimes(2));
+  });
+
+  // The fallback poll exists because migration facts arrive by heartbeat gossip
+  // with no push transport of their own: if the SSE stream is down AND nothing
+  // polls, the panel renders once and then silently never updates, showing no
+  // error to explain why. These three cases pin when the fallback engages.
+  const migrationStatusPayload = {
+    targetVersion: 2,
+    expectedMembers: 1,
+    rollup: {
+      migrated: 0, inProgress: 1, unknown: 0, failed: 0,
+      total: 1, allMigrated: false, membersPendingSignature: 0,
+    },
+    members: [],
+  };
+
+  it('does not fall back to polling while the migration stream is live', async () => {
+    const getMigrationStatus = vi.fn().mockResolvedValue(migrationStatusPayload);
+    const mero = createMero({ getMigrationStatus });
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    vi.useFakeTimers();
+    try {
+      renderHook(() => useMigrationStatus('ns-1'));
+      // Settle connect()/subscribe() first: the fallback interval is armed on
+      // the first render (before the stream reports in), so without this the
+      // test would measure the arming, not the steady state.
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(DEFAULT_MIGRATION_POLL_INTERVAL_MS * 3);
+      });
+      // Only the mount read. A live stream must not also spin an interval.
+      expect(getMigrationStatus).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('falls back to the default poll when the stream fails to subscribe', async () => {
+    const getMigrationStatus = vi.fn().mockResolvedValue(migrationStatusPayload);
+    // connect() resolving is not enough: a failed subscribe is still a dead
+    // stream, and it used to be swallowed indistinguishably from a live one.
+    const mero = createMero(
+      { getMigrationStatus },
+      {
+        events: {
+          onMigrationEvent: vi.fn(() => () => {}),
+          onAppVersionChanged: vi.fn(() => () => {}),
+          connect: vi.fn().mockResolvedValue(undefined),
+          subscribe: vi.fn().mockRejectedValue(new Error('sse unavailable')),
+        },
+      },
+    );
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    vi.useFakeTimers();
+    try {
+      renderHook(() => useMigrationStatus('ns-1'));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(DEFAULT_MIGRATION_POLL_INTERVAL_MS * 2 + 50);
+      });
+      // Mount read plus at least one fallback tick.
+      expect(getMigrationStatus.mock.calls.length).toBeGreaterThanOrEqual(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps an explicitly requested poll interval even while the stream is live', async () => {
+    const getMigrationStatus = vi.fn().mockResolvedValue(migrationStatusPayload);
+    const mero = createMero({ getMigrationStatus });
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    vi.useFakeTimers();
+    try {
+      renderHook(() => useMigrationStatus('ns-1', { pollIntervalMs: 1000 }));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3000);
+      });
+      // A caller that asked to poll keeps polling; the default never silently
+      // overrides an explicit interval.
+      expect(getMigrationStatus.mock.calls.length).toBeGreaterThanOrEqual(3);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('exposes the rollup, members, and derived counters', async () => {

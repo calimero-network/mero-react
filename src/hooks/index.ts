@@ -1749,11 +1749,24 @@ export function useDetachContextFromGroup() {
  * A non-admin subscriber never sees `CascadeProgress`; core delivers that to
  * namespace admins only, so a UI must not wait on it to decide progress.
  */
+/**
+ * Fallback poll cadence for `useMigrationStatus` when the SSE stream is
+ * unavailable (no token, a proxy that buffers, an older node) and the caller
+ * named no interval of its own. Chosen to match the heartbeat cadence that
+ * migration facts actually arrive on; an explicit `pollIntervalMs` overrides it.
+ */
+export const DEFAULT_MIGRATION_POLL_INTERVAL_MS = 5000;
+
 export function useMigrationEvents(
   namespaceId: string | null | undefined,
   onEvent: (event: GroupMigrationEventData) => void,
-) {
+): boolean {
   const { mero } = useMero();
+  const mountedRef = useMountedRef();
+  // Whether the stream is actually carrying frames. Callers use it to decide
+  // whether they still need a fallback poll, so it must reflect the subscribe
+  // ACTUALLY succeeding - not merely that we asked.
+  const [live, setLive] = useState(false);
   // Held in a ref so a caller passing an inline arrow does not resubscribe on
   // every render - the subscription's lifetime is the namespace's, not the
   // callback identity's.
@@ -1764,10 +1777,27 @@ export function useMigrationEvents(
     if (!mero || !namespaceId) return;
     const sse = mero.events;
     const unsubscribe = sse.onMigrationEvent((event) => handlerRef.current(event));
-    sse.connect().catch(() => {});
-    sse.subscribe({ groupIds: [namespaceId] }).catch(() => {});
-    return unsubscribe;
-  }, [mero, namespaceId]);
+    // Sequential, and the result is recorded: connecting but failing to
+    // subscribe is still a dead stream, and both used to be swallowed, which
+    // left a caller unable to tell a live stream from a silent one.
+    let cancelled = false;
+    void (async () => {
+      try {
+        await sse.connect();
+        await sse.subscribe({ groupIds: [namespaceId] });
+        if (!cancelled && mountedRef.current) setLive(true);
+      } catch {
+        if (!cancelled && mountedRef.current) setLive(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (mountedRef.current) setLive(false);
+      unsubscribe();
+    };
+  }, [mero, namespaceId, mountedRef]);
+
+  return live;
 }
 
 /**
@@ -1776,7 +1806,10 @@ export function useMigrationEvents(
  * Live: subscribes to the `GroupMigration` event family and re-reads on each
  * frame. It re-READS rather than folding the event's counters in, because the
  * rollup is recomputed from raw member rows and is the authoritative answer.
- * `pollIntervalMs` stays as the fallback when SSE is unavailable.
+ * `pollIntervalMs` stays as the fallback when SSE is unavailable, and when the
+ * caller names none it defaults to `DEFAULT_MIGRATION_POLL_INTERVAL_MS` for
+ * exactly as long as the stream is down - so the panel can never sit silently
+ * frozen with neither transport.
  * Derived counters are null-safe before the first load.
  */
 export function useMigrationStatus(
@@ -1837,18 +1870,25 @@ export function useMigrationStatus(
     void refetch();
   }, [refetch]);
 
-  const pollIntervalMs = options?.pollIntervalMs;
+  // Live updates. The frame is a signal, not the answer: it says something
+  // moved, and the re-read is what stays authoritative. This runs BEFORE the
+  // poll below because whether the stream is genuinely live is what decides
+  // if a caller who named no interval needs a fallback poll at all.
+  const sseLive = useMigrationEvents(namespaceId, () => void refetch());
+
+  // An explicit interval always wins - a caller that asked to poll keeps
+  // polling. When none was named, poll only while the stream is NOT live:
+  // migration facts arrive by heartbeat gossip with no push transport of their
+  // own, so with neither SSE nor an interval the panel loads once and then
+  // silently never updates again, with no error to show for it.
+  const pollIntervalMs =
+    options?.pollIntervalMs ??
+    (sseLive ? undefined : DEFAULT_MIGRATION_POLL_INTERVAL_MS);
   useEffect(() => {
     if (!pollIntervalMs || !mero || !namespaceId) return;
     const handle = setInterval(() => void refetch(), pollIntervalMs);
     return () => clearInterval(handle);
   }, [pollIntervalMs, mero, namespaceId, refetch]);
-
-  // Live updates. The frame is a signal, not the answer: it says something
-  // moved, and the re-read is what stays authoritative. Subscribing does not
-  // retire the poll above - SSE may be unavailable (no token, proxy, older
-  // node), and then the interval is the only liveness there is.
-  useMigrationEvents(namespaceId, () => void refetch());
 
   const rollup: MigrationStatusRollup | null = status?.rollup ?? null;
   const members: MemberMigrationStatusEntry[] = status?.members ?? [];

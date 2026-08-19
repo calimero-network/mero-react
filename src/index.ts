@@ -99,6 +99,7 @@ export {
   useSubscription,
   useSyncGroup,
   useMigrationStatus,
+  DEFAULT_MIGRATION_POLL_INTERVAL_MS,
   useAppVersion,
   useLatestVersion,
   useGroupAppVersion,
