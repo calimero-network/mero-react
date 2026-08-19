@@ -127,7 +127,7 @@ describe('e2e — multi-context client token (the token real apps hold)', () => 
   it('can create a namespace (namespace — was the rc.9/rc.10 KNOWN GAP)', async () => {
     const ns = await client.admin.createNamespace({
       applicationId,
-        name: `ct-own-${runId()}`,
+      name: `ct-own-${runId()}`,
     });
     expect(ns.namespaceId).toBeTruthy();
     clientNamespaces.push(ns.namespaceId);

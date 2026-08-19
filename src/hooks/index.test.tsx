@@ -50,6 +50,7 @@ import {
   useRemoveGroupMembers,
   useSyncGroup,
   useMigrationStatus,
+  DEFAULT_MIGRATION_POLL_INTERVAL_MS,
   useAppVersion,
   useLatestVersion,
   useGroupAppVersion,
@@ -189,6 +190,18 @@ function createMero(
       createGroupInNamespace: vi.fn().mockResolvedValue({ groupId: 'group-1' }),
       listNamespaceGroups: vi.fn().mockResolvedValue([]),
       ...adminOverrides,
+    },
+    // The SDK's event client. Modelled by default because hooks now subscribe
+    // for liveness - a mock without it fails on the subscribe, not on anything
+    // the test is about. `extra` still overrides it per case.
+    events: {
+      onMigrationEvent: vi.fn(() => () => {}),
+      onAppVersionChanged: vi.fn(() => () => {}),
+      on: vi.fn(),
+      off: vi.fn(),
+      connect: vi.fn().mockResolvedValue(undefined),
+      subscribe: vi.fn().mockResolvedValue(undefined),
+      unsubscribe: vi.fn().mockResolvedValue(undefined),
     },
     ...extra,
   };
@@ -1517,6 +1530,134 @@ describe('group and context hooks', () => {
 });
 
 describe('useMigrationStatus', () => {
+  it('re-reads on a live migration event rather than folding its counters in', async () => {
+    // The rollup is recomputed from raw member rows, so the frame is only a
+    // signal that something moved - trusting its counters would let the panel
+    // disagree with the authoritative read.
+    const getMigrationStatus = vi.fn().mockResolvedValue({
+      targetVersion: 2,
+      expectedMembers: 1,
+      rollup: {
+        migrated: 0, inProgress: 1, unknown: 0, failed: 0,
+        total: 1, allMigrated: false, membersPendingSignature: 0,
+      },
+      members: [],
+    });
+    let fire: ((e: unknown) => void) | undefined;
+    const mero = createMero(
+      { getMigrationStatus },
+      {
+        events: {
+          onMigrationEvent: vi.fn((cb: (e: unknown) => void) => {
+            fire = cb;
+            return () => {};
+          }),
+          connect: vi.fn().mockResolvedValue(undefined),
+          subscribe: vi.fn().mockResolvedValue(undefined),
+        },
+      },
+    );
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    const { result } = renderHook(() => useMigrationStatus('ns-1'));
+    await waitFor(() => expect(result.current.rollup).not.toBeNull());
+    expect(getMigrationStatus).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      fire?.({ groupId: 'ns-1', type: 'MigrationProgress', data: {} });
+    });
+
+    await waitFor(() => expect(getMigrationStatus).toHaveBeenCalledTimes(2));
+  });
+
+  // The fallback poll exists because migration facts arrive by heartbeat gossip
+  // with no push transport of their own: if the SSE stream is down AND nothing
+  // polls, the panel renders once and then silently never updates, showing no
+  // error to explain why. These three cases pin when the fallback engages.
+  const migrationStatusPayload = {
+    targetVersion: 2,
+    expectedMembers: 1,
+    rollup: {
+      migrated: 0, inProgress: 1, unknown: 0, failed: 0,
+      total: 1, allMigrated: false, membersPendingSignature: 0,
+    },
+    members: [],
+  };
+
+  it('does not fall back to polling while the migration stream is live', async () => {
+    const getMigrationStatus = vi.fn().mockResolvedValue(migrationStatusPayload);
+    const mero = createMero({ getMigrationStatus });
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    vi.useFakeTimers();
+    try {
+      renderHook(() => useMigrationStatus('ns-1'));
+      // Settle connect()/subscribe() first: the fallback interval is armed on
+      // the first render (before the stream reports in), so without this the
+      // test would measure the arming, not the steady state.
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(DEFAULT_MIGRATION_POLL_INTERVAL_MS * 3);
+      });
+      // Only the mount read. A live stream must not also spin an interval.
+      expect(getMigrationStatus).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('falls back to the default poll when the stream fails to subscribe', async () => {
+    const getMigrationStatus = vi.fn().mockResolvedValue(migrationStatusPayload);
+    // connect() resolving is not enough: a failed subscribe is still a dead
+    // stream, and it used to be swallowed indistinguishably from a live one.
+    const mero = createMero(
+      { getMigrationStatus },
+      {
+        events: {
+          onMigrationEvent: vi.fn(() => () => {}),
+          onAppVersionChanged: vi.fn(() => () => {}),
+          connect: vi.fn().mockResolvedValue(undefined),
+          subscribe: vi.fn().mockRejectedValue(new Error('sse unavailable')),
+        },
+      },
+    );
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    vi.useFakeTimers();
+    try {
+      renderHook(() => useMigrationStatus('ns-1'));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(DEFAULT_MIGRATION_POLL_INTERVAL_MS * 2 + 50);
+      });
+      // Mount read plus at least one fallback tick.
+      expect(getMigrationStatus.mock.calls.length).toBeGreaterThanOrEqual(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps an explicitly requested poll interval even while the stream is live', async () => {
+    const getMigrationStatus = vi.fn().mockResolvedValue(migrationStatusPayload);
+    const mero = createMero({ getMigrationStatus });
+    mockUseMero.mockReturnValue({ mero } as never);
+
+    vi.useFakeTimers();
+    try {
+      renderHook(() => useMigrationStatus('ns-1', { pollIntervalMs: 1000 }));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3000);
+      });
+      // A caller that asked to poll keeps polling; the default never silently
+      // overrides an explicit interval.
+      expect(getMigrationStatus.mock.calls.length).toBeGreaterThanOrEqual(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('exposes the rollup, members, and derived counters', async () => {
     const getMigrationStatus = vi.fn().mockResolvedValue({
       targetVersion: 2,
@@ -1556,7 +1697,7 @@ describe('useAppVersion', () => {
   it('reports stale when the installed version differs from expected', async () => {
     const mero = createMero(
       { getContext: vi.fn().mockResolvedValue({ id: 'ctx1', applicationId: 'a', rootHash: 'r', dagHeads: [], applicationVersion: '1.0.0' }) },
-      { events: { onAppVersionChanged: vi.fn(() => () => {}) } },
+      { events: { onAppVersionChanged: vi.fn(() => () => {}), onMigrationEvent: vi.fn(() => () => {}), connect: vi.fn().mockResolvedValue(undefined), subscribe: vi.fn().mockResolvedValue(undefined) } },
     );
     mockUseMero.mockReturnValue({ mero } as never);
 
@@ -1568,7 +1709,7 @@ describe('useAppVersion', () => {
   it('is not stale when versions match', async () => {
     const mero = createMero(
       { getContext: vi.fn().mockResolvedValue({ id: 'ctx1', applicationId: 'a', rootHash: 'r', dagHeads: [], applicationVersion: '2.0.0' }) },
-      { events: { onAppVersionChanged: vi.fn(() => () => {}) } },
+      { events: { onAppVersionChanged: vi.fn(() => () => {}), onMigrationEvent: vi.fn(() => () => {}), connect: vi.fn().mockResolvedValue(undefined), subscribe: vi.fn().mockResolvedValue(undefined) } },
     );
     mockUseMero.mockReturnValue({ mero } as never);
 
@@ -1581,7 +1722,7 @@ describe('useAppVersion', () => {
     let captured: ((e: { contextId: string; toVersion?: string }) => void) | null = null;
     const mero = createMero(
       { getContext: vi.fn().mockResolvedValue({ id: 'ctx1', applicationId: 'a', rootHash: 'r', dagHeads: [], applicationVersion: '1.0.0' }) },
-      { events: { onAppVersionChanged: vi.fn((cb: (e: { contextId: string; toVersion?: string }) => void) => { captured = cb; return () => {}; }) } },
+      { events: { onAppVersionChanged: vi.fn((cb: (e: { contextId: string; toVersion?: string }) => void) => { captured = cb; return () => {}; }), onMigrationEvent: vi.fn(() => () => {}), connect: vi.fn().mockResolvedValue(undefined), subscribe: vi.fn().mockResolvedValue(undefined) } },
     );
     mockUseMero.mockReturnValue({ mero } as never);
 
@@ -1700,7 +1841,7 @@ describe('useGroupAppVersion', () => {
         listNamespaces: vi.fn().mockResolvedValue([namespace(KEY_AA)]),
         getApplication: vi.fn().mockResolvedValue(application(BLOB_AA, '2.1.0')),
       },
-      { events: { onAppVersionChanged: vi.fn(() => () => {}) } },
+      { events: { onAppVersionChanged: vi.fn(() => () => {}), onMigrationEvent: vi.fn(() => () => {}), connect: vi.fn().mockResolvedValue(undefined), subscribe: vi.fn().mockResolvedValue(undefined) } },
     );
     mockUseMero.mockReturnValue({ mero } as never);
 
@@ -1708,7 +1849,6 @@ describe('useGroupAppVersion', () => {
 
     await waitFor(() => expect(result.current.version).toBe('2.1.0'));
     expect(result.current.applicationId).toBe('app-1');
-    expect(result.current.upgradePolicy).toBe('LazyOnAccess');
     expect(result.current.pendingApply).toBe(false);
     expect(result.current.activeUpgrade).toBeNull();
     expect(mero.admin.getApplication).toHaveBeenCalledWith('app-1');
@@ -1720,7 +1860,7 @@ describe('useGroupAppVersion', () => {
         listNamespaces: vi.fn().mockResolvedValue([namespace(KEY_AA)]),
         getApplication: vi.fn().mockResolvedValue(application(BLOB_BB)),
       },
-      { events: { onAppVersionChanged: vi.fn(() => () => {}) } },
+      { events: { onAppVersionChanged: vi.fn(() => () => {}), onMigrationEvent: vi.fn(() => () => {}), connect: vi.fn().mockResolvedValue(undefined), subscribe: vi.fn().mockResolvedValue(undefined) } },
     );
     mockUseMero.mockReturnValue({ mero } as never);
 
@@ -1736,7 +1876,7 @@ describe('useGroupAppVersion', () => {
         listNamespaces: vi.fn().mockResolvedValue([namespace('00'.repeat(32))]),
         getApplication: vi.fn().mockResolvedValue(application(BLOB_BB)),
       },
-      { events: { onAppVersionChanged: vi.fn(() => () => {}) } },
+      { events: { onAppVersionChanged: vi.fn(() => () => {}), onMigrationEvent: vi.fn(() => () => {}), connect: vi.fn().mockResolvedValue(undefined), subscribe: vi.fn().mockResolvedValue(undefined) } },
     );
     mockUseMero.mockReturnValue({ mero } as never);
 
@@ -1771,13 +1911,13 @@ describe('useGroupAppVersion', () => {
         getGroupInfo,
         getApplication: vi.fn().mockResolvedValue(application(BLOB_AA)),
       },
-      { events: { onAppVersionChanged: vi.fn(() => () => {}) } },
+      { events: { onAppVersionChanged: vi.fn(() => () => {}), onMigrationEvent: vi.fn(() => () => {}), connect: vi.fn().mockResolvedValue(undefined), subscribe: vi.fn().mockResolvedValue(undefined) } },
     );
     mockUseMero.mockReturnValue({ mero } as never);
 
     const { result } = renderHook(() => useGroupAppVersion('sub-1'));
 
-    await waitFor(() => expect(result.current.upgradePolicy).toBe('Automatic'));
+    await waitFor(() => expect(result.current.applicationId).toBe('app-1'));
     expect(getGroupInfo).toHaveBeenCalledWith('sub-1');
     expect(result.current.activeUpgrade).toEqual(activeUpgrade);
     expect(result.current.pendingApply).toBe(false);
@@ -1787,7 +1927,7 @@ describe('useGroupAppVersion', () => {
     const listNamespaces = vi.fn();
     const mero = createMero(
       { listNamespaces },
-      { events: { onAppVersionChanged: vi.fn(() => () => {}) } },
+      { events: { onAppVersionChanged: vi.fn(() => () => {}), onMigrationEvent: vi.fn(() => () => {}), connect: vi.fn().mockResolvedValue(undefined), subscribe: vi.fn().mockResolvedValue(undefined) } },
     );
     mockUseMero.mockReturnValue({ mero } as never);
 
