@@ -107,3 +107,57 @@ jobs:
       - name: Stop merod
         if: always()
         run: kill "$(cat merod.pid 2>/dev/null)" 2>/dev/null || true
+
+  # The single-node job above cannot cover presence: it is delivered over gossip
+  # BETWEEN nodes, so it needs two. Without this job the useEphemeral live suite
+  # skips itself in CI and the hook's binding to the real SDK goes unexercised —
+  # which is exactly how it drifted before.
+  e2e-presence:
+    name: E2E (useEphemeral vs two released merod nodes)
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      # The suite SIGKILLs node 1 by listening port to observe TTL eviction.
+      - name: Ensure lsof is present
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq lsof
+      - name: Download released merod
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG=$(gh release list --repo calimero-network/core --limit 1 --json tagName -q '.[0].tagName')
+          URL=$(gh release view "$TAG" --repo calimero-network/core --json assets \
+            -q '.assets[] | select(.name | test("merod_x86_64-unknown-linux-gnu\\.tar\\.gz$")) | .url')
+          test -n "$URL" || { echo "no merod linux asset on release $TAG"; exit 1; }
+          echo "Downloading merod from $TAG"
+          curl -sL "$URL" | tar xz
+          chmod +x ./merod
+      - name: Boot two peered nodes and build the shared context fixture
+        run: ./tests/e2e/boot-presence-nodes.sh ./merod
+      - name: Run the useEphemeral live suite
+        env:
+          NO_COLOR: '1'
+        run: |
+          set -o pipefail
+          pnpm test:e2e:presence 2>&1 | tee e2e-presence.log
+          # The suite skips itself when the two-node fixture is absent, so an
+          # all-skipped run would otherwise report green and prove nothing.
+          grep -qE "[1-9][0-9]* passed" e2e-presence.log \
+            || { echo "::error::presence e2e produced no passing tests — refusing a vacuous pass"; exit 1; }
+      - name: Upload presence e2e logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-presence-logs
+          path: |
+            e2e-presence.log
+            .presence-nodes/*.log
+      - name: Stop the presence nodes
+        if: always()
+        run: kill $(cat .presence-nodes.pids 2>/dev/null) 2>/dev/null || true

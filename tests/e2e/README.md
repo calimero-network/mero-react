@@ -5,45 +5,54 @@ Tests in here run against a **real merod**, not a mock. They are excluded from
 
 ## `ephemeral.live.test.tsx` — the whole presence stack, unmocked
 
-`useEphemeral` (this repo) → `mero-js` `EphemeralClient`/`SseClient` (local
-build) → two real gossiping `merod` nodes. Everywhere else this feature is
-tested with the layer below stubbed: the unit suite mocks `mero.ephemeral`, and
-`tsc` checks the hook against the **installed** `@calimero-network/mero-js@^7.3.0`,
-which has no ephemeral surface at all — so the hook casts through structural
-types it declares itself. If those declarations drift from what `mero-js`
-actually does, the unit suite and typecheck both stay green. This file is the
-only thing that catches it.
+`useEphemeral` (this repo) → `mero-js` `EphemeralClient`/`SseClient` (the
+**published** package) → two real gossiping `merod` nodes.
 
-`vitest.e2e.config.ts` therefore aliases `@calimero-network/mero-js` to the
-sibling checkout's `dist/index.mjs` **for the e2e run only** — no `package.json`
-edit, no lockfile churn.
+Everywhere else this feature is tested with the layer below stubbed: the unit
+suite mocks `mero.ephemeral`, and `tsc` only proves the hook agrees with
+mero-js's *type declarations*. Neither can catch the SDK's runtime behaviour
+drifting from the node's actual wire — the types still line up, so both stay
+green. This file is the only thing that catches it.
 
-### Run it — one line each
+Presence is delivered over gossip **between** nodes, so it needs two of them.
+The single node the other suites share cannot exercise it, which is why this
+suite has its own fixture (`boot-presence-nodes.sh`) and its own CI job
+(`e2e-presence`).
 
-Build the local mero-js (the alias target):
+> Historical note: this suite used to require a locally-built sibling `mero-js`,
+> aliased in by `vitest.e2e.config.ts`, because the pinned `^7.3.0` exported no
+> `ephemeral` surface. That is gone — the package is now `^13.1.0`, which
+> exports it, so the suite runs against exactly what consumers install and a
+> local build can no longer mask a drift.
 
-    (cd ../mero-js && npm run build)
+### Run it — two commands
 
-Build the node binaries, from your `core` checkout on `feat/ephemeral-presence-rebased`:
+Boot the two nodes and build the shared app/namespace/context fixture. Pass a
+`merod` binary; a released one is fine (`gh release download` from
+`calimero-network/core`), no `core` checkout or Rust build needed:
 
-    cargo build -p merod -p meroctl
+    ./tests/e2e/boot-presence-nodes.sh ./merod
 
-Boot two nodes on a shared context and leave them running (also from `core`; needs `merobox` on PATH):
+Run the suite:
 
-    PATH="$PWD/target/debug:$PATH" merobox bootstrap run tools/ephemeral-presence-demo/workflow.yml --binary-path "$PWD/target/debug/merod"
-
-Run the suite (back in this repo):
-
-    npm run test:e2e -- tests/e2e/ephemeral.live.test.tsx
+    pnpm test:e2e:presence
 
 Tear the nodes down:
 
-    merobox nuke
+    kill $(cat .presence-nodes.pids)
 
 The suite discovers the per-run context id and both member keys from the live
 admin API, so nothing needs pasting. Override with `MERO_E2E_NODE1`,
 `MERO_E2E_NODE2`, `MERO_E2E_CONTEXT`, `MERO_E2E_NODE1_NAME` if your nodes differ
 from `http://localhost:8940` / `http://localhost:8941`.
+
+Without `MERO_E2E_PRESENCE=1` (which `pnpm test:e2e:presence` sets) the suite
+skips itself, so a plain `pnpm test:e2e` against the usual single node stays
+green rather than failing on a fixture it does not have.
+
+The last phase **SIGKILLs node 1** on purpose — the only way to observe TTL
+eviction, since presence belongs to the node, not to a client socket. Re-run the
+boot script before running the suite again.
 
 ### What it proves
 

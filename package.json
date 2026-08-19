@@ -24,6 +24,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
+    "test:e2e:presence": "MERO_E2E_PRESENCE=1 vitest run --config vitest.e2e.config.ts tests/e2e/ephemeral.live.test.tsx",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
     "prepublishOnly": "pnpm build && pnpm typecheck"

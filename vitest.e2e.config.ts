@@ -1,57 +1,34 @@
-import { fileURLToPath } from 'node:url';
-import { existsSync } from 'node:fs';
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 
 // Live-node integration tests: render hooks/provider against a real merod.
 // Kept separate from the default (mocked) unit run; needs a booted node.
 //
-// See tests/e2e/README.md for the three one-line commands (build mero-js,
-// boot the nodes, run this suite).
-
-/**
- * TEST-ONLY resolution of a LOCAL `@calimero-network/mero-js` build.
- *
- * `package.json` pins `^7.3.0`, which has no `ephemeral` surface at all, and
- * keeping that pin unbumped is a constraint on this change — so the hook casts
- * to locally-declared structural types (`EphemeralClient`, `EphemeralEntry`,
- * `Codec` in src/hooks/index.ts) instead of importing them.
- *
- * That is precisely why this alias matters: a drift between those local
- * declarations and what `mero-js` actually does at runtime is invisible to the
- * unit suite (which mocks mero-js) AND to `tsc` (which type-checks against the
- * installed 7.3.0). Only running the real package can catch it. The alias
- * swaps in the sibling checkout's build for the e2e run only — no
- * package.json edit, no lockfile churn.
- */
-const localMeroJs = fileURLToPath(new URL('../mero-js/dist/index.mjs', import.meta.url));
-
-/**
- * The sibling checkout is a LOCAL developer affordance, not a CI one: the
- * "E2E (hooks vs released merod)" job checks out this repo alone and runs the
- * other suites against a *released* merod. Throwing here would fail the whole
- * config at load time and take those suites down with it, which is exactly
- * what happened. Absent build => no alias, and the presence suite skips
- * itself (see MERO_E2E_LOCAL_MEROJS below) rather than failing against a
- * published mero-js that has no `ephemeral` surface.
- */
-const hasLocalMeroJs = existsSync(localMeroJs);
+// Two fixtures, deliberately separate:
+//   - most suites share ONE node (see tests/e2e/README.md)
+//   - tests/e2e/ephemeral.live.test.tsx needs TWO peered nodes, because
+//     presence is delivered over gossip BETWEEN nodes and a single node cannot
+//     exercise it. Boot those with tests/e2e/boot-presence-nodes.sh, then run
+//     `pnpm test:e2e:presence`, which sets MERO_E2E_PRESENCE; without it that
+//     suite skips itself.
+//
+// This config used to alias `@calimero-network/mero-js` to a sibling checkout's
+// build, because the pinned ^7.3.0 had no `ephemeral` surface and the hook had
+// to cast through structural types it declared itself. Both of those are gone:
+// the package is now ^13.1.0, which exports `EphemeralClient`, `EphemeralEntry`
+// and `Codec`, and the hook imports them nominally — so `tsc` checks the hook
+// against the real SDK and the e2e runs the published package. No alias needed,
+// and no way for a local build to mask a drift from what consumers install.
 
 export default defineConfig({
   plugins: [react()],
-  resolve: {
-    alias: hasLocalMeroJs
-      ? [{ find: /^@calimero-network\/mero-js$/, replacement: localMeroJs }]
-      : [],
-  },
   test: {
-    env: { MERO_E2E_LOCAL_MEROJS: hasLocalMeroJs ? '1' : '' },
     include: ['tests/e2e/**/*.test.{ts,tsx}'],
     environment: 'jsdom',
     globals: true,
     testTimeout: 60000,
     hookTimeout: 60000,
-    // One node, shared fixtures — run serially to avoid cross-test interference.
+    // Shared node fixtures — run serially to avoid cross-test interference.
     fileParallelism: false,
   },
 });
