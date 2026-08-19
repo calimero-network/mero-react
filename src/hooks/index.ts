@@ -3,6 +3,8 @@ import { compareSemver } from '@calimero-network/mero-js';
 import { useMero } from '../context';
 import { base58ToHex } from '../utils/base58';
 import type {
+  Codec,
+  EphemeralClient,
   Context,
   CreateContextRequest,
   CreateGroupInvitationRequest,
@@ -53,50 +55,25 @@ import type {
 
 export { useMero } from '../context';
 
-/** Structural copy of `mero-js`'s `Codec`. Declared locally rather than
- * imported: the installed `@calimero-network/mero-js` is `^7.3.0`, which does
- * not export it, and bumping that dependency is out of scope. Structural typing
- * makes a `mero-js` codec assignable to this without a nominal dependency. */
-export interface Codec<T> {
-  encode(value: T): number[];
-  decode(bytes: number[]): T;
-}
-
 /**
- * One presence entry as delivered by `mero.ephemeral.subscribe`. Both the
- * replayed seed (emitted to a connection right after it subscribes) and the
- * live deltas that follow arrive in this single shape.
+ * The presence types come straight from `mero-js` now — `Codec` and
+ * `EphemeralEntry` are its own declarations, and `EphemeralClient` is the type
+ * of the class behind `mero.ephemeral`, so a drift between what this hook
+ * assumes and what the SDK does is a compile error rather than a runtime
+ * surprise.
  *
- * `ageMs` is the only thing that distinguishes them: it is ABSENT on a live
- * delta and PRESENT on a replayed seed entry, reporting how stale that entry
- * already was (bounded by the node's 7s presence TTL). Absent and `0` are
- * different — a `0` means "the node replayed this and it is brand new", not
- * "no age information". Read it with `?? 0`, never with a truthiness check.
+ * Re-exported under the same names this package has always exported, so
+ * consumers importing `Codec` / `EphemeralEntry` / `EphemeralClient` from
+ * `@calimero-network/mero-react` keep compiling — they now simply get the
+ * nominal `mero-js` types instead of structural copies of them.
+ *
+ * On `EphemeralEntry.ageMs`: it is ABSENT on a live delta and PRESENT on a
+ * replayed seed entry, reporting how stale that entry already was (bounded by
+ * the node's presence TTL). Absent and `0` are different — a `0` means "the
+ * node replayed this and it is brand new", not "no age information". Read it
+ * with `?? 0`, never with a truthiness check.
  */
-export interface EphemeralEntry<T> {
-  author: string;
-  state?: T;
-  removed?: boolean;
-  ageMs?: number;
-}
-
-/** Structural copy of `mero-js`'s `mero.ephemeral` surface. Declared locally
- * for the same reason as `Codec` above: the installed
- * `@calimero-network/mero-js` is `^7.3.0`, whose `MeroJs` type predates this
- * surface, so `mero.ephemeral` does not typecheck against it even though it
- * exists at runtime. Cast through this interface rather than widening
- * `MeroJs` itself or bumping the dependency.
- *
- * There is no `get`: the node's `get_ephemeral` RPC was removed in favour of
- * replaying current presence over the subscription itself. */
-export interface EphemeralClient {
-  subscribe<T>(
-    contextId: string,
-    handler: (entry: EphemeralEntry<T>) => void,
-    codec?: Codec<T>,
-  ): () => void;
-  set<T>(contextId: string, state: T, codec?: Codec<T>): Promise<void>;
-}
+export type { Codec, EphemeralEntry, EphemeralClient } from '@calimero-network/mero-js';
 
 export interface UseEphemeralOptions<T> {
   /** Encoding for the presence slice. Defaults to JSON. */
