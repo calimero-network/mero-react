@@ -45,3 +45,10 @@ storybook-static
 
 # Agent scratch workspace — never commit
 .superpowers/
+
+# Local fixture state for the two-node presence e2e (boot-presence-nodes.sh)
+.presence-nodes/
+.presence-nodes.pids
+
+# merobox/merod node state, if a local harness is run from the repo root
+data/

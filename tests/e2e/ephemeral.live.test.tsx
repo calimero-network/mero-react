@@ -1,32 +1,30 @@
 /**
  * Ephemeral presence, end to end, through the WHOLE stack — no mocks anywhere.
  *
- *   useEphemeral (this repo)  ->  mero-js EphemeralClient + SseClient (local build)
+ *   useEphemeral (this repo)  ->  mero-js EphemeralClient + SseClient (published)
  *                             ->  two real merod nodes gossiping to each other
  *
- * Every other test of this feature stubs the layer below. The unit suite mocks
- * `mero.ephemeral`; `tsc` checks the hook against the INSTALLED
- * `@calimero-network/mero-js@^7.3.0`, which has no ephemeral surface at all and
- * so cannot check anything about it. The hook therefore casts through
- * structural types it declares itself (`EphemeralClient`, `EphemeralEntry`,
- * `Codec` in src/hooks/index.ts). If those declarations ever drift from what
- * mero-js really does, BOTH the unit suite and typecheck stay green. This file
- * is the only thing that can catch that, because it runs the real package
- * against a real node (see the alias in vitest.e2e.config.ts).
+ * Every other test of this feature stubs the layer below: the unit suite mocks
+ * `mero.ephemeral`, and `tsc` only proves the hook agrees with mero-js's type
+ * declarations. Neither can catch the SDK's runtime behaviour drifting from the
+ * node's actual wire — the shapes still line up, so both stay green. This file
+ * is the only thing that can, because it runs the published package against
+ * real nodes.
  *
- * ── RUNNING IT — three one-line commands, from a shell in this repo ──────────
+ * Presence is delivered over gossip BETWEEN nodes, so it needs two of them; the
+ * single node the other e2e suites share cannot exercise it. That is why this
+ * suite has its own fixture and its own CI job.
  *
- * 1. Build the local mero-js (the alias target):
- *    (cd ../mero-js && npm run build)
+ * ── RUNNING IT — two commands, from a shell in this repo ────────────────────
  *
- * 2. Boot two real nodes and LEAVE them running (from the core checkout; needs
- *    a `cargo build -p merod -p meroctl` first, and merobox on PATH):
- *    (cd <core> && PATH="$PWD/target/debug:$PATH" merobox bootstrap run tools/ephemeral-presence-demo/workflow.yml --binary-path "$PWD/target/debug/merod")
+ * 1. Boot the two nodes and build the shared context fixture (pass a merod
+ *    binary; a released one is fine):
+ *    ./tests/e2e/boot-presence-nodes.sh ./merod
  *
- * 3. Run this suite:
- *    npm run test:e2e
+ * 2. Run this suite:
+ *    pnpm test:e2e:presence
  *
- * Tear the nodes down afterwards with: merobox nuke
+ * Stop the nodes afterwards with: kill $(cat .presence-nodes.pids)
  *
  * The suite auto-discovers the per-run context id from node 1's admin API, so
  * no ids need pasting. Override the defaults with MERO_E2E_NODE1 /
@@ -34,7 +32,7 @@
  *
  * NOTE: the last phase STOPS node 1 on purpose — that is the only way to
  * observe TTL eviction (presence belongs to the node, not to a client socket).
- * Re-run the bootstrap command above before running the suite again.
+ * Re-run the boot script before running the suite again.
  */
 
 // Side-effect import, FIRST: jsdom's AbortController is incompatible with
@@ -153,13 +151,17 @@ afterAll(() => {
   }
 });
 
-// Requires BOTH the sibling mero-js build (aliased in by vitest.e2e.config.ts)
-// and the two demo nodes. Neither exists in the released-merod CI job, and the
-// published mero-js has no `ephemeral` surface at all, so skip rather than
-// fail there. Locally, see tests/e2e/README.md for the three commands.
-const hasLocalMeroJs = process.env.MERO_E2E_LOCAL_MEROJS === '1';
+// Requires the TWO peered nodes from tests/e2e/boot-presence-nodes.sh, which
+// sets this variable. The other e2e suites share a single node and cannot serve
+// this one - presence travels over gossip BETWEEN nodes - so skip rather than
+// fail when only that single-node fixture is up.
+//
+// This no longer gates on a local mero-js build: the published package exports
+// the `ephemeral` surface, so the suite runs against exactly what consumers
+// install.
+const hasPresenceNodes = process.env.MERO_E2E_PRESENCE === '1';
 
-describe.skipIf(!hasLocalMeroJs)('ephemeral presence — real merod, real mero-js, real hook', () => {
+describe.skipIf(!hasPresenceNodes)('ephemeral presence — real merod, real mero-js, real hook', () => {
   it('1. publishes from a hook on node 1 and observes it in a hook on node 2 (cross-node, over gossip)', async () => {
     const a = renderHook(() => useEphemeral<Cursor>(CONTEXT_ID), {
       wrapper: wrapperFor(client(NODE1)),
