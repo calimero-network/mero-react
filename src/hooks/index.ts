@@ -1,8 +1,10 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { compareSemver } from '@calimero-network/mero-js';
 import { useMero } from '../context';
 import { base58ToHex } from '../utils/base58';
 import type {
+  Codec,
+  EphemeralClient,
   Context,
   CreateContextRequest,
   CreateGroupInvitationRequest,
@@ -52,6 +54,448 @@ import type {
 } from '../types';
 
 export { useMero } from '../context';
+
+/**
+ * The presence types come straight from `mero-js` now — `Codec` and
+ * `EphemeralEntry` are its own declarations, and `EphemeralClient` is the type
+ * of the class behind `mero.ephemeral`, so a drift between what this hook
+ * assumes and what the SDK does is a compile error rather than a runtime
+ * surprise.
+ *
+ * Re-exported under the same names this package has always exported, so
+ * consumers importing `Codec` / `EphemeralEntry` / `EphemeralClient` from
+ * `@calimero-network/mero-react` keep compiling — they now simply get the
+ * nominal `mero-js` types instead of structural copies of them.
+ *
+ * On `EphemeralEntry.ageMs`: it is ABSENT on a live delta and PRESENT on a
+ * replayed seed entry, reporting how stale that entry already was (bounded by
+ * the node's presence TTL). Absent and `0` are different — a `0` means "the
+ * node replayed this and it is brand new", not "no age information". Read it
+ * with `?? 0`, never with a truthiness check.
+ */
+export type { Codec, EphemeralEntry, EphemeralClient } from '@calimero-network/mero-js';
+
+export interface UseEphemeralOptions<T> {
+  /** Encoding for the presence slice. Defaults to JSON. */
+  codec?: Codec<T>;
+  /** Base value for the first `setPresence` merge. */
+  initial?: T;
+  /** Minimum ms between publishes. Trailing edge — the latest value wins. */
+  throttleMs?: number;
+  /** Include your own echoed presence in `peers`. Default false. */
+  includeSelf?: boolean;
+}
+
+/** Shape returned by {@link useEphemeral}. */
+export interface UseEphemeralResult<T> {
+  peers: Map<string, T>;
+  setPresence: (partial: Partial<T>) => void;
+  ageOf: (author: string) => number | undefined;
+  error: Error | null;
+}
+
+/**
+ * Which asynchronous producer currently owns the latched error slot.
+ *
+ * Only genuinely ASYNCHRONOUS failures are latched — an event happened once,
+ * in the past, and nothing about the current render can re-derive it. Anything
+ * that is a standing property of the current props/client (notably "this
+ * client has no `mero.ephemeral` surface") is NOT latched: it is recomputed
+ * every render, so it can neither go stale nor be accidentally cleared.
+ *
+ * The slot is shared, so each producer only clears what it itself raised.
+ */
+type ErrorSource = 'identity' | 'publish';
+
+/**
+ * The latched async error, tagged with its producer AND with the context it
+ * belongs to.
+ *
+ * `contextKey` is what makes cross-context leaks structurally impossible
+ * rather than a matter of remembering to clear: a write whose key is no longer
+ * the current context is dropped on the way in (a publish that was in flight
+ * across a context switch), and a latch whose key no longer matches is not
+ * read on the way out. Neither path depends on some other effect having run a
+ * clear first.
+ */
+interface LatchedEphemeralError {
+  contextKey: string | null;
+  source: ErrorSource;
+  error: Error;
+}
+
+const NO_EPHEMERAL_SURFACE_MESSAGE =
+  'useEphemeral: this client has no `mero.ephemeral` surface. Ephemeral ' +
+  'presence requires @calimero-network/mero-js >= 9.1.0; upgrade the ' +
+  'installed @calimero-network/mero-js (and any lockfile pin) to use it.';
+
+const COULD_NOT_RESOLVE_IDENTITY_MESSAGE =
+  'useEphemeral: could not resolve a local context identity, so your own ' +
+  'presence cannot be filtered out. Pass includeSelf: true to accept this.';
+
+/**
+ * How long after the last replayed entry (one carrying `ageMs`) the replay
+ * window stays open before `peers` is reconciled down to what the replay
+ * contained. Long enough to absorb a replay burst split across several SSE
+ * frames/ticks, short enough that a swept peer does not linger.
+ */
+const REPLAY_RECONCILE_MS = 50;
+
+/**
+ * Observe and publish ephemeral presence (cursors, typing, online) for a
+ * context.
+ *
+ * ONE read path: the subscription. When a client subscribes, the node replays
+ * that context's current presence to that connection as ordinary entries
+ * before the live deltas start, so seeding and updating share a single shape
+ * ({@link EphemeralEntry}) and a reconnect — `SseClient` auto-reconnects and
+ * re-subscribes — re-seeds itself. There is no snapshot fetch and no
+ * client-side reconciliation pass.
+ *
+ * Freshness is computed entirely from local clock deltas: a replayed entry is
+ * current as of `Date.now() - ageMs`, a live delta as of `Date.now()`. No
+ * cross-machine clock comparison is ever performed.
+ *
+ * No client-side TTL or heartbeat: the node sweeps at 7s and emits removals,
+ * and re-publishes on your behalf every 2.5s. A replay is treated as
+ * AUTHORITATIVE — see the replay-reconcile pass in the read effect — so a peer
+ * swept while the SSE connection was down does not survive the reconnect.
+ *
+ * `error` is derived, not accumulated: standing conditions (no `ephemeral`
+ * surface) are recomputed every render, one-shot async failures are latched
+ * keyed by the context they happened in, and whether a latched failure is even
+ * relevant (an unresolved identity when `includeSelf` is true) is decided at
+ * read time. Nothing survives a context switch.
+ */
+export function useEphemeral<T>(
+  contextId: string | null,
+  options: UseEphemeralOptions<T> = {},
+): UseEphemeralResult<T> {
+  const { includeSelf = false } = options;
+  const { mero } = useMero();
+  // Cast: the installed mero-js's `MeroJs` type predates `ephemeral` (see
+  // `EphemeralClient` above), though it exists at runtime.
+  const ephemeral = mero
+    ? ((mero as unknown as { ephemeral?: EphemeralClient }).ephemeral ?? null)
+    : null;
+
+  const [peers, setPeers] = useState<Map<string, T>>(new Map());
+  // The one latched async error (see `LatchedEphemeralError`). Not read
+  // directly — `error` below derives what is actually reported from it.
+  const [latchedError, setLatchedError] = useState<LatchedEphemeralError | null>(null);
+  // The context the CURRENT render targets. Read by `setSourceError` so a
+  // callback that resolves after a context switch can tell that its result is
+  // no longer wanted without closing over anything but its own captured key.
+  const contextKeyRef = useRef<string | null>(contextId);
+  contextKeyRef.current = contextId;
+  // `key` is the contextId captured when the failing operation was STARTED,
+  // not when it settled. A late write from a context we have already left is
+  // dropped here rather than being written and then hopefully cleared.
+  const setSourceError = useCallback(
+    (source: ErrorSource, err: Error, key: string | null) => {
+      if (key !== contextKeyRef.current) return;
+      setLatchedError({ contextKey: key, source, error: err });
+    },
+    [],
+  );
+  const clearSourceError = useCallback((source: ErrorSource, key: string | null) => {
+    setLatchedError(prev =>
+      prev && prev.source === source && prev.contextKey === key ? null : prev,
+    );
+  }, []);
+
+  // DERIVED, never latched: "this client has no `mero.ephemeral` surface" is a
+  // standing property of the current client, not an event. Recomputing it every
+  // render is what makes it impossible to (a) leave it set after an upgraded
+  // client arrives or (b) lose it to some other effect's clear — a context
+  // switch, for instance, cannot hide a client that still has no surface.
+  // Memoised only so the Error identity is stable while the condition holds.
+  const surfaceError = useMemo(
+    () => (mero && !ephemeral ? new Error(NO_EPHEMERAL_SURFACE_MESSAGE) : null),
+    [mero, ephemeral],
+  );
+
+  // A latch is reported only if it belongs to the context being rendered, and
+  // only if it is still MEANINGFUL: an unresolved local identity is an error
+  // solely because self-filtering needs it, so opting into `includeSelf` makes
+  // it a non-event — decided here, at read time, rather than by racing an
+  // effect to clear it.
+  const error =
+    surfaceError ??
+    (latchedError &&
+    latchedError.contextKey === contextId &&
+    !(latchedError.source === 'identity' && includeSelf)
+      ? latchedError.error
+      : null);
+  // author -> local ms timestamp the entry is considered current as of.
+  const receivedAtRef = useRef<Map<string, number>>(new Map());
+  // `codec` and `initial` are held in refs, never in a dependency array:
+  // `jsonCodec()` is a FACTORY, so `{ codec: jsonCodec() }` at the call site is
+  // a fresh identity every render. As a dep it would tear down and re-create
+  // the subscription on every render — and since every applied entry sets a
+  // new Map (a new render), that is an unbounded resubscribe storm, each
+  // resubscribe pulling a fresh presence replay. A codec swapped mid-flight is
+  // not a real use case.
+  const codecRef = useRef<Codec<T> | undefined>(options.codec);
+  codecRef.current = options.codec;
+  const initialRef = useRef<T | undefined>(options.initial);
+  initialRef.current = options.initial;
+  // This node's own context member key (device-level), resolved async. Never
+  // compare this against an account id — that comparison silently never
+  // matches, which is the classic self-echo bug.
+  const selfRef = useRef<string | null>(null);
+  const lastLocalRef = useRef<T | undefined>(options.initial);
+  const pendingRef = useRef<T | undefined>(undefined);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Seeded to the mount time (not 0) so an isolated call shortly after mount
+  // is correctly treated as part of the initial "burst" and trailing-edge
+  // throttled, rather than bypassing the throttle because it looks like it's
+  // arriving long after a (nonexistent) previous publish.
+  const lastSentAtRef = useRef<number>(Date.now());
+  // Open replay window: the authors seen since a replayed entry (one carrying
+  // `ageMs`) last arrived. Null when no replay is in progress.
+  const replaySeenRef = useRef<Set<string> | null>(null);
+  const replayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const ageOf = useCallback((author: string): number | undefined => {
+    const at = receivedAtRef.current.get(author);
+    return at === undefined ? undefined : Date.now() - at;
+  }, []);
+
+  // Clear ALL per-context state synchronously the instant the target context
+  // changes. Read state, so a previous context's peers don't keep rendering
+  // until the new context's replay arrives — and write state, because a
+  // queued publish would otherwise fire into the PREVIOUS context (its
+  // `setTimeout` closure captured the old `publish`), and `lastLocalRef` would
+  // shallow-merge the old context's fields into the first slice published in
+  // the new one. Presence is app-defined data (cursor position, typing target),
+  // so both are genuine cross-context writes, not cosmetic leaks.
+  //
+  // The latched error is dropped here as well, but purely as housekeeping (it
+  // is what makes A -> B -> A not resurrect A's old failure). Correctness does
+  // not rest on it: the latch carries its own `contextKey`, so an error from a
+  // context we have left is neither written nor read regardless of whether this
+  // effect ran. The standing surface condition is untouched — it is derived, so
+  // it re-reports itself on the very next render if it is still true.
+  useEffect(() => {
+    setPeers(new Map());
+    receivedAtRef.current = new Map();
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    if (replayTimerRef.current) {
+      clearTimeout(replayTimerRef.current);
+      replayTimerRef.current = null;
+    }
+    replaySeenRef.current = null;
+    pendingRef.current = undefined;
+    lastLocalRef.current = initialRef.current;
+    selfRef.current = null;
+    setLatchedError(null);
+  }, [contextId]);
+
+  // Resolve THIS node's context member key — the same value the node stamps
+  // as `author` on ephemeral entries.
+  useEffect(() => {
+    if (!mero || !contextId) return;
+    // Captured at START. Everything this effect reports is tagged with it, so
+    // a slow lookup that lands after a context switch cannot write into the
+    // context we switched to.
+    const key = contextId;
+    let cancelled = false;
+    mero.admin
+      .getContextIdentitiesOwned(contextId)
+      .then(res => {
+        if (cancelled) return;
+        const self = res.identities?.[0] ?? null;
+        selfRef.current = self;
+        if (!self) {
+          // Latched unconditionally — `includeSelf` is NOT consulted here.
+          // Whether an unresolved identity matters is a question about the
+          // CURRENT props, so it is answered where `error` is derived; asking
+          // it here is what previously left the error stranded when
+          // `includeSelf` flipped to true while resolution still failed.
+          setSourceError('identity', new Error(COULD_NOT_RESOLVE_IDENTITY_MESSAGE), key);
+          return;
+        }
+        // A later run of this effect (contextId change, includeSelf toggle)
+        // resolved a self identity where an earlier run didn't — clear the
+        // "could not resolve" error this effect itself raised.
+        clearSourceError('identity', key);
+        // Ordering race: the identity lookup and the subscription's presence
+        // replay land independently, so a self entry can already be seeded in
+        // `peers`. Retroactively drop it now that we know who "self" is.
+        if (!includeSelf) {
+          receivedAtRef.current.delete(self);
+          setPeers(prev => {
+            if (!prev.has(self)) return prev;
+            const next = new Map(prev);
+            next.delete(self);
+            return next;
+          });
+        }
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setSourceError('identity', toError(err), key);
+        }
+      });
+    return () => { cancelled = true; };
+    // `mero` itself is a dep on purpose: a real MeroProvider memoizes its
+    // context value, so `mero` only changes identity when the underlying
+    // client is actually replaced (e.g. `allowedNodeUrls` changes) — and
+    // that replacement is exactly when this effect must re-resolve the
+    // local identity against the new client. Keying on presence alone
+    // (`Boolean(mero)`) would silently keep resolving against a closed,
+    // stale client instance.
+  }, [mero, contextId, includeSelf, setSourceError, clearSourceError]);
+
+  // The single read path. Subscribing makes the node replay this context's
+  // current presence to this connection as ordinary entries, then stream live
+  // deltas — so this one handler both seeds and updates, and an SSE reconnect
+  // (which re-subscribes) re-seeds without any extra machinery.
+  //
+  // A REPLAY IS AUTHORITATIVE. The node replays exactly who is present right
+  // now; anything we still hold that the replay does not mention is gone.
+  // Without reconciling against it, a peer swept while the connection was down
+  // is a permanent ghost: its removal event was delivered to nobody, and the
+  // replay — which lists only survivors — will never mention it again. That
+  // sweep happens inside `SseClient`'s auto-reconnect, so it does NOT re-run
+  // this effect; reconciliation has to be driven by the entries themselves,
+  // which is why it keys off `ageMs` (present only on replayed entries) rather
+  // than off subscribe/unsubscribe. Clearing `peers` eagerly on subscribe would
+  // also miss the reconnect case entirely — and would blank the UI on every
+  // `includeSelf` toggle.
+  //
+  // The window closes `REPLAY_RECONCILE_MS` after the last replayed entry, and
+  // live entries arriving while it is open count as present too, so a peer that
+  // publishes mid-replay is never swept. A replayed entry that somehow arrives
+  // after the window closed re-adds its author immediately — the failure mode
+  // is a flicker, never a resurrected ghost or a permanent loss.
+  useEffect(() => {
+    if (!ephemeral || !contextId) return;
+
+    const closeReplayWindow = () => {
+      replayTimerRef.current = null;
+      const seen = replaySeenRef.current;
+      replaySeenRef.current = null;
+      if (!seen) return;
+      setPeers(prev => {
+        let next: Map<string, T> | null = null;
+        for (const author of prev.keys()) {
+          if (seen.has(author)) continue;
+          if (!next) next = new Map(prev);
+          next.delete(author);
+          receivedAtRef.current.delete(author);
+        }
+        return next ?? prev;
+      });
+    };
+
+    const unsubscribe = ephemeral.subscribe<T>(
+      contextId,
+      entry => {
+        const { author, state } = entry;
+        if (entry.ageMs !== undefined) {
+          // A replayed entry: (re)open the reconcile window and debounce its
+          // close, so a replay burst split across frames counts as one replay.
+          if (!replaySeenRef.current) replaySeenRef.current = new Set();
+          if (replayTimerRef.current) clearTimeout(replayTimerRef.current);
+          replayTimerRef.current = setTimeout(closeReplayWindow, REPLAY_RECONCILE_MS);
+        }
+        if (entry.removed || state === undefined) {
+          replaySeenRef.current?.delete(author);
+          receivedAtRef.current.delete(author);
+          setPeers(prev => {
+            if (!prev.has(author)) return prev;
+            const next = new Map(prev);
+            next.delete(author);
+            return next;
+          });
+          return;
+        }
+        if (!includeSelf && author === selfRef.current) return;
+        replaySeenRef.current?.add(author);
+        // `ageMs` is absent on a live delta (current as of now) and present on
+        // a replayed entry (current as of `now - ageMs`). `?? 0` — never a
+        // truthiness test: an `ageMs` of 0 is a real, meaningful value.
+        receivedAtRef.current.set(author, Date.now() - (entry.ageMs ?? 0));
+        setPeers(prev => new Map(prev).set(author, state));
+      },
+      codecRef.current,
+    );
+
+    return () => {
+      if (replayTimerRef.current) {
+        clearTimeout(replayTimerRef.current);
+        replayTimerRef.current = null;
+      }
+      replaySeenRef.current = null;
+      unsubscribe();
+    };
+    // `ephemeral` itself is a dep on purpose — see the identity-resolution
+    // effect above. A replaced client must re-subscribe against the new
+    // client, not keep reading/writing through the old (possibly closed)
+    // one. `codec` is deliberately NOT a dep — see `codecRef`.
+  }, [ephemeral, contextId, includeSelf]);
+
+  const publish = useCallback((value: T) => {
+    if (!ephemeral || !contextId) return;
+    // Captured at START, like the identity lookup's `key`: `ephemeral.set` is
+    // not cancellable, so a rejection can land long after a context switch.
+    // Tagging the write with the context it was issued for is what keeps that
+    // failure out of the new context's error slot.
+    const key = contextId;
+    lastSentAtRef.current = Date.now();
+    void ephemeral.set<T>(key, value, codecRef.current).then(
+      () => clearSourceError('publish', key),
+      (err: unknown) => setSourceError('publish', toError(err), key),
+    );
+  }, [ephemeral, contextId, setSourceError, clearSourceError]);
+
+  /**
+   * Publish your own presence.
+   *
+   * SHALLOW merge over the last locally-set value (starting from `initial`):
+   * presence is one slot per author, so fields are not independent channels
+   * and a bare replace would silently drop whatever you did not mention.
+   * Nested objects are replaced wholesale, not deep-merged —
+   * `setPresence({ cursor: { x: 1 } })` DROPS `cursor.y` if it was set
+   * separately.
+   *
+   * Throttled on the trailing edge: rapid calls collapse into one publish
+   * carrying the newest value, never the oldest queued one.
+   */
+  const setPresence = useCallback((partial: Partial<T>) => {
+    const next = { ...(lastLocalRef.current ?? ({} as T)), ...partial } as T;
+    lastLocalRef.current = next;
+
+    const throttleMs = options.throttleMs ?? 30;
+    if (throttleMs <= 0) {
+      publish(next);
+      return;
+    }
+
+    pendingRef.current = next;
+    if (timerRef.current) return;
+    const elapsed = Date.now() - lastSentAtRef.current;
+    const delay = Math.max(throttleMs - elapsed, 0);
+    timerRef.current = setTimeout(() => {
+      timerRef.current = null;
+      const queued = pendingRef.current;
+      pendingRef.current = undefined;
+      if (queued !== undefined) publish(queued);
+    }, delay);
+  }, [publish, options.throttleMs]);
+
+  // Cancel a queued publish on unmount.
+  useEffect(() => () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+  }, []);
+
+  return { peers, setPresence, ageOf, error };
+}
 
 /**
  * Shape accepted by the metadata-setter hooks — re-exported from mero-js so
