@@ -456,3 +456,164 @@ describe('getPermissionsForMode — grants requested at login (scope-enforced co
     );
   });
 });
+
+describe('MeroProvider — session survives an expired access token', () => {
+  /**
+   * Reproduces the real mero-js behaviour: `validateToken` pins the token under
+   * test into an explicit Authorization header, so the transport's 401 refresh
+   * rotates the STORE but the retry re-sends the stale header and still reports
+   * `valid: false`. The renewed session must not be thrown away.
+   */
+  function storeRotatingOnValidate(rotated: string | null) {
+    const store = makeStore();
+    let current = 'stale-token';
+    store.getTokens.mockImplementation(() => ({
+      access_token: current,
+      refresh_token: 'r',
+      expires_at: 0,
+    }));
+    const validateToken = vi.fn(async (token: string) => {
+      if (token === 'stale-token') {
+        if (rotated) current = rotated; // transport spent the refresh token
+        return { valid: false, headers: {}, status: 401 };
+      }
+      return { valid: token === rotated, headers: {}, status: 200 };
+    });
+    return { store, validateToken };
+  }
+
+  function mountWith(validateToken: ReturnType<typeof vi.fn>, store: MockStore) {
+    const events = { on: vi.fn(), off: vi.fn(), connect: vi.fn().mockResolvedValue(undefined) };
+    meroMock.mockImplementation(
+      () =>
+        ({
+          admin: { getContexts: vi.fn().mockResolvedValue([]) },
+          auth: { validateToken },
+          events,
+          clearToken: vi.fn(),
+          close: vi.fn(),
+        }) as never,
+    );
+    localStorage.setItem('mero:node_url', 'https://node-a.example.com');
+    render(
+      <MeroProvider mode={AppMode.MultiContext} tokenStore={store}>
+        <Consumer />
+      </MeroProvider>,
+    );
+    return { events };
+  }
+
+  it('stays authenticated when validateToken rotated the stored bundle underneath it', async () => {
+    const { store, validateToken } = storeRotatingOnValidate('fresh-token');
+    mountWith(validateToken, store);
+    await settled();
+
+    // Judged on the token we actually hold now, not the one we walked in with.
+    expect(validateToken).toHaveBeenCalledWith('stale-token');
+    expect(validateToken).toHaveBeenCalledWith('fresh-token');
+    expect(screen.getByTestId('authed').textContent).toBe('true');
+  });
+
+  it('reports unauthenticated when nothing rotated (a genuinely dead session)', async () => {
+    const { store, validateToken } = storeRotatingOnValidate(null);
+    mountWith(validateToken, store);
+    await settled();
+
+    expect(validateToken).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('authed').textContent).toBe('false');
+  });
+
+  it('does not re-validate, or log out, when the first check already passed', async () => {
+    const store = makeStore();
+    store.getTokens.mockReturnValue({ access_token: 'good', refresh_token: 'r', expires_at: 0 });
+    const validateToken = vi.fn().mockResolvedValue({ valid: true, headers: {}, status: 200 });
+    mountWith(validateToken, store);
+    await settled();
+
+    expect(validateToken).toHaveBeenCalledTimes(1);
+    expect(store.clear).not.toHaveBeenCalled();
+    expect(screen.getByTestId('authed').textContent).toBe('true');
+  });
+});
+
+describe('MeroProvider — an SSE 401 must not destroy the token store', () => {
+  function mountAuthed(validateToken: ReturnType<typeof vi.fn>) {
+    const store = makeStore();
+    store.getTokens.mockReturnValue({ access_token: 'a', refresh_token: 'r', expires_at: 0 });
+    const events = {
+      on: vi.fn(),
+      off: vi.fn(),
+      connect: vi.fn().mockResolvedValue(undefined),
+    };
+    meroMock.mockImplementation(
+      () =>
+        ({
+          admin: { getContexts: vi.fn().mockResolvedValue([]) },
+          auth: { validateToken },
+          events,
+          clearToken: vi.fn(),
+          close: vi.fn(),
+        }) as never,
+    );
+    localStorage.setItem('mero:node_url', 'https://node-a.example.com');
+    render(
+      <MeroProvider mode={AppMode.MultiContext} tokenStore={store}>
+        <Consumer />
+      </MeroProvider>,
+    );
+    return { store, events };
+  }
+
+  /** Fire the 'error' handler the provider registered on the SSE client. */
+  const raise = async (events: { on: ReturnType<typeof vi.fn> }, err: Error) => {
+    const handler = events.on.mock.calls.find((c) => c[0] === 'error')?.[1];
+    expect(handler).toBeTypeOf('function');
+    await act(async () => {
+      handler(err);
+      await Promise.resolve();
+    });
+  };
+
+  it('refreshes and reconnects instead of logging out when the session is recoverable', async () => {
+    // First call = the boot check; second = the recovery, which now succeeds.
+    const validateToken = vi
+      .fn()
+      .mockResolvedValueOnce({ valid: true, headers: {}, status: 200 })
+      .mockResolvedValue({ valid: true, headers: {}, status: 200 });
+    const { store, events } = mountAuthed(validateToken);
+    await settled();
+
+    await raise(events, new Error('SSE connection failed: 401'));
+
+    // The refresh token is the whole session — it must survive.
+    expect(store.clear).not.toHaveBeenCalled();
+    expect(screen.getByTestId('authed').textContent).toBe('true');
+    expect(events.connect).toHaveBeenCalledTimes(2); // initial + reconnect
+  });
+
+  it('logs out only once the session is genuinely dead', async () => {
+    const validateToken = vi
+      .fn()
+      .mockResolvedValueOnce({ valid: true, headers: {}, status: 200 })
+      .mockResolvedValue({ valid: false, headers: {}, status: 401 });
+    const { store, events } = mountAuthed(validateToken);
+    await settled();
+
+    await raise(events, new Error('SSE connection failed: 401'));
+
+    await waitFor(() => expect(screen.getByTestId('authed').textContent).toBe('false'));
+    expect(store.clear).toHaveBeenCalled();
+  });
+
+  it('ignores a non-401 stream error (offline, not unauthenticated)', async () => {
+    const validateToken = vi.fn().mockResolvedValue({ valid: true, headers: {}, status: 200 });
+    const { store, events } = mountAuthed(validateToken);
+    await settled();
+
+    await raise(events, new Error('network down'));
+
+    expect(store.clear).not.toHaveBeenCalled();
+    expect(validateToken).toHaveBeenCalledTimes(1); // boot only — no recovery attempt
+    expect(screen.getByTestId('authed').textContent).toBe('true');
+  });
+});
