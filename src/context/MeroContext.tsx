@@ -103,6 +103,9 @@ export function MeroProvider({
   const [contextIdentity, setContextIdentityState] = useState<string | null>(() => getContextIdentity());
 
   const meroRef = useRef<MeroJs | null>(null);
+  // Guards the SSE 401 recovery below, so a burst of reconnect failures can't
+  // stack concurrent validate/refresh attempts over one single-use refresh token.
+  const recoveringRef = useRef(false);
 
   // Parse auth callback ONCE in a ref (StrictMode-safe: refs persist across unmount/remount)
   const callbackRef = useRef<AuthCallbackResult | null | undefined>(undefined);
@@ -137,12 +140,41 @@ export function MeroProvider({
       // bounced every app straight back to the login page.
       const accessToken = tokenStore.getTokens()?.access_token;
       if (!accessToken) return false;
-      try {
-        const { valid } = await instance.auth.validateToken(accessToken);
-        return valid;
-      } catch {
-        return false;
-      }
+
+      const validate = async (token: string): Promise<boolean> => {
+        try {
+          const { valid } = await instance.auth.validateToken(token);
+          return valid;
+        } catch {
+          return false;
+        }
+      };
+
+      if (await validate(accessToken)) return true;
+
+      // An expired access token does NOT mean the session is over: refresh
+      // tokens last 30 days against core's 1-hour access TTL, so on any reload
+      // more than an hour after login we land here holding a perfectly good
+      // refresh token.
+      //
+      // `validateToken` has in fact already spent it. It pins the token under
+      // test into an explicit `Authorization` header, and mero-js's init
+      // headers override the transport's own token (mero-js
+      // http-client/web-client.js `buildHeaders`). So the 401 + `x-auth-error:
+      // token_expired` trips the transport's refresh hook — rotating the stored
+      // bundle — and then the retry re-sends the SAME stale header, 401s again,
+      // and reports `valid: false`. The session was silently renewed and thrown
+      // away, and the app bounced to login; a second reload would then "fix"
+      // itself, which is exactly how this reads as a random logout.
+      //
+      // So: re-read the store, and if the transport rotated it underneath us,
+      // judge the session on the token we ACTUALLY hold now. We never call
+      // /auth/refresh ourselves — doing so would race mero-js's single-flight
+      // lock over a single-use refresh token and get the whole family revoked
+      // (calimero-network/core#3083).
+      const rotated = tokenStore.getTokens()?.access_token;
+      if (!rotated || rotated === accessToken) return false;
+      return validate(rotated);
     },
     [tokenStore],
   );
@@ -324,19 +356,42 @@ export function MeroProvider({
     const onError = (err: Error) => {
       if (!active) return;
       setIsOnline(false);
-      // TODO(mero-js#67): surface a revoked token family as an explicit forced
-      // re-login rather than an opaque 401. Once a refresh token is replayed the
-      // node revokes the family and answers 401 with `x-auth-error: token_reuse`
-      // (or `token_revoked`) — a terminal state no retry can recover from, unlike
-      // `token_expired`. mero-js#67 adds an `AuthRevokedError` for exactly this;
-      // the mero-js pinned here (6.1.0) predates it — it neither exports that
-      // error nor reads `x-auth-error` beyond `token_expired` — so there is
-      // nothing to branch on yet. Bump mero-js past #67, then match on
-      // `AuthRevokedError` here and expose a distinct `sessionRevoked` reason to
-      // consumers instead of a silent logout.
-      if (err.message.includes('401')) {
-        logout();
-      }
+      if (!err.message.includes('401')) return;
+
+      // A 401 from the event stream is NOT proof the session is over, and it
+      // used to be treated as such: `logout()` wipes the token store, so an
+      // expired access token cost the user their still-valid 30-day refresh
+      // token and forced a real re-login.
+      //
+      // The stream authenticates only at connect time (an open stream survives
+      // expiry), so this fires on the first reconnect after the access token
+      // ages out — a sleep/wake, a network blip, a PWA resume, a node restart.
+      // Routine events, all of them.
+      //
+      // We cannot tell `token_expired` from a revoked family here: mero-js's
+      // SseClient connects with a raw fetch and throws a bare
+      // `SSE connection failed: <status>`, so no `x-auth-error` and no
+      // `AuthRevokedError` reaches us. Instead of guessing, ask `checkAuth`,
+      // which recovers a merely-expired token via the transport's refresh and
+      // returns false only when the session is genuinely dead.
+      if (recoveringRef.current) return;
+      recoveringRef.current = true;
+      void (async () => {
+        try {
+          const instance = meroRef.current;
+          if (!instance) return;
+          if (await checkAuth(instance)) {
+            // Renewed. mero-js's `onTokenRefresh` hook has already updated the
+            // instance's in-memory token, so the SseClient's `getAuthToken`
+            // hands the reconnect the new one.
+            if (active) await instance.events.connect().catch(() => {});
+            return;
+          }
+          if (active) logout();
+        } finally {
+          recoveringRef.current = false;
+        }
+      })();
     };
 
     sse.on('connect', onConnect);
@@ -348,7 +403,9 @@ export function MeroProvider({
       sse.off('connect', onConnect);
       sse.off('error', onError);
     };
-  }, [isAuthenticated, mero]);
+    // `checkAuth` and `logout` are both useCallback-stable (they close over the
+    // memoized `tokenStore`), so listing them does not re-subscribe the stream.
+  }, [isAuthenticated, mero, checkAuth, logout]);
 
   const contextValue = useMemo<MeroContextValue>(
     () => ({
