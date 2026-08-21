@@ -1,3 +1,10 @@
+## [6.0.1](https://github.com/calimero-network/mero-react/compare/mero-react-v6.0.0...mero-react-v6.0.1) (2026-08-21)
+
+### Bug Fixes
+
+* **auth:** stop ending sessions that are still alive ([db1339f](https://github.com/calimero-network/mero-react/commit/db1339fb66dc6ba9307831579aa5d11965351d8d))
+* **auth:** stop ending sessions that are still alive ([99f0d6c](https://github.com/calimero-network/mero-react/commit/99f0d6c54168aea3d839e3a54894257f823bbd87)), closes [core#3083](https://github.com/calimero-network/core/issues/3083) [mero-js#67](https://github.com/calimero-network/mero-js/issues/67)
+
 ## [6.0.0](https://github.com/calimero-network/mero-react/compare/mero-react-v5.1.0...mero-react-v6.0.0) (2026-08-19)
 
 ### ⚠ BREAKING CHANGES
