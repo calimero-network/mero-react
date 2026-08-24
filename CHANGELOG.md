@@ -1,3 +1,9 @@
+## [6.0.2](https://github.com/calimero-network/mero-react/compare/mero-react-v6.0.1...mero-react-v6.0.2) (2026-08-24)
+
+### Bug Fixes
+
+* **fleet:** commit only the files the bump claims ([#59](https://github.com/calimero-network/mero-react/issues/59)) ([b8ed8d8](https://github.com/calimero-network/mero-react/commit/b8ed8d8dbe70615dc02334daba9284443be65d94)), closes [#190](https://github.com/calimero-network/mero-react/issues/190) [#194](https://github.com/calimero-network/mero-react/issues/194)
+
 ## [6.0.1](https://github.com/calimero-network/mero-react/compare/mero-react-v6.0.0...mero-react-v6.0.1) (2026-08-21)
 
 ### Bug Fixes
