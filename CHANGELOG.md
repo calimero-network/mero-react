@@ -1,3 +1,10 @@
+## [6.0.3](https://github.com/calimero-network/mero-react/compare/mero-react-v6.0.2...mero-react-v6.0.3) (2026-08-25)
+
+### Bug Fixes
+
+* **fleet:** bump with the pnpm the repository actually uses ([#60](https://github.com/calimero-network/mero-react/issues/60)) ([fed34ff](https://github.com/calimero-network/mero-react/commit/fed34ffe341cfb379606af4875337c43d3b48b37))
+* **fleet:** record a root lockfile at its repository-relative path ([#61](https://github.com/calimero-network/mero-react/issues/61)) ([1c67f69](https://github.com/calimero-network/mero-react/commit/1c67f69e58eacd7e2d0e78d1854221f6e57dcfc8))
+
 ## [6.0.2](https://github.com/calimero-network/mero-react/compare/mero-react-v6.0.1...mero-react-v6.0.2) (2026-08-24)
 
 ### Bug Fixes
