@@ -427,6 +427,9 @@ describe('getPermissionsForMode — grants requested at login (scope-enforced co
       'context:list',
       'context:execute',
       'application:list',
+      // Downloading a new version is part of the upgrade flow this package
+      // ships; without this grant the install 403s.
+      'application:install',
       'namespace',
       'group',
       'blob',

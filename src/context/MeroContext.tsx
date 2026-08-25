@@ -61,6 +61,11 @@ export function getPermissionsForMode(mode: AppMode): string[] {
         'context:list',
         'context:execute',
         'application:list',
+        // The update flow this package ships - `useInstallFromRegistry`, and the
+        // Download that precedes every group upgrade - posts to
+        // /admin-api/install-application, which requires `application:install`.
+        // Without it the button 403s and no app can ever apply an update.
+        'application:install',
         'namespace',
         'group',
         'blob',
