@@ -27,6 +27,7 @@ import {
   useJoinGroup,
   useJoinNamespace,
   useJoinSubgroupInheritance,
+  useMemberDevices,
   useMemberMetadata,
   useNamespace,
   useNamespaceGroups,
@@ -94,6 +95,7 @@ function createMero(
       joinContext: vi.fn().mockResolvedValue({ contextId: 'ctx-1', memberPublicKey: 'pk-1' }),
       getContextGroup: vi.fn().mockResolvedValue('group-hex-id'),
       listGroupMembers: vi.fn().mockResolvedValue({ members: [] }),
+      listMemberDevices: vi.fn().mockResolvedValue({ members: [] }),
       listGroupContexts: vi.fn().mockResolvedValue([]),
       deleteGroup: vi.fn().mockResolvedValue({ isDeleted: true }),
       getGroupInfo: vi.fn().mockResolvedValue({
@@ -262,6 +264,99 @@ describe('group and context hooks', () => {
     await waitFor(() => {
       expect(result.current.members).toEqual([{ identity: 'member-1', role: 'Admin' }]);
     });
+  });
+
+  it('useMemberDevices loads the account -> devices rows for a group', async () => {
+    const listMemberDevices = vi.fn().mockResolvedValue({
+      members: [
+        {
+          account: 'aefed1f729e026874e2488e427786c294c64823b4a0660d483b005dc4c913ecb',
+          devices: [
+            {
+              deviceId: 'bff9592c96d8b3ca144e75f0c22cb8f8569392f62b49a60eb854589435fba564',
+              signingKey: 'G52L5f9XmH3cBGQscqUBiKTbavLiFYJW7oKoeFe2vgHM',
+            },
+          ],
+        },
+      ],
+    });
+    mockUseMero.mockReturnValue({ mero: createMero({ listMemberDevices }) } as never);
+
+    const { result } = renderHook(() => useMemberDevices('group-1'));
+
+    await waitFor(() => {
+      expect(result.current.memberDevices).toEqual([
+        {
+          account: 'aefed1f729e026874e2488e427786c294c64823b4a0660d483b005dc4c913ecb',
+          devices: [
+            {
+              deviceId: 'bff9592c96d8b3ca144e75f0c22cb8f8569392f62b49a60eb854589435fba564',
+              signingKey: 'G52L5f9XmH3cBGQscqUBiKTbavLiFYJW7oKoeFe2vgHM',
+            },
+          ],
+        },
+      ]);
+    });
+    expect(listMemberDevices).toHaveBeenCalledWith('group-1', {
+      offset: undefined,
+      limit: undefined,
+    });
+  });
+
+  it('useMemberDevices forwards offset and limit', async () => {
+    const listMemberDevices = vi.fn().mockResolvedValue({ members: [] });
+    mockUseMero.mockReturnValue({ mero: createMero({ listMemberDevices }) } as never);
+
+    renderHook(() => useMemberDevices('group-1', { offset: 5, limit: 2 }));
+
+    await waitFor(() => {
+      expect(listMemberDevices).toHaveBeenCalledWith('group-1', { offset: 5, limit: 2 });
+    });
+  });
+
+  it('useMemberDevices asks for nothing without a group', async () => {
+    const listMemberDevices = vi.fn().mockResolvedValue({ members: [] });
+    mockUseMero.mockReturnValue({ mero: createMero({ listMemberDevices }) } as never);
+
+    const { result } = renderHook(() => useMemberDevices(null));
+
+    expect(result.current.memberDevices).toEqual([]);
+    expect(listMemberDevices).not.toHaveBeenCalled();
+  });
+
+  // The hazard this hook is shaped to avoid: the underlying resource resets its
+  // data in an effect, so a render can happen with the new groupId while the
+  // previous group's rows are still in state. Recording every render (not just
+  // the settled one) is what makes that window observable.
+  it('useMemberDevices never renders one group\'s devices under another group\'s id', async () => {
+    const listMemberDevices = vi.fn(async (groupId: string) => ({
+      members: [{ account: `account-of-${groupId}`, devices: [] }],
+    }));
+    mockUseMero.mockReturnValue({ mero: createMero({ listMemberDevices }) } as never);
+
+    const seen: { id: string; accounts: string[] }[] = [];
+    const { rerender } = renderHook(
+      ({ id }: { id: string }) => {
+        const hook = useMemberDevices(id);
+        seen.push({ id, accounts: hook.memberDevices.map((m) => m.account) });
+        return hook;
+      },
+      { initialProps: { id: 'group-1' } },
+    );
+
+    await waitFor(() => {
+      expect(seen.at(-1)).toEqual({ id: 'group-1', accounts: ['account-of-group-1'] });
+    });
+
+    rerender({ id: 'group-2' });
+    await waitFor(() => {
+      expect(seen.at(-1)).toEqual({ id: 'group-2', accounts: ['account-of-group-2'] });
+    });
+
+    const leaked = seen.filter(
+      (render) => render.accounts.length > 0 && render.accounts[0] !== `account-of-${render.id}`,
+    );
+    expect(leaked).toEqual([]);
   });
 
   it('useGroupMembers clears stale errors when the group selection is removed', async () => {

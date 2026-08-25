@@ -348,7 +348,7 @@ AppMode, ConnectionType
 useExecute, useSubscription
 useContexts, useApplicationContexts, useContextGroup, useContextDiscovery
 useCreateContext, useDeleteContext, useJoinContext
-useGroupInfo, useGroupMembers, useGroupContexts, useGroupInvitations, useGroupCapabilities
+useGroupInfo, useGroupMembers, useMemberDevices, useGroupContexts, useGroupInvitations, useGroupCapabilities
 useJoinGroup, useDeleteGroup, useAddGroupMembers, useRemoveGroupMembers
 useSyncGroup, useReparentGroup, useSubgroups
 useUpgradeGroup, useGroupUpgradeStatus, useRetryGroupUpgrade

@@ -73,6 +73,7 @@ export {
   useJoinGroup,
   useJoinNamespace,
   useJoinSubgroupInheritance,
+  useMemberDevices,
   useMemberMetadata,
   useNamespace,
   useNamespaceGroups,

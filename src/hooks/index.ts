@@ -23,6 +23,8 @@ import type {
   JoinGroupRequest,
   JoinNamespaceRequest,
   ListGroupMembersResponseData,
+  ListMemberDevicesOptions,
+  MemberDevices,
   Namespace,
   NamespaceIdentity,
   NodeIdentity,
@@ -141,6 +143,8 @@ const COULD_NOT_RESOLVE_IDENTITY_MESSAGE =
  * frames/ticks, short enough that a swept peer does not linger.
  */
 const REPLAY_RECONCILE_MS = 50;
+/** Stable identity so an empty answer does not re-render consumers. */
+const NO_MEMBER_DEVICES: MemberDevices[] = [];
 
 /**
  * Observe and publish ephemeral presence (cursors, typing, online) for a
@@ -801,6 +805,49 @@ export function useGroupMembers(groupId?: string | null) {
   };
 }
 
+/**
+ * Account -> devices for the members of `groupId`: the join between
+ * `useGroupMembers`, which names accounts, and a context identity, which names
+ * a bare signing key. Match `devices[].signingKey` to an identity's public key
+ * to learn which account authored something.
+ *
+ * Scoped to this node: an admin gets every account in the group, a plain member
+ * only its own entry.
+ */
+export function useMemberDevices(
+  groupId?: string | null,
+  options?: ListMemberDevicesOptions,
+) {
+  const { mero } = useMero();
+  const offset = options?.offset;
+  const limit = options?.limit;
+  // The answer carries the group it was fetched for, and is handed back only
+  // when that still matches. useAsyncResource resets its data in an effect, so
+  // for one render after a groupId change its `data` is still the previous
+  // group's - keying the value makes that window unobservable rather than
+  // relying on when the reset lands.
+  const { data, loading, error, refetch } = useAsyncResource<{
+    groupId: string | null;
+    members: MemberDevices[];
+  }>(
+    mero && groupId
+      ? async () => ({
+          groupId,
+          members: (await mero.admin.listMemberDevices(groupId, { offset, limit })).members,
+        })
+      : null,
+    { groupId: null, members: NO_MEMBER_DEVICES },
+    [mero, groupId, offset, limit],
+  );
+
+  return {
+    memberDevices: data.groupId === groupId ? data.members : NO_MEMBER_DEVICES,
+    loading,
+    error,
+    refetch,
+  };
+}
+
 export function useGroupContexts(groupId?: string | null) {
   const { mero } = useMero();
   const { data, loading, error, refetch } = useAsyncResource<GroupContextEntry[]>(
@@ -1167,10 +1214,17 @@ export function useSyncGroup() {
 }
 
 /**
- * Takes the invitee's signing KEY (bs58) - the one call on this resource that
- * does, because someone being added may have no account here yet. Every other
- * member call, including `useRemoveGroupMembers`, takes the ACCOUNT, so a value
- * round-tripped from an add is the wrong one to remove with.
+ * Takes the invitee's ACCOUNT (64 hex) or its signing KEY (bs58) - the one call
+ * on this resource that accepts either, because someone being added may have no
+ * account here yet: a node that has never taken part in a namespace 404s on
+ * `useNodeIdentity` ("this node holds neither a device nor an account root
+ * yet; both are minted the first time it takes part in a namespace"), so a key
+ * is the only id it can offer. A key is resolved to its account as the member
+ * is admitted.
+ *
+ * Every other member call, including `useRemoveGroupMembers`, takes the ACCOUNT
+ * only, so a KEY round-tripped from an add is the wrong value to remove with -
+ * use what `useGroupMembers` returns.
  */
 export function useAddGroupMembers() {
   const { mero } = useMero();
