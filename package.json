@@ -1,6 +1,6 @@
 {
   "name": "@calimero-network/mero-react",
-  "version": "6.0.3",
+  "version": "6.0.4",
   "description": "React bindings for MeroJs - Calimero Network SDK",
   "type": "module",
   "main": "dist/index.cjs",

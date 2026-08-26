@@ -1,3 +1,9 @@
+## [6.0.4](https://github.com/calimero-network/mero-react/compare/mero-react-v6.0.3...mero-react-v6.0.4) (2026-08-26)
+
+### Bug Fixes
+
+* **fleet:** let the pnpm probe find nothing without killing the step ([#62](https://github.com/calimero-network/mero-react/issues/62)) ([f5c823f](https://github.com/calimero-network/mero-react/commit/f5c823ff8624fd9f11ced28c4a034f470ae37de4))
+
 ## [6.0.3](https://github.com/calimero-network/mero-react/compare/mero-react-v6.0.2...mero-react-v6.0.3) (2026-08-25)
 
 ### Bug Fixes
