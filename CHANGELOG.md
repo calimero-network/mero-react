@@ -1,3 +1,51 @@
+## [7.0.0](https://github.com/calimero-network/mero-react/compare/mero-react-v6.0.4...mero-react-v7.0.0) (2026-09-01)
+
+### ⚠ BREAKING CHANGES
+
+* **e2e:** to a default this fixture silently depended on. The last green
+run here was 2026-08-26 against rc.25; rc.26 was published on 2026-08-27.
+
+The two nodes are booted on one host with no bootstrap peers, so mDNS was the
+only thing that had ever introduced them. With it off they never meet, and the
+failure surfaces three layers from the cause:
+
+  node 2 joins namespace: gave up after 60000ms — HTTP 500
+
+Node 2 holds a valid invitation, finds no mesh peer inside the 45s discovery
+deadline, falls back to gossip, and then times out waiting 5s for a group key
+that only a peer could have sent. The 500 is core masking an untyped error on
+purpose; the real message — "KeyDelivery timed out ... no group key arrived
+within 5s via the gossip fallback path" — exists only in the node log.
+
+`--mdns` would restore the old default, but it does not fix this: mDNS between
+two merods on one host is unreliable, and it was tried here and still failed.
+Naming node 1 as node 2's bootstrap peer does fix it, and is deterministic —
+no announce, no discovery window, no dependence on what the runner allows on
+loopback. node 1's peer id is in its config.toml the moment `init` returns, so
+this needs no log scraping and no ordering games.
+
+Two diagnostic fixes alongside it, because this took a local repro to find
+something both of them should have shown:
+
+- The boot script dumped node logs when a node failed to become healthy, but
+  not when the FIXTURE failed — which is where it actually died. It now tails
+  every node log on that path too.
+
+- `.presence-nodes` is a dotfile directory, and upload-artifact skips hidden
+  paths by default, so every run of this job has logged "No files were found
+  with the provided path" and uploaded an empty artifact. The one artifact that
+  exists to explain a failure here has never once contained anything.
+  include-hidden-files: true.
+
+Verified against real merod 0.11.0-rc.28 nodes: the fixture builds, and the
+suite is 4/4 green.
+
+Co-authored-by: Claude Opus 5 (1M context) <noreply@anthropic.com>
+
+### Bug Fixes
+
+* **e2e:** peer the two presence nodes explicitly, mDNS is off from rc.26 ([#64](https://github.com/calimero-network/mero-react/issues/64)) ([a0cea7a](https://github.com/calimero-network/mero-react/commit/a0cea7a8ffed000e6f4e1e8fd1389a216063467f)), closes [core#3620](https://github.com/calimero-network/core/issues/3620)
+
 ## [6.0.4](https://github.com/calimero-network/mero-react/compare/mero-react-v6.0.3...mero-react-v6.0.4) (2026-08-26)
 
 ### Bug Fixes
