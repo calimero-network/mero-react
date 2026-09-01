@@ -1,3 +1,23 @@
+## [8.0.0](https://github.com/calimero-network/mero-react/compare/mero-react-v7.0.1...mero-react-v8.0.0) (2026-09-01)
+
+### ⚠ BREAKING CHANGES
+
+* **release:** <text>     -> major
+  fix: ...                    -> patch
+  feat: ...                   -> minor
+
+release-notes-generator gets the same parserOpts so a genuine note still renders
+under the right heading.
+
+Also annotates the 7.0.0 entry in CHANGELOG.md, which currently advertises a
+breaking change that does not exist.
+
+Co-authored-by: Claude Opus 5 (1M context) <noreply@anthropic.com>
+
+### Bug Fixes
+
+* **release:** stop prose from being read as a breaking change ([#66](https://github.com/calimero-network/mero-react/issues/66)) ([0836e2a](https://github.com/calimero-network/mero-react/commit/0836e2a4d8bfd236f6659cd9b22d648368edcfa8))
+
 ## [7.0.1](https://github.com/calimero-network/mero-react/compare/mero-react-v7.0.0...mero-react-v7.0.1) (2026-09-01)
 
 ## [7.0.0](https://github.com/calimero-network/mero-react/compare/mero-react-v6.0.4...mero-react-v7.0.0) (2026-09-01)
