@@ -155,6 +155,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: e2e-presence-logs
+          # .presence-nodes is a DOTFILE directory and upload-artifact skips
+          # hidden paths by default, so every run of this job so far has logged
+          # "No files were found with the provided path" and uploaded nothing —
+          # the one artifact that exists to explain a failure here was always
+          # empty.
+          include-hidden-files: true
           path: |
             e2e-presence.log
             .presence-nodes/*.log
