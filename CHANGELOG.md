@@ -2,6 +2,15 @@
 
 ## [7.0.0](https://github.com/calimero-network/mero-react/compare/mero-react-v6.0.4...mero-react-v7.0.0) (2026-09-01)
 
+> **This major was not a breaking change and 7.0.0 should not be used.**
+> Its published contents are byte-identical to 6.0.4 apart from the version
+> string — the commit touched only `.github/workflows/ci.yml` and
+> `tests/e2e/boot-presence-nodes.sh`, neither of which ships in the package.
+> The release notes below were produced by the release tooling reading the
+> phrase "breaking change" out of ordinary prose in the commit body; see
+> `.releaserc.json`. 7.0.0 is deprecated on npm. Nothing in the 7.x line
+> requires any change from a 6.x consumer.
+
 ### ⚠ BREAKING CHANGES
 
 * **e2e:** to a default this fixture silently depended on. The last green
