@@ -13,6 +13,7 @@ import type {
   CreateNamespaceInvitationResponseData,
   CreateNamespaceRequest,
   CreateRecursiveInvitationResponseData,
+  GetBlobInfoResponseData,
   GroupContextEntry,
   GroupInfo,
   GroupUpgradeStatusResponseData,
@@ -34,6 +35,7 @@ import type {
   SseEventData,
   UpdateMemberRoleRequest,
   UpgradeGroupRequest,
+  UploadBlobRequest,
   ResyncContextRequest,
   MigrationStatus,
   MemberMigrationStatusEntry,
@@ -2268,4 +2270,197 @@ export function useMyAuthoredMigration(contextId?: string | null) {
     error,
     refresh,
   };
+}
+
+// ---- Blob Hooks ----
+
+/**
+ * Options for the blob READ hooks.
+ *
+ * `contextId` is what picks the mode, and the two modes have wildly different
+ * costs:
+ *
+ * - **omitted** — local-only read. The node answers from its own blob store
+ *   and returns immediately, or 404s.
+ * - **supplied** — network discovery. The node probes that context's peers
+ *   (availability nodes first) for a holder. Core bounds the search by a ~30s
+ *   deadline, and for {@link useBlobUrl} the byte transfer is on top of that.
+ *
+ * So `loading` is load-bearing UI state on these hooks, not decoration: a
+ * discovery read can plausibly spin for half a minute before it resolves
+ * either way. Render a spinner (or a cancel affordance) accordingly.
+ */
+export interface BlobHookOptions {
+  /** Context whose peers to probe. Omit for a local-only read. */
+  contextId?: string;
+}
+
+/** Options for {@link useBlobUrl}. */
+export interface UseBlobUrlOptions extends BlobHookOptions {
+  /**
+   * MIME type stamped on the `Blob` the object URL points at. The blob read
+   * itself carries no type, and a peer-sourced answer has no `mimeType` at
+   * all, so pass it when the consumer needs one (`<img>` sniffs; a download
+   * `<a>` and an `<iframe>` do not).
+   */
+  type?: string;
+}
+
+/**
+ * True when the failure is the node saying "nobody has this blob" (HTTP 404)
+ * rather than a transport/auth failure.
+ *
+ * Duck-typed on `status` rather than `instanceof HTTPError`: a consumer app can
+ * easily end up with two copies of mero-js (bundled + peer), and an
+ * `instanceof` across that boundary silently reports false.
+ */
+function isBlobNotFound(error: Error | null): boolean {
+  return !!error && (error as { status?: unknown }).status === 404;
+}
+
+/**
+ * A blob's presence and size, WITHOUT downloading it — the cheap half of the
+ * blob surface, and the one to ask before pulling something large.
+ *
+ * `blobId` follows the same `string | null` convention as the other read
+ * hooks: null/undefined means "no read", not "read nothing" — nothing is
+ * fetched and `info` stays null.
+ *
+ * `hash` and `mimeType` on the result are genuinely optional: a peer probe
+ * answers with presence and size only, so a discovery-sourced hit carries
+ * neither. `info.source` (`'local' | 'peer'`, undefined on nodes that predate
+ * the header) tells the two apart — do not treat a missing `mimeType` as a
+ * malformed response.
+ *
+ * `notFound` distinguishes the legitimate "no holder" outcome (the node
+ * answered 404) from a transport failure. `error` is set in BOTH cases — this
+ * hook does not swallow the 404, it only labels it.
+ *
+ * Latency: immediate without `contextId`, up to core's ~30s discovery deadline
+ * with one. See {@link BlobHookOptions}.
+ */
+export function useBlobInfo(blobId?: string | null, options?: BlobHookOptions) {
+  const { mero } = useMero();
+  const contextId = options?.contextId;
+  const { data, loading, error, refetch } = useAsyncResource<GetBlobInfoResponseData | null>(
+    mero && blobId
+      ? () => mero.admin.getBlobInfo(blobId, contextId ? { contextId } : undefined)
+      : null,
+    null,
+    [mero, blobId, contextId],
+  );
+
+  return { info: data, notFound: isBlobNotFound(error), loading, error, refetch };
+}
+
+/**
+ * A blob's bytes as an object URL, ready for `<img src>`, an `<a href>`
+ * download, or an `<iframe>`.
+ *
+ * Lifecycle is handled here so the consumer never has to revoke: the URL is
+ * revoked on unmount, and whenever `blobId`/`contextId`/`type` change. `url`
+ * goes back to null synchronously on such a change, so a revoked URL is never
+ * handed out as the current one — render off `url` and it is always live.
+ *
+ * A response for a superseded `blobId` is dropped before an object URL is even
+ * created, so an out-of-order arrival can neither overwrite the newer result
+ * nor leak.
+ *
+ * Latency: this is the expensive hook. Without `contextId` it is a local read;
+ * with one it is discovery (core's ~30s deadline) PLUS the transfer of the
+ * bytes. Prefer {@link useBlobInfo} to decide whether the download is worth
+ * starting, and always render `loading`.
+ *
+ * `notFound` marks the node's 404 ("no peer holds this") apart from a
+ * transport failure; `error` is set for both.
+ */
+export function useBlobUrl(blobId?: string | null, options?: UseBlobUrlOptions) {
+  const { mero } = useMero();
+  const contextId = options?.contextId;
+  const type = options?.type;
+  const mountedRef = useMountedRef();
+  const [url, setUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+  // Latest-request-wins token, same shape as useAsyncResource's.
+  const reqRef = useRef(0);
+  // The URL currently handed out, held in a ref so revocation never depends on
+  // a render having happened.
+  const urlRef = useRef<string | null>(null);
+
+  const revoke = useCallback(() => {
+    if (urlRef.current) {
+      URL.revokeObjectURL(urlRef.current);
+      urlRef.current = null;
+    }
+  }, []);
+
+  const refetch = useCallback(async () => {
+    const seq = ++reqRef.current;
+    if (!mero || !blobId) return;
+
+    if (mountedRef.current) {
+      setLoading(true);
+      setError(null);
+    }
+    try {
+      const bytes = await mero.admin.getBlob(blobId, contextId ? { contextId } : undefined);
+      // Check BEFORE creating the object URL: a loser allocates nothing, so
+      // there is nothing to leak and nothing to overwrite the winner with.
+      if (!mountedRef.current || seq !== reqRef.current) return;
+      revoke();
+      const objectUrl = URL.createObjectURL(new Blob([bytes], type ? { type } : undefined));
+      urlRef.current = objectUrl;
+      setUrl(objectUrl);
+    } catch (err) {
+      if (mountedRef.current && seq === reqRef.current) setError(toError(err));
+    } finally {
+      if (mountedRef.current && seq === reqRef.current) setLoading(false);
+    }
+  }, [mero, blobId, contextId, type, revoke, mountedRef]);
+
+  // Invalidate the in-flight request and drop the current URL synchronously
+  // when the inputs change, so the consumer never sees the previous blob's URL
+  // (revoked or not) attributed to the new id.
+  useEffect(() => {
+    reqRef.current += 1;
+    revoke();
+    setUrl(null);
+    setError(null);
+    setLoading(false);
+  }, [mero, blobId, contextId, type, revoke]);
+
+  useEffect(() => {
+    void refetch();
+  }, [refetch]);
+
+  // Final revoke on unmount. Separate from the input-change effect above so it
+  // runs exactly once, on teardown, whatever the deps did.
+  useEffect(() => revoke, [revoke]);
+
+  return { url, notFound: isBlobNotFound(error), loading, error, refetch };
+}
+
+/**
+ * Upload bytes to the node's blob store. Mutation-shaped, like the other
+ * write hooks: `uploadBlob` resolves to `{ blobId, size }`, or null when the
+ * client is absent or the call failed (read `error` for which).
+ *
+ * Pass `contextId` to announce the blob to that context, which is what lets
+ * the context's other members later discover it with {@link useBlobUrl} /
+ * {@link useBlobInfo}. Without it the blob is only readable on this node.
+ */
+export function useUploadBlob() {
+  const { mero } = useMero();
+  const { loading, error, run } = useAsyncMutation();
+
+  const uploadBlob = useCallback(
+    async (request: UploadBlobRequest) => {
+      if (!mero) return null;
+      return run(() => mero.admin.uploadBlob(request));
+    },
+    [mero, run],
+  );
+
+  return { uploadBlob, loading, error };
 }
