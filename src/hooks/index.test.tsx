@@ -603,7 +603,7 @@ describe('group and context hooks', () => {
       expect(deleted).toEqual({ isDeleted: true });
     });
 
-    expect(deleteGroup).toHaveBeenCalledWith('group-1', undefined);
+    expect(deleteGroup).toHaveBeenCalledWith('group-1');
   });
 
   it('useSyncGroup syncs a group', async () => {
@@ -624,7 +624,7 @@ describe('group and context hooks', () => {
       expect(synced?.groupId).toBe('group-1');
     });
 
-    expect(syncGroup).toHaveBeenCalledWith('group-1', undefined);
+    expect(syncGroup).toHaveBeenCalledWith('group-1');
   });
 
   it('useAddGroupMembers adds members to a group', async () => {
@@ -865,7 +865,7 @@ describe('group and context hooks', () => {
       expect(deleted).toEqual({ isDeleted: true });
     });
 
-    expect(deleteNamespace).toHaveBeenCalledWith('ns-1', undefined);
+    expect(deleteNamespace).toHaveBeenCalledWith('ns-1');
   });
 
   it('useCreateNamespaceInvitation creates an invitation', async () => {
@@ -927,11 +927,11 @@ describe('group and context hooks', () => {
     const { result } = renderHook(() => useCreateGroupInNamespace());
 
     await act(async () => {
-      const created = await result.current.createGroupInNamespace('ns-1', { name: 'Sub Group' });
+      const created = await result.current.createGroupInNamespace('ns-1', { groupName: 'Sub Group' });
       expect(created).toEqual({ groupId: 'group-9' });
     });
 
-    expect(createGroupInNamespace).toHaveBeenCalledWith('ns-1', { name: 'Sub Group' });
+    expect(createGroupInNamespace).toHaveBeenCalledWith('ns-1', { groupName: 'Sub Group' });
   });
 
   it('useNamespaceGroups loads groups for a namespace', async () => {
@@ -1336,10 +1336,13 @@ describe('group and context hooks', () => {
 
   it('useInstallFromRegistry installs a package version and toggles loading', async () => {
     let resolveInstall: (v: { applicationId: string }) => void = () => {};
-    const installFromRegistry = vi
+    // The hook calls `installApplication({ package, version })` now — mero-js
+    // dropped `installFromRegistry` when the node became the only thing that
+    // knows which registry to fetch from.
+    const installApplication = vi
       .fn()
       .mockReturnValue(new Promise<{ applicationId: string }>((r) => { resolveInstall = r; }));
-    const mero = createMero({ installFromRegistry });
+    const mero = createMero({ installApplication });
     mockUseMero.mockReturnValue({ mero } as never);
 
     const { result } = renderHook(() => useInstallFromRegistry());
@@ -1348,7 +1351,7 @@ describe('group and context hooks', () => {
     let installed: { applicationId: string } | null = null;
     act(() => {
       void result.current
-        .installFromRegistry('https://registry.example.com', 'com.acme.app', '2.0.0')
+        .installFromRegistry('com.acme.app', '2.0.0')
         .then((v) => { installed = v; });
     });
     // loading flips true synchronously while the install is in flight
@@ -1359,11 +1362,10 @@ describe('group and context hooks', () => {
     });
 
     expect(installed).toEqual({ applicationId: 'app-2' });
-    expect(installFromRegistry).toHaveBeenCalledWith(
-      'https://registry.example.com',
-      'com.acme.app',
-      '2.0.0',
-    );
+    expect(installApplication).toHaveBeenCalledWith({
+      package: 'com.acme.app',
+      version: '2.0.0',
+    });
     expect(result.current.loading).toBe(false);
   });
 
@@ -1453,7 +1455,7 @@ describe('group and context hooks', () => {
       expect(res?.status).toBe('in_progress');
     });
 
-    expect(retryGroupUpgrade).toHaveBeenCalledWith('group-1', undefined);
+    expect(retryGroupUpgrade).toHaveBeenCalledWith('group-1');
   });
 
   it('useReparentGroup moves a child group under a new parent', async () => {
@@ -1525,7 +1527,7 @@ describe('group and context hooks', () => {
       await result.current.detachContextFromGroup('group-1', 'ctx-1');
     });
 
-    expect(detachContextFromGroup).toHaveBeenCalledWith('group-1', 'ctx-1', undefined);
+    expect(detachContextFromGroup).toHaveBeenCalledWith('group-1', 'ctx-1');
   });
 });
 

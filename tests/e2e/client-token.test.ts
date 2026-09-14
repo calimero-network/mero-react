@@ -144,7 +144,7 @@ describe('e2e — multi-context client token (the token real apps hold)', () => 
 
   it('can create + list + inspect a group (group create/list routes)', async () => {
     const { groupId } = await client.admin.createGroupInNamespace(namespaceId, {
-      name: `ct-grp-${runId()}`,
+      groupName: `ct-grp-${runId()}`,
     });
     expect(groupId).toBeTruthy();
     await expect(client.admin.listNamespaceGroups(namespaceId)).resolves.toBeDefined();
@@ -154,7 +154,7 @@ describe('e2e — multi-context client token (the token real apps hold)', () => 
 
   it('can run a group mutation (group manage — POST /groups/:id/invite)', async () => {
     const { groupId } = await client.admin.createGroupInNamespace(namespaceId, {
-      name: `ct-inv-${runId()}`,
+      groupName: `ct-inv-${runId()}`,
     });
     // Any 2xx/4xx-validation response proves the permission gate passed;
     // 403 is the only failure mode under test.

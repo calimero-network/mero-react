@@ -53,7 +53,9 @@ export async function ensureApplication(mero: MeroJs): Promise<string> {
   if (existing) return existing.id;
   // cwd-based, not import.meta.url: jsdom gives a non-file: import.meta.url.
   const path = resolve(process.cwd(), 'tests/e2e/assets/kv-store.mpk');
-  const res = await mero.admin.installDevApplication({ path, metadata: [] });
+  // `path` only: core reduced this request to a single field and denies
+  // unknown ones, so a stray `metadata` is a 400.
+  const res = await mero.admin.installDevApplication({ path });
   return res.applicationId;
 }
 

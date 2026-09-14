@@ -33,7 +33,7 @@ describe('Phase 1 — mutations + round-trips vs live node', () => {
     const { result: mut } = renderHook(() => useCreateGroupInNamespace(), { wrapper });
     let created: Awaited<ReturnType<typeof mut.current.createGroupInNamespace>> | undefined;
     await act(async () => {
-      created = await mut.current.createGroupInNamespace(fx.namespaceId, { name });
+      created = await mut.current.createGroupInNamespace(fx.namespaceId, { groupName: name });
     });
     expect(mut.current.error).toBeNull();
     expect(created?.groupId).toBeTruthy();
