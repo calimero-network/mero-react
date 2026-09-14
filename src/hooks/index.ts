@@ -13,9 +13,6 @@ import type {
   CreateNamespaceInvitationResponseData,
   CreateNamespaceRequest,
   CreateRecursiveInvitationResponseData,
-  DeleteGroupRequest,
-  DeleteNamespaceRequest,
-  DetachContextFromGroupRequest,
   GroupContextEntry,
   GroupInfo,
   GroupUpgradeStatusResponseData,
@@ -29,13 +26,11 @@ import type {
   ReparentGroupRequest,
   AddGroupMembersRequest,
   RemoveGroupMembersRequest,
-  RetryGroupUpgradeRequest,
   SetDefaultCapabilitiesRequest,
   SetMetadataRequest,
   SetSubgroupVisibilityRequest,
   SetTeeAdmissionPolicyRequest,
   SubgroupEntry,
-  SyncGroupRequest,
   SseEventData,
   UpdateMemberRoleRequest,
   UpgradeGroupRequest,
@@ -1141,9 +1136,9 @@ export function useDeleteGroup() {
   const { loading, error, run } = useAsyncMutation();
 
   const deleteGroup = useCallback(
-    async (groupId: string, request?: DeleteGroupRequest) => {
+    async (groupId: string) => {
       if (!mero) return null;
-      return run(() => mero.admin.deleteGroup(groupId, request));
+      return run(() => mero.admin.deleteGroup(groupId));
     },
     [mero, run],
   );
@@ -1156,9 +1151,9 @@ export function useSyncGroup() {
   const { loading, error, run } = useAsyncMutation();
 
   const syncGroup = useCallback(
-    async (groupId: string, request?: SyncGroupRequest) => {
+    async (groupId: string) => {
       if (!mero) return null;
-      return run(() => mero.admin.syncGroup(groupId, request));
+      return run(() => mero.admin.syncGroup(groupId));
     },
     [mero, run],
   );
@@ -1291,9 +1286,9 @@ export function useDeleteNamespace() {
   const { loading, error, run } = useAsyncMutation();
 
   const deleteNamespace = useCallback(
-    async (namespaceId: string, request?: DeleteNamespaceRequest) => {
+    async (namespaceId: string) => {
       if (!mero) return null;
-      return run(() => mero.admin.deleteNamespace(namespaceId, request));
+      return run(() => mero.admin.deleteNamespace(namespaceId));
     },
     [mero, run],
   );
@@ -1595,10 +1590,18 @@ export function useInstallFromRegistry() {
   const { mero } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
+  /**
+   * ⚠️ NO `registryUrl` ARGUMENT ANY MORE. Since core's registry-only
+   * application distribution, a node installs by `package@version` and
+   * resolves the artifact against the registry IT is configured with — a
+   * client cannot name one. mero-js dropped `installFromRegistry` for
+   * `installApplication({ package, version })` to match, so the old third
+   * argument had nowhere to go.
+   */
   const installFromRegistry = useCallback(
-    async (registryUrl: string, packageName: string, version: string) => {
+    async (packageName: string, version: string) => {
       if (!mero) return null;
-      return run(() => mero.admin.installFromRegistry(registryUrl, packageName, version));
+      return run(() => mero.admin.installApplication({ package: packageName, version }));
     },
     [mero, run],
   );
@@ -1689,9 +1692,9 @@ export function useRetryGroupUpgrade() {
   const { loading, error, run } = useAsyncMutation();
 
   const retryGroupUpgrade = useCallback(
-    async (groupId: string, request?: RetryGroupUpgradeRequest) => {
+    async (groupId: string) => {
       if (!mero) return null;
-      return run(() => mero.admin.retryGroupUpgrade(groupId, request));
+      return run(() => mero.admin.retryGroupUpgrade(groupId));
     },
     [mero, run],
   );
@@ -1732,9 +1735,9 @@ export function useDetachContextFromGroup() {
   const { loading, error, run } = useAsyncMutation();
 
   const detachContextFromGroup = useCallback(
-    async (groupId: string, contextId: string, request?: DetachContextFromGroupRequest) => {
+    async (groupId: string, contextId: string) => {
       if (!mero) return null;
-      return run(() => mero.admin.detachContextFromGroup(groupId, contextId, request));
+      return run(() => mero.admin.detachContextFromGroup(groupId, contextId));
     },
     [mero, run],
   );
