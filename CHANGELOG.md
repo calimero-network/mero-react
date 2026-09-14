@@ -1,3 +1,13 @@
+## [9.0.0](https://github.com/calimero-network/mero-react/compare/mero-react-v8.0.0...mero-react-v9.0.0) (2026-09-14)
+
+### ⚠ BREAKING CHANGES
+
+* move to mero-js 18, which stops sending a field core deleted (#72)
+
+### Bug Fixes
+
+* move to mero-js 18, which stops sending a field core deleted ([#72](https://github.com/calimero-network/mero-react/issues/72)) ([0db58cf](https://github.com/calimero-network/mero-react/commit/0db58cf3e0230bc7d505ed74fecc8224762e1157))
+
 ## [8.0.0](https://github.com/calimero-network/mero-react/compare/mero-react-v7.0.1...mero-react-v8.0.0) (2026-09-01)
 
 ### ⚠ BREAKING CHANGES
