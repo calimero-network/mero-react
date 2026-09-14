@@ -47,11 +47,15 @@ const n2 = new MeroJs({ baseUrl: NODE2, timeoutMs: 0 });
 
 // Both nodes need the application: node 2 cannot join a context whose app it
 // does not have. Same bundle on both, so both resolve the same ApplicationId.
+// `path` ONLY. core reduced this request to a single field and denies unknown
+// ones, so a stray `metadata` is a hard 400 that the retry loop above then
+// spends its full 60s on:
+//   metadata: unknown field `metadata`, expected `path`
 const app1 = await until('install app on node 1', () =>
-  n1.admin.installDevApplication({ path: APP, metadata: [] }),
+  n1.admin.installDevApplication({ path: APP }),
 );
 const app2 = await until('install app on node 2', () =>
-  n2.admin.installDevApplication({ path: APP, metadata: [] }),
+  n2.admin.installDevApplication({ path: APP }),
 );
 if (app1.applicationId !== app2.applicationId) {
   throw new Error(

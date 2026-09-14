@@ -23,13 +23,6 @@ import {
   useNamespacesForApplication,
 } from '@calimero-network/mero-react';
 
-// Server accepts one of these values for upgradePolicy. Using a union type
-// (rather than a bare string) catches typos at compile time.
-type UpgradePolicy = 'Automatic' | 'LazyOnAccess' | 'Coordinated';
-
-// LazyOnAccess is the least disruptive default — upgrades only when accessed.
-const UPGRADE_POLICY: UpgradePolicy = 'LazyOnAccess';
-
 // Bytes for an empty JSON object `{}` — passed as the init payload when
 // the contract's `init` method takes no arguments. Despite the TS type
 // marking `initializationParams` optional, the server rejects requests
@@ -153,11 +146,15 @@ export default function SelectContext() {
     setCreating(true);
     let createdNs: { namespaceId: string } | null = null;
     try {
-      // Required fields only; alias is omitted when blank (server defaults).
+      // ⚠️ `applicationId` and an optional `name`, and NOTHING ELSE. The
+      // request denies unknown fields, and core deleted both of the others
+      // this used to send: the upgrade-policy concept is gone, and the label
+      // is `name`, not `alias`. Either one is a 400:
+      //   upgradePolicy: unknown field `upgradePolicy`, expected one of
+      //   `applicationId`, `name`, `appKey`, `bytecodeId`
       createdNs = await mero.admin.createNamespace({
         applicationId,
-        upgradePolicy: UPGRADE_POLICY,
-        ...(namespaceAlias && { alias: namespaceAlias }),
+        ...(namespaceAlias && { name: namespaceAlias }),
       });
 
       // Group request body defaults to {} — root group inside a fresh
