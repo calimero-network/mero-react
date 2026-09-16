@@ -1,3 +1,9 @@
+## [9.1.1](https://github.com/calimero-network/mero-react/compare/mero-react-v9.1.0...mero-react-v9.1.1) (2026-09-16)
+
+### Bug Fixes
+
+* **hooks:** drop the previous key's data during render, not in an effect ([#56](https://github.com/calimero-network/mero-react/issues/56)) ([2c41efa](https://github.com/calimero-network/mero-react/commit/2c41efaea8ccf84d61f15cdf22ed39c2d86c3276))
+
 ## [9.1.0](https://github.com/calimero-network/mero-react/compare/mero-react-v9.0.0...mero-react-v9.1.0) (2026-09-16)
 
 ### Features
