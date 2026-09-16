@@ -48,6 +48,8 @@ export type { MeroTheme, ResolvedMeroTheme } from './theme';
 // Hooks
 export {
   useApplicationContexts,
+  useBlobInfo,
+  useBlobUrl,
   useContextDiscovery,
   useContextGroup,
   useContexts,
@@ -93,6 +95,7 @@ export {
   useSubgroupVisibility,
   useUpdateMemberRole,
   useUpgradeGroup,
+  useUploadBlob,
   useResyncContext,
   useAddGroupMembers,
   useRemoveGroupMembers,
@@ -107,6 +110,8 @@ export {
   useMyAuthoredMigration,
 } from './hooks';
 export type {
+  BlobHookOptions,
+  UseBlobUrlOptions,
   SetMetadataInput,
   SubscriptionInput,
   SubscriptionEventData,

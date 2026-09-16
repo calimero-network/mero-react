@@ -208,6 +208,41 @@ const { contexts, loading, error, refetch } = useContexts(applicationId);
 // contexts: Array<{ contextId: string; applicationId: string }>
 ```
 
+### Blob hooks
+
+`useBlobInfo` / `useBlobUrl` / `useUploadBlob` read and write the node's blob
+store. The reads take an optional `contextId`, and it is what picks the mode:
+
+- **without `contextId`** — local-only. The node answers from its own blob
+  store immediately, or 404s.
+- **with `contextId`** — network discovery. The node probes that context's
+  peers (availability nodes first) for a holder.
+
+Discovery is slow: core bounds the search by a **~30s deadline**, and for
+`useBlobUrl` the byte transfer is on top of that. `loading` is real UI state on
+these hooks, not decoration.
+
+```tsx
+// Presence and size, no download — ask this before pulling something large.
+const { info, notFound, loading, error } = useBlobInfo(blobId, { contextId });
+// info: { blobId, size, hash?, mimeType?, source?: 'local' | 'peer' } | null
+
+// Bytes as an object URL, revoked for you on unmount and on id/context change.
+const { url } = useBlobUrl(blobId, { contextId, type: 'image/png' });
+return url ? <img src={url} /> : null;
+
+// Upload. Pass contextId to announce the blob so the context's peers can
+// discover it later.
+const { uploadBlob, loading, error } = useUploadBlob();
+const result = await uploadBlob({ data: bytes, contextId });
+```
+
+A null/undefined `blobId` fetches nothing, like the other `string | null` read
+hooks. `hash` and `mimeType` are genuinely optional — a peer probe carries only
+presence and size, so a discovery-sourced hit has neither; read `info.source`
+to tell a local answer from a peer one. `notFound` marks the node's legitimate
+"no holder" 404 apart from a transport failure; `error` is set for both.
+
 ### Storage helpers
 
 Persist/read node URL, application ID, context ID, and context identity in localStorage.
@@ -360,11 +395,13 @@ useDetachContextFromGroup
 useNamespaces, useNamespace, useNamespaceGroups, useNamespaceIdentity
 useNamespacesForApplication, useCreateNamespace, useDeleteNamespace
 useJoinNamespace, useCreateNamespaceInvitation, useCreateGroupInNamespace
+useBlobInfo, useBlobUrl, useUploadBlob
 
 // Types (mero-react)
 MeroContextValue, MeroProviderConfig, MeroProviderProps
 CustomConnectionConfig, AppContext, ExecutionResult
 ApplicationContextRecord, ContextDiscoveryOptions, ContextDiscoveryState
+BlobHookOptions, UseBlobUrlOptions
 
 // Storage (mero-react)
 localStorageTokenStorage
