@@ -1,3 +1,9 @@
+## [9.1.0](https://github.com/calimero-network/mero-react/compare/mero-react-v9.0.0...mero-react-v9.1.0) (2026-09-16)
+
+### Features
+
+* **blobs:** add useBlobInfo, useBlobUrl and useUploadBlob ([#69](https://github.com/calimero-network/mero-react/issues/69)) ([1d55f60](https://github.com/calimero-network/mero-react/commit/1d55f6045f087388ba29dd22544d572f453b0c01)), closes [calimero-network/mero-js#142](https://github.com/calimero-network/mero-js/issues/142)
+
 ## [9.0.0](https://github.com/calimero-network/mero-react/compare/mero-react-v8.0.0...mero-react-v9.0.0) (2026-09-14)
 
 ### ⚠ BREAKING CHANGES
