@@ -12,6 +12,8 @@ import {
   LocalStorageTokenStore,
   parseAuthCallback,
   buildAuthLoginUrl,
+  AuthRevokedError,
+  HTTPError,
 } from '@calimero-network/mero-js';
 import { AppMode } from '../types';
 import type { AuthCallbackResult, TokenStore } from '@calimero-network/mero-js';
@@ -375,24 +377,75 @@ export function MeroProvider({
     const onError = (err: Error) => {
       if (!active) return;
       setIsOnline(false);
-      if (!err.message.includes('401')) return;
 
-      // A 401 from the event stream is NOT proof the session is over, and it
-      // used to be treated as such: `logout()` wipes the token store, so an
-      // expired access token cost the user their still-valid 30-day refresh
-      // token and forced a real re-login.
+      // ── Which stream failures are worth acting on ──────────────────────────
+      //
+      // This used to be `if (!err.message.includes('401')) return;`, and the
+      // comment under it explained that mero-js threw a bare
+      // `SSE connection failed: <status>`, so nothing better was available.
+      // That stopped being true in mero-js 19.14.1 (#166): the SSE path now
+      // throws the same typed errors the request path does, carrying the
+      // status and the `x-auth-error` header.
+      //
+      // Matching on '401' was not merely coarse, it was aimed at the wrong
+      // number. Core answers a dead or under-scoped token on `/sse` with
+      // **403**, not 401 — `token_expired` is the only 401 a stream sees. So
+      // every failure that actually needed acting on was the one this gate
+      // dropped, and the app sat at `isOnline = false` with no way back and no
+      // prompt to log in again.
+      //
+      // Three cases now, because they need three different answers.
+
+      // 1. The token family is gone (403 `token_revoked`, or a 401
+      //    `token_reuse`). mero-js has already STOPPED reconnecting — every
+      //    retry re-sends the same dead credential — so nothing will reopen
+      //    this stream, and there is no refresh token left to spend either.
+      if (err instanceof AuthRevokedError) {
+        logout();
+        return;
+      }
+
+      if (err instanceof HTTPError && err.status === 403) {
+        // 2. The token is live but was minted without `context:subscribe`.
+        //    Core requires that grant for `/sse`, `/sse/subscription` and
+        //    `/ws`, and the grant set is baked in at MINT time — so a refresh
+        //    re-issues the same unusable token and the stream 403s again,
+        //    forever. mero-react 9.1.2 (#73) fixed what we ASK for; a client
+        //    key minted before it can only be replaced by a fresh login.
+        //    `checkAuth` would return true here and reconnect us into that
+        //    loop, which is why this case must not go through it.
+        if (err.headers?.get('x-auth-error') === 'permission_denied') {
+          console.warn(
+            '[MeroProvider] This session cannot open an event stream ' +
+              '(403 permission_denied): its token predates the context:subscribe ' +
+              'grant. Logging out — a fresh login mints a key that can subscribe.',
+          );
+          logout();
+          return;
+        }
+        // 3. Any other 403 is core refusing this caller for a reason a new
+        //    token would not change — "Forbidden: not the session owner". Not
+        //    an auth-token problem, so do not spend the session on it.
+        return;
+      }
+
+      // A 401 is NOT proof the session is over, and it used to be treated as
+      // such: `logout()` wipes the token store, so an expired access token cost
+      // the user their still-valid 30-day refresh token and forced a real
+      // re-login.
       //
       // The stream authenticates only at connect time (an open stream survives
       // expiry), so this fires on the first reconnect after the access token
       // ages out — a sleep/wake, a network blip, a PWA resume, a node restart.
-      // Routine events, all of them.
+      // Routine events, all of them. Ask `checkAuth`, which recovers a
+      // merely-expired token via the transport's refresh and returns false only
+      // when the session is genuinely dead.
       //
-      // We cannot tell `token_expired` from a revoked family here: mero-js's
-      // SseClient connects with a raw fetch and throws a bare
-      // `SSE connection failed: <status>`, so no `x-auth-error` and no
-      // `AuthRevokedError` reaches us. Instead of guessing, ask `checkAuth`,
-      // which recovers a merely-expired token via the transport's refresh and
-      // returns false only when the session is genuinely dead.
+      // The string check stays as a fallback: not every caller is on 19.14.1,
+      // and an older mero-js still reports this as `SSE connection failed: 401`.
+      const status = err instanceof HTTPError ? err.status : null;
+      if (status !== 401 && !err.message.includes('401')) return;
+
       if (recoveringRef.current) return;
       recoveringRef.current = true;
       void (async () => {
