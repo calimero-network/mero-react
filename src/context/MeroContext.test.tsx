@@ -426,6 +426,7 @@ describe('getPermissionsForMode — grants requested at login (scope-enforced co
       'context:create',
       'context:list',
       'context:execute',
+      'context:subscribe',
       'application:list',
       'namespace',
       'group',
@@ -440,11 +441,24 @@ describe('getPermissionsForMode — grants requested at login (scope-enforced co
     expect(getPermissionsForMode(AppMode.SingleContext)).toEqual([
       'context:execute',
       'context:list',
+      'context:subscribe',
       'application:list',
       'blob',
       'context:alias',
     ]);
   });
+
+  // The list assertions above pin an exact order, which makes them fragile and
+  // easy to "fix" by editing the expectation. This one states the property:
+  // core requires `context:subscribe` for /sse, /sse/subscription and /ws, so an
+  // app mode that cannot ask for it can never receive a live update. MEASURED on
+  // merod 0.11.0-rc.41: without it `GET /sse` is 403 permission_denied; with it, 200.
+  it.each([AppMode.SingleContext, AppMode.MultiContext])(
+    '%s can open an event stream',
+    (mode) => {
+      expect(getPermissionsForMode(mode)).toContain('context:subscribe');
+    },
+  );
 
   it('Admin is unchanged', () => {
     expect(getPermissionsForMode(AppMode.Admin)).toEqual(['admin']);
