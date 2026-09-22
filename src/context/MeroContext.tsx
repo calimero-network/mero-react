@@ -49,17 +49,36 @@ const isBrowser = typeof window !== 'undefined';
  * calls GET /admin-api/contexts/:id/identities-owned right after login, which
  * maps to a `context:list` requirement.
  *
+ * `context:subscribe` is what `/sse`, `/sse/subscription` and `/ws` require
+ * (core's `PermissionValidator`, `validator.rs`, maps all three to
+ * `Context(Subscribe(Global))`). Without it every event stream an app opens is
+ * refused `403` + `X-Auth-Error: permission_denied`, so the app renders, reads
+ * and writes, and simply never receives a live update. Only `AppMode.Admin`
+ * escaped, because `admin` covers every route.
+ *
+ * MEASURED against merod 0.11.0-rc.41 (build 88e323b): a client key minted with
+ * the MultiContext list below minus `context:subscribe` gets `403` on
+ * `GET /sse`; the same list with it gets `200`.
+ *
  * Exported for tests.
  */
 export function getPermissionsForMode(mode: AppMode): string[] {
   switch (mode) {
     case AppMode.SingleContext:
-      return ['context:execute', 'context:list', 'application:list', 'blob', 'context:alias'];
+      return [
+        'context:execute',
+        'context:list',
+        'context:subscribe',
+        'application:list',
+        'blob',
+        'context:alias',
+      ];
     case AppMode.MultiContext:
       return [
         'context:create',
         'context:list',
         'context:execute',
+        'context:subscribe',
         'application:list',
         'namespace',
         'group',
