@@ -4,28 +4,43 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, act, cleanup } from '@testing-library/react';
 
 // Mock only the mero-js module; node-trust + storage run for real.
-vi.mock('@calimero-network/mero-js', () => ({
-  MeroJs: vi.fn().mockImplementation(() => ({
-    admin: { getContexts: vi.fn().mockResolvedValue([]) },
-    auth: {
-      validateToken: vi.fn().mockResolvedValue({ valid: true, headers: {}, status: 200 }),
-    },
-    events: { on: vi.fn(), off: vi.fn(), connect: vi.fn().mockResolvedValue(undefined) },
-    clearToken: vi.fn(),
-    close: vi.fn(),
-  })),
-  LocalStorageTokenStore: vi.fn().mockImplementation(() => ({
-    getTokens: vi.fn().mockReturnValue(null),
-    setTokens: vi.fn(),
-    clear: vi.fn(),
-  })),
-  parseAuthCallback: vi.fn(),
-  buildAuthLoginUrl: vi.fn(() => 'https://auth.example/login'),
-}));
+//
+// `AuthRevokedError` and `HTTPError` come from the ACTUAL module on purpose.
+// The provider's stream-error branching is written on `instanceof`, so a
+// stubbed class would let it pass here and still take the wrong branch in a
+// browser — which is the failure these tests exist to catch.
+vi.mock('@calimero-network/mero-js', async (importActual) => {
+  const actual = await importActual<typeof import('@calimero-network/mero-js')>();
+  return {
+    AuthRevokedError: actual.AuthRevokedError,
+    HTTPError: actual.HTTPError,
+    MeroJs: vi.fn().mockImplementation(() => ({
+      admin: { getContexts: vi.fn().mockResolvedValue([]) },
+      auth: {
+        validateToken: vi.fn().mockResolvedValue({ valid: true, headers: {}, status: 200 }),
+      },
+      events: { on: vi.fn(), off: vi.fn(), connect: vi.fn().mockResolvedValue(undefined) },
+      clearToken: vi.fn(),
+      close: vi.fn(),
+    })),
+    LocalStorageTokenStore: vi.fn().mockImplementation(() => ({
+      getTokens: vi.fn().mockReturnValue(null),
+      setTokens: vi.fn(),
+      clear: vi.fn(),
+    })),
+    parseAuthCallback: vi.fn(),
+    buildAuthLoginUrl: vi.fn(() => 'https://auth.example/login'),
+  };
+});
 
 import { MeroProvider, useMero, getPermissionsForMode } from './MeroContext';
 import { AppMode } from '../types';
-import { MeroJs, parseAuthCallback } from '@calimero-network/mero-js';
+import {
+  MeroJs,
+  parseAuthCallback,
+  AuthRevokedError,
+  HTTPError,
+} from '@calimero-network/mero-js';
 import type { TokenStore } from '@calimero-network/mero-js';
 
 const meroMock = vi.mocked(MeroJs);
@@ -629,5 +644,114 @@ describe('MeroProvider — an SSE 401 must not destroy the token store', () => {
     expect(store.clear).not.toHaveBeenCalled();
     expect(validateToken).toHaveBeenCalledTimes(1); // boot only — no recovery attempt
     expect(screen.getByTestId('authed').textContent).toBe('true');
+  });
+
+  // ── The 403s ───────────────────────────────────────────────────────────────
+  //
+  // Everything above this line is a 401. Core answers a dead or under-scoped
+  // token on `/sse` with **403** — `token_expired` is the only 401 a stream
+  // sees — so until mero-js 19.14.1 (#166) started throwing typed errors here,
+  // the provider's `err.message.includes('401')` gate dropped every failure
+  // that actually needed acting on. These pin the branches that replaced it.
+  // The error classes are real; see the mock at the top of this file.
+
+  const authHeaders = (reason?: string) =>
+    new Headers(reason ? { 'x-auth-error': reason } : {});
+
+  it('logs out on a revoked token family, which arrives as 403 not 401', async () => {
+    const validateToken = vi.fn().mockResolvedValue({ valid: true, headers: {}, status: 200 });
+    const { store, events } = mountAuthed(validateToken);
+    await settled();
+
+    await raise(
+      events,
+      new AuthRevokedError(
+        'token_revoked',
+        403,
+        'Forbidden',
+        'https://node-a.example.com/sse',
+        authHeaders('token_revoked'),
+        '',
+      ),
+    );
+
+    // mero-js has already stopped reconnecting and there is no refresh token
+    // left to spend, so ending the session is the only honest answer.
+    await waitFor(() => expect(screen.getByTestId('authed').textContent).toBe('false'));
+    expect(store.clear).toHaveBeenCalled();
+    expect(validateToken).toHaveBeenCalledTimes(1); // boot only — nothing to recover
+  });
+
+  it('logs out when the token cannot subscribe, because only a new login re-mints it', async () => {
+    const validateToken = vi.fn().mockResolvedValue({ valid: true, headers: {}, status: 200 });
+    const { store, events } = mountAuthed(validateToken);
+    await settled();
+
+    await raise(
+      events,
+      new HTTPError(
+        403,
+        'Forbidden',
+        'https://node-a.example.com/sse',
+        authHeaders('permission_denied'),
+        '',
+      ),
+    );
+
+    // The token is LIVE here — `checkAuth` would say yes and reconnect us into
+    // a 403 loop, because the `context:subscribe` grant is baked in at mint
+    // time and no refresh can add it.
+    await waitFor(() => expect(screen.getByTestId('authed').textContent).toBe('false'));
+    expect(store.clear).toHaveBeenCalled();
+    expect(validateToken).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the session on a 403 that a new token would not fix', async () => {
+    const validateToken = vi.fn().mockResolvedValue({ valid: true, headers: {}, status: 200 });
+    const { store, events } = mountAuthed(validateToken);
+    await settled();
+
+    // Core's "Forbidden: not the session owner" — no `x-auth-error`, and a
+    // fresh login would be refused in exactly the same way. Going offline is
+    // the whole of the correct response; logging out here would cost the user
+    // a live session for a reason a new one could not fix.
+    await raise(
+      events,
+      new HTTPError(
+        403,
+        'Forbidden',
+        'https://node-a.example.com/sse',
+        authHeaders(),
+        'Forbidden: not the session owner',
+      ),
+    );
+
+    expect(store.clear).not.toHaveBeenCalled();
+    expect(validateToken).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('authed').textContent).toBe('true');
+  });
+
+  it('still recovers a typed 401, not just the legacy string form', async () => {
+    const validateToken = vi
+      .fn()
+      .mockResolvedValueOnce({ valid: true, headers: {}, status: 200 })
+      .mockResolvedValue({ valid: true, headers: {}, status: 200 });
+    const { store, events } = mountAuthed(validateToken);
+    await settled();
+
+    await raise(
+      events,
+      new HTTPError(
+        401,
+        'Unauthorized',
+        'https://node-a.example.com/sse',
+        authHeaders('token_expired'),
+        '',
+      ),
+    );
+
+    expect(store.clear).not.toHaveBeenCalled();
+    expect(screen.getByTestId('authed').textContent).toBe('true');
+    expect(events.connect).toHaveBeenCalledTimes(2); // initial + reconnect
   });
 });
