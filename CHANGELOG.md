@@ -1,3 +1,9 @@
+## [9.1.3](https://github.com/calimero-network/mero-react/compare/mero-react-v9.1.2...mero-react-v9.1.3) (2026-09-22)
+
+### Bug Fixes
+
+* **auth:** the stream 403s, and the recovery path only ever looked at 401 ([#74](https://github.com/calimero-network/mero-react/issues/74)) ([8611bcb](https://github.com/calimero-network/mero-react/commit/8611bcb08180843918095d7b79b169fd372fac73)), closes [#166](https://github.com/calimero-network/mero-react/issues/166)
+
 ## [9.1.2](https://github.com/calimero-network/mero-react/compare/mero-react-v9.1.1...mero-react-v9.1.2) (2026-09-22)
 
 ### Bug Fixes
