@@ -1,3 +1,9 @@
+## [9.1.2](https://github.com/calimero-network/mero-react/compare/mero-react-v9.1.1...mero-react-v9.1.2) (2026-09-22)
+
+### Bug Fixes
+
+* **auth:** an app token that cannot subscribe gets no live updates, ever ([#73](https://github.com/calimero-network/mero-react/issues/73)) ([361bcff](https://github.com/calimero-network/mero-react/commit/361bcfff625b8115ee1633e52b7276233b692f11))
+
 ## [9.1.1](https://github.com/calimero-network/mero-react/compare/mero-react-v9.1.0...mero-react-v9.1.1) (2026-09-16)
 
 ### Bug Fixes
