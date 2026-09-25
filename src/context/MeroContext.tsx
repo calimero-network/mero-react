@@ -16,7 +16,7 @@ import {
   HTTPError,
 } from '@calimero-network/mero-js';
 import { AppMode } from '../types';
-import type { AuthCallbackResult, TokenStore } from '@calimero-network/mero-js';
+import type { AuthCallbackResult, MeroClient, TokenStore } from '@calimero-network/mero-js';
 import { resolveTrustedNodeUrl } from '../auth/node-trust';
 import { resolveTokenAdoption } from '../auth/token-adoption';
 import {
@@ -33,6 +33,14 @@ import {
   clearAllStorage,
 } from '../storage';
 import type { MeroContextValue, MeroProviderConfig } from '../types';
+
+import {
+  buildDelegatedClient,
+  clearDelegatedSession,
+  readDelegatedSession,
+  saveDelegatedSession,
+  type DelegatedSession,
+} from '../delegated/session';
 
 const MeroContext = createContext<MeroContextValue | null>(null);
 
@@ -112,7 +120,17 @@ export function MeroProvider({
     () => tokenStoreProp ?? new LocalStorageTokenStore(),
     [tokenStoreProp],
   );
-  const [mero, setMero] = useState<MeroJs | null>(null);
+  const [mero, setMero] = useState<MeroJs | MeroClient | null>(null);
+  /**
+   * The delegated record, or null for the node-login path.
+   *
+   * Read from storage in the initializer rather than an effect: a reload of a
+   * delegated tab should render connected, not flash the connect button and
+   * then replace it.
+   */
+  const [delegated, setDelegated] = useState<DelegatedSession | null>(() =>
+    readDelegatedSession(),
+  );
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
@@ -223,6 +241,18 @@ export function MeroProvider({
     [mode, packageName, packageVersion, registryUrl],
   );
 
+  /**
+   * Adopt a delegated connection.
+   *
+   * No redirect and nothing to await: a delegated client carries its own
+   * credential on every request, so it is usable the moment it is built. The
+   * record is persisted first so a reload finds it.
+   */
+  const connectWithAccount = useCallback((session: DelegatedSession) => {
+    saveDelegatedSession(session);
+    setDelegated(session);
+  }, []);
+
   const logout = useCallback(() => {
     if (meroRef.current) {
       meroRef.current.clearToken();
@@ -232,6 +262,8 @@ export function MeroProvider({
     // otherwise the access/refresh tokens persist in storage after logout.
     tokenStore.clear();
     clearAllStorage();
+    clearDelegatedSession();
+    setDelegated(null);
     setMero(null);
     setIsAuthenticated(false);
     setNodeUrlState(null);
@@ -241,8 +273,85 @@ export function MeroProvider({
     meroRef.current = null;
   }, [tokenStore]);
 
+  /**
+   * Install the relay client for a delegated record.
+   *
+   * Separate effect from the node-login initializer below, and the two are
+   * mutually exclusive: a delegated connection has no token to adopt, no node
+   * URL to validate and no callback to consume, so running that machinery for
+   * it would only find nothing and log out.
+   */
+  useEffect(() => {
+    if (!delegated) return;
+    // Re-keys the warrant-nonce ledger when the chosen context changes, which is
+    // why `contextId` is a dependency. The context itself is NOT set from here —
+    // it comes from storage (the initializer above) or from whatever the app's
+    // own picker selected, exactly as on the node-login path.
+    const client = buildDelegatedClient(delegated, contextId);
+    setMero(client);
+    setIsAuthenticated(true);
+    setIsOnline(true);
+    setNodeUrlState(delegated.relayUrl);
+    setIsLoading(false);
+
+    /*
+     * Which application this tab is for, asked rather than told.
+     *
+     * The node-login path is handed an `applicationId` by the auth callback. A
+     * delegated tab has no callback, so it had none — and an app's context
+     * picker that filters on it (correctly: "I cannot tell which are mine" and
+     * "all of them are mine" are different answers) then had nothing to filter
+     * with and stayed empty forever. That, not the relay, was the last reason
+     * anyone had to type a context id in.
+     *
+     * `admin.getContexts()` on this client is caller-scoped through the request
+     * proof — it answers this ACCOUNT's own contexts, each naming its
+     * application — so the id is derivable from the credential already held.
+     *
+     * Not persisted with `setApplicationId`: it is derived from a cheap,
+     * authoritative read, so caching it would only create a value to invalidate
+     * when the account's contexts change.
+     */
+    let active = true;
+    (async () => {
+      try {
+        const { contexts } = await client.admin.getContexts();
+        const apps = [
+          ...new Set((contexts ?? []).map((c) => c.applicationId).filter(Boolean)),
+        ];
+        if (!active) return;
+        if (apps.length === 1) {
+          setApplicationIdState(apps[0]);
+        }
+        // More than one, and this stays null ON PURPOSE. A tab holds one
+        // application's UI and nothing here says which — the account simply has
+        // contexts for several. Picking the first would silently point the app at
+        // another app's contract, which answers none of its methods; admitting
+        // "I don't know" leaves the app's own "waiting for this session to report
+        // which application" message honest, and a chooser is the follow-up.
+        //
+        // Zero contexts also stays null: there is no application to infer.
+      } catch {
+        // Left null, and deliberately not surfaced as a connection failure. The
+        // writes work — every one carries its own warrant — and a read that did
+        // not answer must not unwind a connection that did.
+      }
+    })();
+
+    return () => {
+      active = false;
+      // `close` is a node-client concern; a relay client has nothing to tear
+      // down, so do not reach for it.
+    };
+  }, [delegated, contextId]);
+
   // Initialization effect
   useEffect(() => {
+    // A delegated tab is already connected by the effect above. This whole
+    // path — callback parsing, token adoption, node-URL trust, /auth/validate —
+    // describes a session the delegated client does not have.
+    if (delegated) return;
+
     let active = true;
 
     const init = async () => {
@@ -364,7 +473,7 @@ export function MeroProvider({
     return () => {
       active = false;
     };
-  }, [createMeroInstance, checkAuth, allowedNodeUrls, tokenStore]);
+  }, [createMeroInstance, checkAuth, allowedNodeUrls, tokenStore, delegated]);
 
   // SSE connection for online/offline detection — no polling.
   useEffect(() => {
@@ -377,6 +486,13 @@ export function MeroProvider({
     const onError = (err: Error) => {
       if (!active) return;
       setIsOnline(false);
+
+      // A delegated stream has no token to renew. It is authenticated by a
+      // request proof the device key signs for each connect, so a 401 here is
+      // not an expiry the recovery below can fix — and that recovery ends in
+      // `logout()`, which would tear down a connection whose credential is
+      // still perfectly good. Report offline and let the client reconnect.
+      if (delegated) return;
 
       // ── Which stream failures are worth acting on ──────────────────────────
       //
@@ -477,7 +593,10 @@ export function MeroProvider({
     };
     // `checkAuth` and `logout` are both useCallback-stable (they close over the
     // memoized `tokenStore`), so listing them does not re-subscribe the stream.
-  }, [isAuthenticated, mero, checkAuth, logout]);
+    // Not for a delegated client: this stream is opened from the node client's
+    // own `events`, and a relay client observes only when it was given the
+    // relay's node key — which `buildDelegatedClient` wires up itself.
+  }, [isAuthenticated, mero, checkAuth, logout, delegated]);
 
   const contextValue = useMemo<MeroContextValue>(
     () => ({
@@ -489,10 +608,12 @@ export function MeroProvider({
       contextId,
       contextIdentity,
       connectToNode,
+      connectWithAccount,
+      isDelegated: delegated !== null,
       logout,
       isLoading,
     }),
-    [mero, isAuthenticated, isOnline, nodeUrl, applicationId, contextId, contextIdentity, connectToNode, logout, isLoading],
+    [mero, isAuthenticated, isOnline, nodeUrl, applicationId, contextId, contextIdentity, connectToNode, connectWithAccount, delegated, logout, isLoading],
   );
 
   return (

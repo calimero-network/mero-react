@@ -26,13 +26,23 @@
  *   `getContexts` and `listNamespaces` answer this account's own and `/sse`
  *   delivers this account's contexts.
  *
- * ## And the relay is the third thing it answers
+ * ## The pane asks for nothing
  *
- * The same certificate proves the cloud's account→relay lookup
- * (`CloudClient.getAccountRelays`), so this pane no longer asks anyone to type a
- * relay URL — a thing no end user could know. The device signs an account-bound
- * nonce; the cloud names the relays. No cloud session, no Google sign-in, no
- * account root.
+ * It used to have three fields, and not one of them was a question an end user
+ * could answer. All three are gone:
+ *
+ * - the **relay** is discovered. The same certificate proves the cloud's
+ *   account→relay lookup (`CloudClient.getAccountRelays`): the device signs an
+ *   account-bound nonce and the cloud names the relays. No cloud session, no
+ *   Google sign-in, no account root.
+ * - the **wallet** is a platform constant, defaulted here, overridable only for
+ *   working on the wallet itself.
+ * - the **context** is chosen after connecting, not before. `MeroContext` derives
+ *   this tab's `applicationId` from `admin.getContexts()` — caller-scoped by the
+ *   request proof — so an app's own context picker has what it needs and the
+ *   person picks from a list instead of pasting a 64-hex id.
+ *
+ * So the account path is one button.
  *
  * This pane used to ask for the relay node's signing key as well, to mint an
  * `account_proof` session with `login()`. Nothing needs it: the proof path was
@@ -58,24 +68,42 @@ import { resolveMeroTheme, themeToCssVars, type MeroTheme } from '../theme';
 
 /** Where this tab's device keypair lives. */
 const DEVICE_KEY = 'calimero.device';
-/** What the account pane was filled in with when we left for the wallet. */
-const PENDING_KEY = 'calimero.enrol.pending';
+
+/**
+ * The hosted wallet, which is a property of the platform rather than of any app.
+ *
+ * A default here and not a required prop: every app that enrols an account
+ * enrols it at the same wallet, so making each one name it would be asking a
+ * question with one answer — and an app that got it wrong would send a device key
+ * to the wrong origin.
+ */
+const HOSTED_WALLET = 'https://wallet.cloud.calimero.network/account-enroll';
 
 export interface ConnectButtonAccountProps {
   className?: string;
   style?: React.CSSProperties;
   theme?: MeroTheme;
   /**
-   * Prefill for the account pane, so a local rig needs no typing.
+   * Overrides for local development. An app in production passes none of this,
+   * and the pane asks the person for nothing at all.
    *
-   * There is deliberately no `relayUrl` here any more. A relay is not something
-   * an end user can know, and it no longer has to be asked for: the certificate
-   * this enrolment returns is itself the credential the cloud's relay lookup
-   * wants, so the answer is fetched rather than typed. A prefill would only be
-   * a second, staler source of truth for something already discoverable.
+   * Nothing here is a value an end user could know, which is precisely why none
+   * of it is a form field any more:
+   *
+   * - the **relay** is discovered — the certificate the enrolment returns proves
+   *   the cloud's account→relay lookup, so there is nothing to type and a prefill
+   *   would only be a staler second source of truth;
+   * - the **context** is chosen after connecting, from the account's own contexts,
+   *   which `admin.getContexts()` answers caller-scoped through the request proof.
    */
   defaults?: {
-    contextId?: string;
+    /**
+     * Point enrolment at a wallet other than the hosted one.
+     *
+     * Exists for working ON the wallet: a wallet served from `localhost:8090`
+     * cannot be reached through the hosted URL, and without this the only way to
+     * test a wallet change would be to deploy it.
+     */
     walletUrl?: string;
   };
 }
@@ -213,10 +241,7 @@ export function ConnectButtonAccount({
   const [note, setNote] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const [contextId, setContextId] = useState(defaults.contextId ?? '');
-  const [walletUrl, setWalletUrl] = useState(
-    defaults.walletUrl ?? 'http://localhost:8090/account-enroll',
-  );
+  const walletUrl = defaults.walletUrl ?? HOSTED_WALLET;
 
   const resolvedTheme = useMemo(() => (theme ? resolveMeroTheme(theme) : null), [theme]);
   const themeVars = useMemo(
@@ -281,24 +306,18 @@ export function ConnectButtonAccount({
     (async () => {
       try {
         const keys = await deviceKeys();
-        const pending = JSON.parse(sessionStorage.getItem(PENDING_KEY) ?? '{}') as {
-          contextId?: string;
-        };
-        sessionStorage.removeItem(PENDING_KEY);
 
+        // Nothing is carried across the redirect any more beyond the device keys
+        // themselves. There used to be a `sessionStorage` record holding the
+        // typed relay and context; both are now answered by the credential this
+        // returns, so the record held nothing and the "they were lost, try
+        // again" failure it guarded cannot happen.
         const enrolled = await completeDeviceEnrolment({
           ...back,
           devicePublicKey: keys.signPk,
           kemPublicKey: keys.kemPk,
           expectState: back.state,
         });
-
-        // Same reasoning as below: past this point the credential is spent, so
-        // a teardown must not be allowed to drop it on the floor.
-        if (!pending.contextId) {
-          setNote('Enrolled, but the context was lost. Try again.');
-          return;
-        }
 
         /*
          * Where to write: asked, not typed.
@@ -348,7 +367,6 @@ export function ConnectButtonAccount({
         // connection after a StrictMode teardown is correct.
         connectWithAccount({
           relayUrl: chosen.relayUrl,
-          contextId: pending.contextId,
           account: enrolled.account,
           credential: enrolled.credential,
           deviceSecret: keys.signSk,
@@ -364,12 +382,8 @@ export function ConnectButtonAccount({
   }, [connectWithAccount]);
 
   const goToWallet = useCallback(async () => {
-    if (!contextId) {
-      setNote('A context id is needed.');
-      return;
-    }
+    // No inputs to validate: there is nothing left to ask for.
     const keys = await deviceKeys();
-    sessionStorage.setItem(PENDING_KEY, JSON.stringify({ contextId }));
     const state = hex(crypto.getRandomValues(new Uint8Array(16)));
     window.location.assign(
       deviceEnrolmentUrl({
@@ -380,7 +394,7 @@ export function ConnectButtonAccount({
         state,
       }),
     );
-  }, [contextId, walletUrl]);
+  }, [walletUrl]);
 
   if (isAuthenticated && !isOnline) {
     return (
@@ -481,24 +495,14 @@ export function ConnectButtonAccount({
             font: '13px system-ui, sans-serif',
           }}
         >
-          <label>
-            Context id
-            <input
-              value={contextId}
-              onChange={(e) => setContextId(e.target.value)}
-              style={{ width: '100%' }}
-            />
-          </label>
-          <label>
-            Wallet
-            <input
-              value={walletUrl}
-              onChange={(e) => setWalletUrl(e.target.value)}
-              style={{ width: '100%' }}
-            />
-          </label>
+          {/* No form fields. Every one this pane used to have asked for
+              something only an operator could know, and all three are now
+              answered by the certificate: the wallet is the platform's, the relay
+              is looked up, and the context is chosen afterwards from the
+              account's own. What is left is a button and an explanation of what
+              pressing it does. */}
           <button className="mero-connect-button" onClick={goToWallet}>
-            Enrol with the wallet
+            Enrol with your account
           </button>
           <p style={{ margin: 0, opacity: 0.75 }}>
             You will approve a device key on the wallet&apos;s own page, then come
@@ -508,8 +512,15 @@ export function ConnectButtonAccount({
           <p style={{ margin: 0, opacity: 0.75 }}>
             That one certificate is all of it: finding the relay that serves your
             account, writing through it, reading your own contexts and namespaces,
-            and live events. There is no relay URL to paste in — it is looked up.
+            and live events. Nothing to paste in.
           </p>
+          {defaults.walletUrl && (
+            /* Shown only when an app overrode it, so a local rig can see at a
+               glance that it is not enrolling against the hosted wallet. */
+            <p style={{ margin: 0, opacity: 0.6 }}>
+              Enrolling at <code>{walletUrl}</code>, not the hosted wallet.
+            </p>
+          )}
         </div>
       )}
 
