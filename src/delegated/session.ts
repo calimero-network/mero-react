@@ -13,7 +13,12 @@
  * two different connections — one a node you run, one a relay you do not — with
  * the same application code in both.
  */
-import { createMeroClient, type MeroClient } from '@calimero-network/mero-js';
+import {
+  createMeroClient,
+  defaultAudience,
+  login,
+  type MeroClient,
+} from '@calimero-network/mero-js';
 
 /** Where the per-tab record lives. */
 const KEY = 'calimero.delegated.connection';
@@ -200,6 +205,85 @@ function persistedNonces(relayUrl: string, contextId: string | null) {
   };
 }
 
+const RELAY_NODE_KEY_PREFIX = 'calimero.delegated.relay-node-key.';
+
+function relayOrigin(relayUrl: string): string {
+  return relayUrl.replace(/\/+$/, '');
+}
+
+/**
+ * Pin a relay's device signing key, hex (32 bytes), learned out of band.
+ *
+ * `login()` binds the session to this key, and it must never be read from the
+ * relay being logged in to — the answering party would choose what the device
+ * signs about. Until the cloud publishes it (mdma#312), it comes from the
+ * relay's operator.
+ */
+export function pinRelayNodeKey(relayUrl: string, nodeKey: string): void {
+  localStorage.setItem(RELAY_NODE_KEY_PREFIX + relayOrigin(relayUrl), nodeKey.trim().toLowerCase());
+}
+
+/** The pinned key for a relay, or `null` if none was pinned. */
+export function readPinnedRelayNodeKey(relayUrl: string): string | null {
+  try {
+    const v = localStorage.getItem(RELAY_NODE_KEY_PREFIX + relayOrigin(relayUrl));
+    return v && /^[0-9a-f]{64}$/.test(v) ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Milliseconds-since-epoch a JWT expires at, or `null` if unreadable. */
+function jwtExpiryMs(token: string): number | null {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]!.replace(/-/g, '+').replace(/_/g, '/')));
+    return typeof payload.exp === 'number' ? payload.exp * 1000 : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A lazily minted `account_proof` session on the relay.
+ *
+ * A hosted relay's `/admin-api/` sits behind the node's forward-auth, which
+ * knows no request proof — it answers a Bearer token or 401. Logging in with
+ * the device certificate is how a keyholder gets that token. Minted on first
+ * use and re-minted once it has expired. On failure it yields `undefined`, the
+ * admin request then goes out unauthenticated and the node's 401 is what the
+ * caller sees; the next call tries to log in again.
+ */
+function relaySession(s: DelegatedSession & { relayUrl: string }, nodeKey: string) {
+  let token: string | null = null;
+  let inflight: Promise<string | undefined> | null = null;
+  return async (): Promise<string | undefined> => {
+    const exp = token ? jwtExpiryMs(token) : null;
+    if (token && (exp === null || exp - Date.now() > 30_000)) return token;
+    if (!inflight) {
+      inflight = login({
+        nodeUrl: s.relayUrl,
+        node: nodeKey,
+        deviceSecret: s.deviceSecret,
+        accountProof: s.credential,
+        audience: defaultAudience(),
+      })
+        .then((minted) => {
+          token = minted.accessToken;
+          return token;
+        })
+        .catch((e: unknown) => {
+          console.warn('[mero-react] relay login failed', e);
+          token = null;
+          return undefined;
+        })
+        .finally(() => {
+          inflight = null;
+        });
+    }
+    return inflight;
+  };
+}
+
 /**
  * Build the client a delegated session talks through.
  *
@@ -223,6 +307,7 @@ export function buildDelegatedClient(
   // been invited anywhere yet. A stand-in URL would make every write fail as a
   // refused warrant against a node that was never chosen.
   if (!s.relayUrl) return null;
+  const nodeKey = readPinnedRelayNodeKey(s.relayUrl);
   return createMeroClient({
     transport: 'relay',
     relay: {
@@ -248,5 +333,10 @@ export function buildDelegatedClient(
     // signing key learned out of band — two inputs, one of which the cloud does
     // not publish, for an answer the certificate already gives.
     proof: { credential: s.credential, deviceSecret: s.deviceSecret },
+    // A session, when this relay's node key is pinned. A hosted relay's
+    // forward-auth accepts a Bearer token and not the proof above, so without
+    // one every admin read there is a 401. Given a session the client uses it
+    // for every admin call; a relay with no pinned key keeps the proof path.
+    session: nodeKey ? relaySession({ ...s, relayUrl: s.relayUrl }, nodeKey) : undefined,
   });
 }

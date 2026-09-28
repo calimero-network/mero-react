@@ -23,6 +23,8 @@ export {
   readDelegatedCredential,
   saveDelegatedCredential,
   clearDelegatedCredential,
+  pinRelayNodeKey,
+  readPinnedRelayNodeKey,
 } from './delegated/session';
 
 // Bootstrapping an account that is a member of nothing, from an invitation —
