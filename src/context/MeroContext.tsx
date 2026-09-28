@@ -39,6 +39,7 @@ import {
   clearDelegatedCredential,
   clearDelegatedSession,
   readDelegatedSession,
+  readPinnedRelayNodeKey,
   saveDelegatedCredential,
   saveDelegatedSession,
   type DelegatedSession,
@@ -334,6 +335,10 @@ export function MeroProvider({
       // member of nothing — there are no contexts to derive an application from,
       // which is exactly the state an invitation changes.
       if (!client) return;
+      // Admin reads need a session the relay accepts, which exists only once
+      // its node key is pinned (see `buildDelegatedClient`). A hosted relay
+      // answers the proof-only path with 401, so do not ask.
+      if (!delegated.relayUrl || !readPinnedRelayNodeKey(delegated.relayUrl)) return;
       try {
         const { contexts } = await client.admin.getContexts();
         const apps = [
