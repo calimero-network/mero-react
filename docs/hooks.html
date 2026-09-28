@@ -95,7 +95,7 @@
 <div class="fr"><div class="fp">useContextDiscovery(options)</div><div class="fd">Discover joinable contexts. Returns <span class="code">ContextDiscoveryState</span> with items and pagination.</div></div>
 <div class="fr"><div class="fp">useCreateContext()</div><div class="fd">Returns <span class="code">&#123; createContext, loading, error &#125;</span>. Call <span class="code">createContext(req)</span> to create.</div></div>
 <div class="fr"><div class="fp">useDeleteContext()</div><div class="fd">Returns <span class="code">&#123; deleteContext, loading, error &#125;</span>.</div></div>
-<div class="fr"><div class="fp">useJoinContext()</div><div class="fd">Returns <span class="code">&#123; joinContext, loading, error &#125;</span>.</div></div>
+<div class="fr"><div class="fp">useJoinContext(options?)</div><div class="fd">Returns <span class="code">&#123; joinContext, loading, error, failure &#125;</span>. <span class="code">failure</span> is mero-js&#39;s <span class="code">ClassifiedError</span> (kind, status, retryable, the node&#39;s message). <span class="code">joinContext</span> resolves <span class="code">null</span> on failure unless <span class="code">&#123; throwOnError: true &#125;</span> is passed, which rejects with the original error instead.</div></div>
 </div>
 
 <div class="card ge">
@@ -138,7 +138,8 @@
 <div class="fr"><div class="fp">useNamespacesForApplication(applicationId?)</div><div class="fd">List namespaces associated with an application.</div></div>
 <div class="fr"><div class="fp">useCreateNamespace()</div><div class="fd">Returns <span class="code">&#123; createNamespace, loading, error &#125;</span>.</div></div>
 <div class="fr"><div class="fp">useDeleteNamespace()</div><div class="fd">Delete a namespace.</div></div>
-<div class="fr"><div class="fp">useJoinNamespace()</div><div class="fd">Join a namespace by invitation.</div></div>
+<div class="fr"><div class="fp">useJoinNamespace(options?)</div><div class="fd">Join a namespace by invitation. Returns <span class="code">&#123; joinNamespace, loading, error, failure &#125;</span>, with <span class="code">failure</span> and <span class="code">throwOnError</span> as for <span class="code">useJoinContext</span>.</div></div>
+<div class="fr"><div class="fp">useRedeemInvitation()</div><div class="fd">Follow an invitation link. Returns <span class="code">&#123; redeem, outcome, loading &#125;</span>. <span class="code">redeem(namespaceId, invitation, &#123; groupName?, teamName? &#125;)</span> joins once, then checks membership, and resolves a <span class="code">RedeemOutcome</span>: <span class="code">joined</span>, <span class="code">already-member</span> (including a join that landed although its request timed out) or <span class="code">failed</span> with a reason and <span class="code">retryable</span>. mero-js&#39;s <span class="code">shouldRetain(outcome)</span> says whether to keep the invitation.</div></div>
 <div class="fr"><div class="fp">useCreateNamespaceInvitation()</div><div class="fd">Create an invitation for a namespace.</div></div>
 <div class="fr"><div class="fp">useCreateGroupInNamespace()</div><div class="fd">Create a new group inside a namespace.</div></div>
 </div>

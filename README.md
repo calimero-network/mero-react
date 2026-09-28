@@ -394,14 +394,14 @@ useSetSubgroupVisibility, useSubgroupVisibility, useSetTeeAdmissionPolicy
 useDetachContextFromGroup
 useNamespaces, useNamespace, useNamespaceGroups, useNamespaceIdentity
 useNamespacesForApplication, useCreateNamespace, useDeleteNamespace
-useJoinNamespace, useCreateNamespaceInvitation, useCreateGroupInNamespace
+useJoinNamespace, useRedeemInvitation, useCreateNamespaceInvitation, useCreateGroupInNamespace
 useBlobInfo, useBlobUrl, useUploadBlob
 
 // Types (mero-react)
 MeroContextValue, MeroProviderConfig, MeroProviderProps
 CustomConnectionConfig, AppContext, ExecutionResult
 ApplicationContextRecord, ContextDiscoveryOptions, ContextDiscoveryState
-BlobHookOptions, UseBlobUrlOptions
+BlobHookOptions, UseBlobUrlOptions, MutationOptions
 
 // Storage (mero-react)
 localStorageTokenStorage
