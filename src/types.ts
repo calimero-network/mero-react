@@ -2,7 +2,8 @@
  * Types for mero-react
  */
 
-import type { MeroJs, TokenStore } from '@calimero-network/mero-js';
+import type { MeroClient, MeroJs, TokenStore } from '@calimero-network/mero-js';
+import type { DelegatedSession } from './delegated/session';
 
 /**
  * Application mode determines the permission scope
@@ -102,8 +103,20 @@ export interface ContextDiscoveryState {
  * Mero context value exposed by useMero hook
  */
 export interface MeroContextValue {
-  /** The MeroJs instance (null if not connected) */
-  mero: MeroJs | null;
+  /**
+   * The connected client, or null.
+   *
+   * Two shapes, because there are two ways to connect: a node login yields a
+   * `MeroJs`, an account + relay connection yields a relay-transport
+   * `MeroClient`. Both expose `rpc` as an `ExecuteTransport`, which is what a
+   * generated ABI client depends on — so application logic is identical across
+   * the two and needs no branch.
+   *
+   * The union is deliberately not flattened behind a cast. A relay client has
+   * no `admin`, so code reaching for one should not typecheck as though it
+   * were there; narrow with {@link MeroContextValue.isDelegated} first.
+   */
+  mero: MeroJs | MeroClient | null;
   /** Whether the user is authenticated */
   isAuthenticated: boolean;
   /** Whether the connection is online */
@@ -118,6 +131,22 @@ export interface MeroContextValue {
   contextIdentity: string | null;
   /** Connect to a node URL and start auth flow */
   connectToNode: (url: string) => void;
+  /**
+   * Adopt a delegated connection: an account, a device that account certified,
+   * and a relay that writes on its behalf.
+   *
+   * Installs the relay client immediately — there is no redirect and no token to
+   * wait for, because every request carries its own warrant.
+   */
+  connectWithAccount: (session: DelegatedSession) => void;
+  /**
+   * Whether the connection is delegated (account + relay) rather than a node
+   * login. True means `mero` is a relay-transport client, authenticated by the
+   * account's device certificate: `rpc` writes under warrants, and `admin` and
+   * `events` answer caller-scoped — this account's own contexts and namespaces,
+   * and events only for contexts it is a member of.
+   */
+  isDelegated: boolean;
   /** Logout and clear tokens */
   logout: () => void;
   /** Loading state */

@@ -16,6 +16,46 @@ export type { MeroProviderProps } from './context';
 // Components
 export { ConnectButton } from './components';
 export type { ConnectButtonProps } from './components';
+export { ConnectButtonAccount } from './components';
+export type { ConnectButtonAccountProps } from './components';
+export type { DelegatedSession, DelegatedCredential } from './delegated/session';
+export {
+  readDelegatedCredential,
+  saveDelegatedCredential,
+  clearDelegatedCredential,
+} from './delegated/session';
+
+// Bootstrapping an account that is a member of nothing, from an invitation —
+// the one step between a freshly enrolled account and a usable relay.
+export { resolveRelayFromInvitation, normaliseAccount } from './delegated/relay-from-invitation';
+export type {
+  RelayResolutionStep,
+  RelayResolutionFailure,
+  ResolvedInvitationRelay,
+  ResolveRelayResult,
+  ResolveRelayFromInvitationInput,
+} from './delegated/relay-from-invitation';
+export { joinWithNode } from './delegated/join-with-node';
+export type {
+  JoinWithNodeInput,
+  JoinWithNodeResult,
+  JoinWithNodeSuccess,
+  JoinWithNodeFailure,
+  JoinWithNodeStep,
+} from './delegated/join-with-node';
+export { bootstrapFromInvitation } from './delegated/bootstrap-from-invitation';
+export type {
+  BootstrapStep,
+  BootstrapResult,
+  BootstrapSuccess,
+  BootstrapFailure,
+  BootstrapFromInvitationInput,
+} from './delegated/bootstrap-from-invitation';
+export { useDelegatedBootstrap } from './delegated/useDelegatedBootstrap';
+export type {
+  UseDelegatedBootstrapOptions,
+  UseDelegatedBootstrapResult,
+} from './delegated/useDelegatedBootstrap';
 export { LoginModal } from './components';
 export type { LoginModalProps } from './components';
 export { CalimeroLogo } from './components';

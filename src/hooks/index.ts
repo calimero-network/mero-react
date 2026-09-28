@@ -664,7 +664,7 @@ function extractAliasContextId(value: unknown): string | null {
  * Tracks loading/error state. Unmount-safe.
  */
 export function useExecute(contextId: string | null, executorId: string | null) {
-  const { mero } = useMero();
+  const { mero, isDelegated } = useMero();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const mountedRef = useRef(true);
@@ -677,7 +677,22 @@ export function useExecute(contextId: string | null, executorId: string | null) 
   const execute = useCallback(
     async <T = unknown>(method: string, params?: Record<string, unknown>): Promise<T | null> => {
       if (!mero || !contextId || !executorId) {
-        if (mountedRef.current) setError(new Error('Not connected'));
+        // A delegated session with no client is one specific, ordinary state —
+        // an account that has not been invited anywhere yet, so the cloud names
+        // no relay for it — and it must not report as "Not connected", because
+        // the account IS connected and re-authenticating cures nothing. The cure
+        // is an invitation, so the message says so.
+        if (mountedRef.current) {
+          setError(
+            new Error(
+              !mero && isDelegated
+                ? 'No relay for this account yet, so there is nowhere to send this write. ' +
+                  'Redeeming an invitation admits the account to a namespace and gives it a ' +
+                  'relay; reads and events resume with it.'
+                : 'Not connected',
+            ),
+          );
+        }
         return null;
       }
 
@@ -701,7 +716,7 @@ export function useExecute(contextId: string | null, executorId: string | null) 
         if (mountedRef.current) setLoading(false);
       }
     },
-    [mero, contextId, executorId],
+    [mero, contextId, executorId, isDelegated],
   );
 
   return { execute, loading, error };

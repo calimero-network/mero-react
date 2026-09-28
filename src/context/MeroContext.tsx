@@ -36,8 +36,10 @@ import type { MeroContextValue, MeroProviderConfig } from '../types';
 
 import {
   buildDelegatedClient,
+  clearDelegatedCredential,
   clearDelegatedSession,
   readDelegatedSession,
+  saveDelegatedCredential,
   saveDelegatedSession,
   type DelegatedSession,
 } from '../delegated/session';
@@ -250,6 +252,12 @@ export function MeroProvider({
    */
   const connectWithAccount = useCallback((session: DelegatedSession) => {
     saveDelegatedSession(session);
+    // Kept as a credential too, so the identity outlives the connection. A relay
+    // can be lost without the certificate being lost — the fleet row goes stale,
+    // or the record is cleared — and re-enrolling to recover a key this tab still
+    // holds would be a new device for no reason.
+    const { account, credential, deviceSecret } = session;
+    saveDelegatedCredential({ account, credential, deviceSecret });
     setDelegated(session);
   }, []);
 
@@ -263,6 +271,10 @@ export function MeroProvider({
     tokenStore.clear();
     clearAllStorage();
     clearDelegatedSession();
+    // The certificate goes too. Logging out of an account and leaving its device
+    // key in storage would leave the next visitor able to bootstrap as it from
+    // any invitation they hold.
+    clearDelegatedCredential();
     setDelegated(null);
     setMero(null);
     setIsAuthenticated(false);
@@ -288,6 +300,10 @@ export function MeroProvider({
     // it comes from storage (the initializer above) or from whatever the app's
     // own picker selected, exactly as on the node-login path.
     const client = buildDelegatedClient(delegated, contextId);
+    // `null` when the account holds no relay yet, and the session is still
+    // authenticated. Being signed in is how an account comes to be invited, so a
+    // relay cannot be a precondition for it — and `mero: null` is what makes a
+    // write say "there is no relay" instead of failing against a guessed node.
     setMero(client);
     setIsAuthenticated(true);
     setIsOnline(true);
@@ -314,6 +330,10 @@ export function MeroProvider({
      */
     let active = true;
     (async () => {
+      // No relay, so no client and nothing to ask. A brand-new account is a
+      // member of nothing — there are no contexts to derive an application from,
+      // which is exactly the state an invitation changes.
+      if (!client) return;
       try {
         const { contexts } = await client.admin.getContexts();
         const apps = [

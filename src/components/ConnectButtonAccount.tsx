@@ -62,12 +62,15 @@ import {
   type DeviceEnrolmentCallback,
 } from '@calimero-network/mero-js';
 import { useMero } from '../context';
+import { saveDelegatedCredential } from '../delegated/session';
 import { LoginModal } from './LoginModal';
 import { CalimeroLogo } from './CalimeroLogo';
 import { resolveMeroTheme, themeToCssVars, type MeroTheme } from '../theme';
 
 /** Where this tab's device keypair lives. */
 const DEVICE_KEY = 'calimero.device';
+/** The state parameter this tab sent to the wallet, to check what comes back. */
+const STATE_KEY = 'calimero.enrol.state';
 
 /**
  * The hosted wallet, which is a property of the platform rather than of any app.
@@ -112,47 +115,65 @@ const hex = (b: ArrayBuffer | Uint8Array): string =>
   [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, '0')).join('');
 
 /**
- * Which of the account's relays to talk to, and whether to say anything about it.
+ * Which of the account's relays to talk to, and what to say about it.
  *
- * Three outcomes, kept apart because they need three different things from the
- * caller and collapsing them into "no relay" would hide the one that is
- * actionable:
+ * Four outcomes, and the connection is made in ALL of them — what differs is
+ * whether there is somewhere to write yet, and what the person is told:
  *
  * - a **fresh** relay with an address: use it, say nothing;
  * - only **stale** ones: use one anyway — the cloud reports `fresh` from a
  *   heartbeat, and a heartbeat that lapsed a minute ago is not the same claim as
  *   a node that is gone — but say so, because if the writes then fail this is
  *   why;
- * - **nothing usable**: no rows at all, or rows whose `relayUrl` is null. Either
- *   way there is nowhere to send an intent, and no typed value substitutes for
- *   one, so the connection is not made.
+ * - **rows with no address**: relays are assigned and the cloud has no URL for
+ *   any of them yet, which is the shape a node reports before its first
+ *   heartbeat lands. A wait.
+ * - **no rows at all**: the normal state of a brand-new account. It is a member
+ *   of nothing, so nothing serves it.
+ *
+ * ## Why the last two connect instead of refusing
+ *
+ * This used to return "not connected" for both, and that was wrong in the case
+ * it mattered most: you get invited *because* you are signed in, and accepting
+ * an invitation is what earns a relay. Refusing to log the account in until it
+ * had one locked a new account out of the only path that would give it one.
+ *
+ * Nothing is faked to achieve it. The session carries `relayUrl: null`, so no
+ * client is built, `mero` stays `null`, and a write is told the relay is
+ * missing rather than being sent to a guess.
  */
-function chooseRelay(
-  relays: readonly CloudAccountRelay[],
-): { relayUrl: string; stale: boolean } | { relayUrl: null; reason: string } {
+function chooseRelay(relays: readonly CloudAccountRelay[]): {
+  relayUrl: string | null;
+  note: string | null;
+} {
   const reachable = relays.filter(
     (r): r is CloudAccountRelay & { relayUrl: string } => typeof r.relayUrl === 'string' && r.relayUrl.length > 0,
   );
   const fresh = reachable.find((r) => r.fresh);
-  if (fresh) return { relayUrl: fresh.relayUrl, stale: false };
-  if (reachable.length > 0) return { relayUrl: reachable[0].relayUrl, stale: true };
+  if (fresh) return { relayUrl: fresh.relayUrl, note: null };
+  if (reachable.length > 0) {
+    return {
+      relayUrl: reachable[0].relayUrl,
+      note:
+        'Connected through a relay whose last heartbeat has lapsed — it may not answer. It was ' +
+        'the only one with an address.',
+    };
+  }
   if (relays.length > 0) {
-    // Rows exist, so the account HAS relays assigned; the cloud just has no
-    // address for any of them. A different problem from having none, and worth
-    // naming separately — it is the shape a node reports before its first
-    // heartbeat lands.
     return {
       relayUrl: null,
-      reason:
-        `Your account has ${relays.length} relay${relays.length === 1 ? '' : 's'} assigned, but the ` +
-        'cloud knows no address for any of them yet. Nothing to connect to — try again shortly.',
+      note:
+        `Signed in. Your account has ${relays.length} relay${relays.length === 1 ? '' : 's'} ` +
+        'assigned, but the cloud knows no address for any of them yet, so there is nowhere to ' +
+        'write through for the moment. Reads and writes resume as soon as one reports in.',
     };
   }
   return {
     relayUrl: null,
-    reason:
-      'Your account has no relay assigned yet, so there is nowhere to write through. ' +
-      'That is a plan or provisioning matter on the cloud side, not something to fix here.',
+    note:
+      'Signed in, with nowhere to write yet: a new account is a member of nothing, so no node ' +
+      'serves it. Redeeming an invitation admits this account to a namespace and gives it a ' +
+      'relay — that is the normal first step, not an error.',
   };
 }
 
@@ -312,11 +333,37 @@ export function ConnectButtonAccount({
         // typed relay and context; both are now answered by the credential this
         // returns, so the record held nothing and the "they were lost, try
         // again" failure it guarded cannot happen.
+        // The state we sent, not the one that came back. `expectState: back.state`
+        // compared the returned value against itself and therefore always passed,
+        // which left the parameter as decoration: any page able to drive this
+        // origin's callback could have had a credential adopted here.
+        const sent = (() => {
+          try {
+            return sessionStorage.getItem(STATE_KEY);
+          } catch {
+            return null;
+          }
+        })();
+        try {
+          sessionStorage.removeItem(STATE_KEY);
+        } catch {
+          /* single-use where storage allows it; the comparison below is the gate */
+        }
+        if (!sent) {
+          // No record of having started this. Refused rather than adopted: this is
+          // either a callback we did not initiate, or storage that lost the value
+          // mid-flow, and neither justifies accepting a certificate.
+          setNote(
+            'This enrolment could not be verified as one this tab started, so it was not ' +
+              'accepted. Start again from "Enrol with your account".',
+          );
+          return;
+        }
         const enrolled = await completeDeviceEnrolment({
           ...back,
           devicePublicKey: keys.signPk,
           kemPublicKey: keys.kemPk,
-          expectState: back.state,
+          expectState: sent,
         });
 
         /*
@@ -332,6 +379,21 @@ export function ConnectButtonAccount({
          * (`manager.cloud.calimero.network`), which is the right default for a
          * hosted account and the only deployment that answers this route today.
          */
+        // Saved BEFORE the relay lookup, and kept whatever that lookup answers.
+        //
+        // A first-time account is a member of nothing, so `getAccountRelays`
+        // correctly answers `[]` and no connection is made below. That is not a
+        // failed enrolment: the certificate is real, and it is the input that
+        // resolves a relay from an INVITATION instead
+        // (`useDelegatedBootstrap`). Discarding it here would make "no relay
+        // yet" mean "enrol again", which mints a second device for an account
+        // whose first one was fine.
+        saveDelegatedCredential({
+          account: enrolled.account,
+          credential: enrolled.credential,
+          deviceSecret: keys.signSk,
+        });
+
         const cloud = new CloudClient({
           routingCredential: {
             credential: enrolled.credential,
@@ -339,19 +401,10 @@ export function ConnectButtonAccount({
           },
         });
         const chosen = chooseRelay(await cloud.getAccountRelays(enrolled.account));
-        if (chosen.relayUrl === null) {
-          // Not connected, rather than connected to a typed guess. A relay URL
-          // that nothing assigned is a node that will refuse every warrant, and
-          // a half-connected session fails later and further away.
-          setNote(chosen.reason);
-          return;
-        }
-        if (chosen.stale) {
-          setNote(
-            'Connected through a relay whose last heartbeat has lapsed — it may not answer. ' +
-              'It was the only one with an address.',
-          );
-        }
+        // Connected either way — see `chooseRelay`. A null relay is an
+        // authenticated account with nowhere to write yet, and the note says
+        // what changes that.
+        if (chosen.note) setNote(chosen.note);
 
         // Nothing else to obtain. The certificate this enrolment just returned
         // authenticates the reads and the event stream as well as the writes —
@@ -384,7 +437,17 @@ export function ConnectButtonAccount({
   const goToWallet = useCallback(async () => {
     // No inputs to validate: there is nothing left to ask for.
     const keys = await deviceKeys();
+    // Remembered before leaving, so what comes back can be checked against what
+    // we sent. Without this the state parameter is decoration: comparing the
+    // returned value to itself always passes, which is what it did here.
     const state = hex(crypto.getRandomValues(new Uint8Array(16)));
+    try {
+      sessionStorage.setItem(STATE_KEY, state);
+    } catch {
+      // Storage unavailable (private mode, blocked site data). The redirect
+      // still works and the check below reports it as unverifiable rather than
+      // silently passing.
+    }
     window.location.assign(
       deviceEnrolmentUrl({
         walletUrl,
@@ -431,7 +494,9 @@ export function ConnectButtonAccount({
         {isDropdownOpen && (
           <div className="mero-dropdown">
             <div className="mero-dropdown-info" title={nodeUrl || ''}>
-              {nodeUrl}
+              {/* A delegated account with no relay is signed in and has no node
+                  to name. Saying so beats an empty row that reads as a bug. */}
+              {nodeUrl ?? (isDelegated ? 'no relay yet' : null)}
             </div>
             {/* No dashboard link on the delegated path: the admin dashboard is
                 a node-operator surface, and a keyholder has no credential for

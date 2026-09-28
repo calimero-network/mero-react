@@ -17,6 +17,17 @@ import { createMeroClient, type MeroClient } from '@calimero-network/mero-js';
 
 /** Where the per-tab record lives. */
 const KEY = 'calimero.delegated.connection';
+/**
+ * Where the enrolled credential lives when there is no relay for it yet.
+ *
+ * Separate from {@link KEY}, and deliberately not "a connection with a null
+ * relay": a record under that key means a usable client can be built from it,
+ * and every reader relies on that. An account that has just enrolled is a
+ * member of nothing, so the cloud names no relay for it and there is nothing to
+ * build — but the certificate is real and must survive, or the only way to
+ * bootstrap from an invitation would be to enrol again.
+ */
+const CREDENTIAL_KEY = 'calimero.delegated.credential';
 
 /**
  * What a delegated connection needs to be rebuilt after a reload.
@@ -26,9 +37,43 @@ const KEY = 'calimero.delegated.connection';
  * a certificate the account can revoke — not the account root, which never
  * leaves the wallet's origin.
  */
-export interface DelegatedSession {
-  /** The relay to write through — a node origin. */
-  relayUrl: string;
+/**
+ * What the wallet certified: an account, a device it trusts, and the key that
+ * device signs with. Everything except somewhere to send the result.
+ *
+ * Split out of {@link DelegatedSession} because it is reachable one step
+ * earlier. An account that has just enrolled holds exactly this and no relay —
+ * it is a member of nothing, so the cloud has no relay to name — and this is the
+ * input that resolves one from an invitation instead.
+ */
+export interface DelegatedCredential {
+  /** The author's account id, hex. */
+  account: string;
+  /** The author's `AccountProof<DeviceCert>`, hex borsh. */
+  credential: string;
+  /** The certified device's ed25519 signing secret, hex. */
+  deviceSecret: string;
+}
+
+export interface DelegatedSession extends DelegatedCredential {
+  /**
+   * The relay to write through — a node origin, or `null` for none yet.
+   *
+   * **`null` is a logged-in state, not a broken one.** A brand-new account is a
+   * member of nothing, so the cloud names no relay for it — and that is the
+   * normal condition of an account that has just been created, because being
+   * signed in is how you come to be invited in the first place. Refusing to
+   * connect without a relay locked a new account out of the only path that
+   * would earn it one.
+   *
+   * What it does NOT mean is that writes quietly do nothing. There is no
+   * client at all without a URL ({@link buildDelegatedClient} returns `null`),
+   * so `mero` stays `null`, the session is authenticated, and anything reaching
+   * for `rpc.execute` is told the relay is missing. A placeholder URL would be
+   * the one unacceptable answer: it would look connected and refuse every
+   * warrant.
+   */
+  relayUrl: string | null;
   /**
    * No `contextId`, deliberately.
    *
@@ -41,12 +86,6 @@ export interface DelegatedSession {
    * immediately make stale, and it would make connecting depend on a value
    * nobody could type.
    */
-  /** The author's account id, hex. */
-  account: string;
-  /** The author's `AccountProof<DeviceCert>`, hex borsh. */
-  credential: string;
-  /** The certified device's ed25519 signing secret, hex. */
-  deviceSecret: string;
 }
 
 export function readDelegatedSession(): DelegatedSession | null {
@@ -73,6 +112,51 @@ export function saveDelegatedSession(s: DelegatedSession): void {
 export function clearDelegatedSession(): void {
   try {
     sessionStorage.removeItem(KEY);
+  } catch {
+    /* nothing to clear if storage is unavailable */
+  }
+}
+
+/**
+ * The enrolled credential, whether or not a relay was ever found for it.
+ *
+ * A connected session is authoritative: it carries the same three fields and a
+ * relay, so it is read first and the standalone record is the fallback. Without
+ * that order a stale record from an earlier enrolment could out-rank the account
+ * actually connected.
+ */
+export function readDelegatedCredential(): DelegatedCredential | null {
+  const session = readDelegatedSession();
+  if (session) {
+    const { account, credential, deviceSecret } = session;
+    return { account, credential, deviceSecret };
+  }
+  if (typeof sessionStorage === 'undefined') return null;
+  try {
+    const raw = sessionStorage.getItem(CREDENTIAL_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<DelegatedCredential>;
+    // A half-written record is worse than none: it would be carried into a
+    // signing call and fail as a malformed credential, somewhere that cannot say
+    // where the bad value came from.
+    if (!parsed.account || !parsed.credential || !parsed.deviceSecret) return null;
+    return parsed as DelegatedCredential;
+  } catch {
+    return null;
+  }
+}
+
+export function saveDelegatedCredential(c: DelegatedCredential): void {
+  try {
+    sessionStorage.setItem(CREDENTIAL_KEY, JSON.stringify(c));
+  } catch {
+    /* this page view still holds it; it just will not survive a reload */
+  }
+}
+
+export function clearDelegatedCredential(): void {
+  try {
+    sessionStorage.removeItem(CREDENTIAL_KEY);
   } catch {
     /* nothing to clear if storage is unavailable */
   }
@@ -129,7 +213,16 @@ function persistedNonces(relayUrl: string, contextId: string | null) {
 export function buildDelegatedClient(
   s: DelegatedSession,
   contextId: string | null,
-): MeroClient {
+): MeroClient | null {
+  // No relay, no client — and deliberately no placeholder either.
+  //
+  // A relay-transport client IS a URL plus a credential; with no URL there is
+  // nothing to post an intent to. `null` propagates as "not connected for
+  // writing" while the session stays authenticated, which is the honest shape
+  // for a brand-new account: it exists, it has a certificate, and it has not
+  // been invited anywhere yet. A stand-in URL would make every write fail as a
+  // refused warrant against a node that was never chosen.
+  if (!s.relayUrl) return null;
   return createMeroClient({
     transport: 'relay',
     relay: {
