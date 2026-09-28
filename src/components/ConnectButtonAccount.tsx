@@ -80,6 +80,8 @@ const STATE_KEY = 'calimero.enrol.state';
  * question with one answer — and an app that got it wrong would send a device key
  * to the wrong origin.
  */
+// TEMPORARY — see the connect effect below.
+const TEMP_RELAY_URL = 'https://node-mul80epb.relay.cloud.calimero.network';
 const HOSTED_WALLET = 'https://wallet.cloud.calimero.network/account-enroll';
 
 export interface ConnectButtonAccountProps {
@@ -400,7 +402,11 @@ export function ConnectButtonAccount({
             deviceSecret: keys.signSk,
           },
         });
-        const chosen = chooseRelay(await cloud.getAccountRelays(enrolled.account));
+        // TEMPORARY: the relay is hardcoded to the one working hosted relay
+        // instead of asking the cloud. Revert before merging.
+        void cloud;
+        void chooseRelay;
+        const chosen = { relayUrl: TEMP_RELAY_URL, note: null as string | null };
         // Connected either way — see `chooseRelay`. A null relay is an
         // authenticated account with nowhere to write yet, and the note says
         // what changes that.
