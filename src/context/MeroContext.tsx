@@ -311,12 +311,58 @@ export function MeroProvider({
     setIsLoading(false);
 
     /*
-     * No admin reads on a delegated connection. A hosted relay serves a
-     * keyholder `/admit` and `/intents` only; every other `/admin-api/` route
-     * sits behind the node's forward-auth, which knows no request proof and
-     * answers 401. The context comes from the invitation, so nothing here
-     * needs the application id that `getContexts()` was called to derive.
+     * Which application this tab is for, asked rather than told.
+     *
+     * The node-login path is handed an `applicationId` by the auth callback. A
+     * delegated tab has no callback, so it had none — and an app's context
+     * picker that filters on it (correctly: "I cannot tell which are mine" and
+     * "all of them are mine" are different answers) then had nothing to filter
+     * with and stayed empty forever. That, not the relay, was the last reason
+     * anyone had to type a context id in.
+     *
+     * `admin.getContexts()` on this client is caller-scoped through the request
+     * proof — it answers this ACCOUNT's own contexts, each naming its
+     * application — so the id is derivable from the credential already held.
+     *
+     * Not persisted with `setApplicationId`: it is derived from a cheap,
+     * authoritative read, so caching it would only create a value to invalidate
+     * when the account's contexts change.
      */
+    let active = true;
+    (async () => {
+      // No relay, so no client and nothing to ask. A brand-new account is a
+      // member of nothing — there are no contexts to derive an application from,
+      // which is exactly the state an invitation changes.
+      if (!client) return;
+      try {
+        const { contexts } = await client.admin.getContexts();
+        const apps = [
+          ...new Set((contexts ?? []).map((c) => c.applicationId).filter(Boolean)),
+        ];
+        if (!active) return;
+        if (apps.length === 1) {
+          setApplicationIdState(apps[0]);
+        }
+        // More than one, and this stays null ON PURPOSE. A tab holds one
+        // application's UI and nothing here says which — the account simply has
+        // contexts for several. Picking the first would silently point the app at
+        // another app's contract, which answers none of its methods; admitting
+        // "I don't know" leaves the app's own "waiting for this session to report
+        // which application" message honest, and a chooser is the follow-up.
+        //
+        // Zero contexts also stays null: there is no application to infer.
+      } catch {
+        // Left null, and deliberately not surfaced as a connection failure. The
+        // writes work — every one carries its own warrant — and a read that did
+        // not answer must not unwind a connection that did.
+      }
+    })();
+
+    return () => {
+      active = false;
+      // `close` is a node-client concern; a relay client has nothing to tear
+      // down, so do not reach for it.
+    };
   }, [delegated, contextId]);
 
   // Initialization effect
