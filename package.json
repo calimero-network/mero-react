@@ -83,5 +83,10 @@
     "access": "public",
     "registry": "https://registry.npmjs.org/"
   },
-  "packageManager": "pnpm@10.14.0"
+  "packageManager": "pnpm@10.14.0",
+  "pnpm": {
+    "overrides": {
+      "@calimero-network/mero-js": "link:../mero-js-signer"
+    }
+  }
 }
