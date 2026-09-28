@@ -26,6 +26,7 @@ import {
   useJoinContext,
   useJoinGroup,
   useJoinNamespace,
+  useRedeemInvitation,
   useJoinSubgroupInheritance,
   useMemberMetadata,
   useNamespace,
@@ -57,7 +58,7 @@ import {
   useInstallFromRegistry,
   useMyAuthoredMigration,
 } from './index';
-import type { SignedGroupOpenInvitation } from '@calimero-network/mero-js';
+import { HTTPError, type SignedGroupOpenInvitation } from '@calimero-network/mero-js';
 import { useMero } from '../context';
 
 vi.mock('../context', () => ({
@@ -917,6 +918,87 @@ describe('group and context hooks', () => {
     expect(joinNamespace).toHaveBeenCalledWith('ns-1', expect.objectContaining({
       invitation: expect.any(Object),
     }));
+  });
+
+  describe('join failures', () => {
+    const refused = () =>
+      new HTTPError(409, 'Conflict', 'http://node/join', new Headers(),
+        JSON.stringify({ error: 'invitation for group ab expired at 1759000000 (unix seconds)' }));
+
+    it('useJoinNamespace records what kind of refusal a failed join was', async () => {
+      const mero = createMero({ joinNamespace: vi.fn().mockRejectedValue(refused()) });
+      mockUseMero.mockReturnValue({ mero } as never);
+      const { result } = renderHook(() => useJoinNamespace());
+
+      await act(async () => {
+        expect(await result.current.joinNamespace('ns-1', { invitation: {} as never })).toBeNull();
+      });
+
+      expect(result.current.failure).toMatchObject({ kind: 'conflict', status: 409, retryable: false });
+      expect(result.current.failure?.message).toBe('invitation for group ab expired at 1759000000 (unix seconds)');
+      expect(result.current.error).toBeInstanceOf(HTTPError);
+    });
+
+    // Resolving null made a caller's catch unreachable, so a refused join
+    // was acked as a successful one.
+    it('useJoinNamespace rethrows the original error with throwOnError', async () => {
+      const err = refused();
+      const mero = createMero({ joinNamespace: vi.fn().mockRejectedValue(err) });
+      mockUseMero.mockReturnValue({ mero } as never);
+      const { result } = renderHook(() => useJoinNamespace({ throwOnError: true }));
+
+      await act(async () => {
+        await expect(result.current.joinNamespace('ns-1', { invitation: {} as never })).rejects.toBe(err);
+      });
+      expect(result.current.failure?.kind).toBe('conflict');
+    });
+
+    it('useJoinContext rethrows with throwOnError and clears failure on the next success', async () => {
+      const joinContext = vi.fn()
+        .mockRejectedValueOnce(new HTTPError(503, 'Service Unavailable', 'u', new Headers(), '{"error":"no peer"}'))
+        .mockResolvedValueOnce({ contextId: 'ctx-1', memberPublicKey: 'pk' });
+      const mero = createMero({ joinContext });
+      mockUseMero.mockReturnValue({ mero } as never);
+      const { result } = renderHook(() => useJoinContext({ throwOnError: true }));
+
+      await act(async () => {
+        await expect(result.current.joinContext('ctx-1')).rejects.toBeInstanceOf(HTTPError);
+      });
+      expect(result.current.failure).toMatchObject({ kind: 'unavailable', retryable: true });
+
+      await act(async () => {
+        await result.current.joinContext('ctx-1');
+      });
+      expect(result.current.failure).toBeNull();
+      expect(result.current.error).toBeNull();
+    });
+  });
+
+  describe('useRedeemInvitation', () => {
+    it('hands the invitation to the admin client and keeps its outcome', async () => {
+      const outcome = { status: 'already-member', namespaceId: 'ns-1', teamName: 'Design' };
+      const redeemInvitation = vi.fn().mockResolvedValue(outcome);
+      const mero = createMero({ redeemInvitation });
+      mockUseMero.mockReturnValue({ mero } as never);
+      const { result } = renderHook(() => useRedeemInvitation());
+
+      await act(async () => {
+        expect(await result.current.redeem('ns-1', {} as never, { teamName: 'Design' })).toEqual(outcome);
+      });
+
+      expect(redeemInvitation).toHaveBeenCalledWith('ns-1', {}, { teamName: 'Design' });
+      expect(result.current.outcome).toEqual(outcome);
+      expect(result.current.loading).toBe(false);
+    });
+
+    it('resolves null with no client', async () => {
+      mockUseMero.mockReturnValue({ mero: null } as never);
+      const { result } = renderHook(() => useRedeemInvitation());
+      await act(async () => {
+        expect(await result.current.redeem('ns-1', {} as never)).toBeNull();
+      });
+      expect(result.current.outcome).toBeNull();
+    });
   });
 
   it('useCreateGroupInNamespace creates a group in a namespace', async () => {
