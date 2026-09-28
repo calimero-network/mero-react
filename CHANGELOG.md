@@ -1,3 +1,9 @@
+## [9.2.0](https://github.com/calimero-network/mero-react/compare/mero-react-v9.1.3...mero-react-v9.2.0) (2026-09-28)
+
+### Features
+
+* **hooks:** classify join failures and add useRedeemInvitation ([3a21681](https://github.com/calimero-network/mero-react/commit/3a2168151a38e4603c887ed7fba1590367a54cb8))
+
 ## [9.1.3](https://github.com/calimero-network/mero-react/compare/mero-react-v9.1.2...mero-react-v9.1.3) (2026-09-22)
 
 ### Bug Fixes
