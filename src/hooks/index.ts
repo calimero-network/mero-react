@@ -2,7 +2,8 @@ import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { compareSemver } from '@calimero-network/mero-js';
 import { useMero } from '../context';
 import { base58ToHex } from '../utils/base58';
-import { listDelegatedContexts, readDelegatedSession } from '../delegated/session';
+import { listDelegatedContexts, listDelegatedNamespaces, readDelegatedSession } from '../delegated/session';
+import { createDelegatedContext } from '../delegated/create-context';
 import type {
   Codec,
   EphemeralClient,
@@ -1090,15 +1091,29 @@ export function useContextDiscovery(options: ContextDiscoveryOptions): ContextDi
 // ---- Context CRUD Hooks ----
 
 export function useCreateContext() {
-  const { mero } = useMero();
+  const { mero, isDelegated } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const createContext = useCallback(
     async (request: CreateContextRequest) => {
+      if (isDelegated) {
+        // An account creates a context through the relay serving the namespace
+        // (a signed request; see delegated/create-context.ts — mocked locally
+        // until core ships the route).
+        const session = readDelegatedSession();
+        if (!session || !request.groupId) return null;
+        return run(() =>
+          createDelegatedContext(session, {
+            namespaceId: request.groupId!,
+            applicationId: request.applicationId,
+            initializationParams: request.initializationParams as number[] | undefined,
+          }),
+        );
+      }
       if (!mero) return null;
       return run(() => mero.admin.createContext(request));
     },
-    [mero, run],
+    [mero, run, isDelegated],
   );
 
   return { createContext, loading, error };
@@ -1297,11 +1312,21 @@ export function useNamespaceIdentity(namespaceId?: string | null) {
 }
 
 export function useNamespacesForApplication(applicationId?: string | null) {
-  const { mero } = useMero();
+  const { mero, isDelegated } = useMero();
   const { data, loading, error, refetch } = useAsyncResource<Namespace[]>(
-    mero && applicationId ? () => mero.admin.listNamespacesForApplication(applicationId) : null,
+    mero && applicationId
+      ? isDelegated
+        ? async () => {
+            // The per-application listing is node-wide, so a relay refuses it to
+            // an account; list its own namespaces on every relay and filter.
+            const session = readDelegatedSession();
+            const listed = session ? await listDelegatedNamespaces(session) : [];
+            return listed.filter((ns) => ns.targetApplicationId === applicationId);
+          }
+        : () => mero.admin.listNamespacesForApplication(applicationId)
+      : null,
     [],
-    [mero, applicationId],
+    [mero, applicationId, isDelegated],
   );
   return { namespaces: data, loading, error, refetch };
 }

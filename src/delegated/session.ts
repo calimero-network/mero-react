@@ -475,3 +475,36 @@ export async function listDelegatedContexts(
   writeRelayMap(s.account, map);
   return out;
 }
+
+type ListedNamespace = Awaited<ReturnType<MeroClient['admin']['listNamespaces']>>[number];
+
+/**
+ * This account's namespaces on every relay it knows, each tagged with the relay
+ * that listed it and recorded as that namespace's relay. Same rules as
+ * {@link listDelegatedContexts}: each relay answers for itself and this caller
+ * only (`namespace:list-own`); an unreachable relay is skipped.
+ */
+export async function listDelegatedNamespaces(
+  s: DelegatedSession,
+): Promise<Array<ListedNamespace & { relayUrl: string }>> {
+  const out: Array<ListedNamespace & { relayUrl: string }> = [];
+  const seen = new Set<string>();
+  const map = readRelayMap(s.account);
+  for (const relayUrl of knownRelays(s)) {
+    try {
+      if (!(await resolveRelayNodeKey(relayUrl))) continue;
+      const client = buildDelegatedClient({ ...s, relayUrl }, null);
+      if (!client) continue;
+      for (const ns of await client.admin.listNamespaces()) {
+        if (seen.has(ns.namespaceId)) continue;
+        seen.add(ns.namespaceId);
+        out.push({ ...ns, relayUrl });
+        map.namespaces[ns.namespaceId] ??= relayUrl;
+      }
+    } catch (e) {
+      console.warn(`[mero-react] could not list namespaces on ${relayUrl}`, e);
+    }
+  }
+  writeRelayMap(s.account, map);
+  return out;
+}

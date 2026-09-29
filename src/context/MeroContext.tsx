@@ -650,6 +650,9 @@ export function MeroProvider({
       connectToNode,
       connectWithAccount,
       isDelegated: delegated !== null,
+      can: delegated !== null
+        ? { createNamespace: false, createContext: true, invite: false }
+        : { createNamespace: true, createContext: true, invite: true },
       logout,
       isLoading,
     }),

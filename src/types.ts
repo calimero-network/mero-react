@@ -147,6 +147,14 @@ export interface MeroContextValue {
    * and events only for contexts it is a member of.
    */
   isDelegated: boolean;
+  /**
+   * What this connection may do, so an app asks WHAT IS ALLOWED instead of
+   * which transport it runs on. A node login can do everything; an account on
+   * a relay can create contexts (delegated creation) but not namespaces or
+   * invitations — those are a node's own operations today. A capability that
+   * later becomes available to accounts turns true here with no app change.
+   */
+  can: MeroCapabilities;
   /** Logout and clear tokens */
   logout: () => void;
   /** Loading state */
@@ -186,4 +194,14 @@ export interface MeroProviderConfig {
    * HttpOnly cookie set by your auth service.
    */
   tokenStore?: TokenStore;
+}
+
+/** See {@link MeroContextValue.can}. */
+export interface MeroCapabilities {
+  /** Found a namespace. */
+  readonly createNamespace: boolean;
+  /** Create a context inside a namespace this connection belongs to. */
+  readonly createContext: boolean;
+  /** Mint an invitation to a namespace. */
+  readonly invite: boolean;
 }

@@ -58,6 +58,7 @@ export type {
   BootstrapFromInvitationInput,
 } from './delegated/bootstrap-from-invitation';
 export { useDelegatedBootstrap } from './delegated/useDelegatedBootstrap';
+export { createDelegatedContext } from './delegated/create-context';
 export type {
   UseDelegatedBootstrapOptions,
   UseDelegatedBootstrapResult,
@@ -180,6 +181,7 @@ export type {
   ContextDiscoveryState,
   CustomConnectionConfig,
   ExecutionResult,
+  MeroCapabilities,
   MeroContextValue,
   MeroProviderConfig,
 } from './types';
