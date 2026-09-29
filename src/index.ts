@@ -59,6 +59,14 @@ export type {
 } from './delegated/bootstrap-from-invitation';
 export { useDelegatedBootstrap } from './delegated/useDelegatedBootstrap';
 export { createDelegatedContext } from './delegated/create-context';
+
+// One call to join from an invitation, whatever the connection.
+export { useJoinInvitation, isFinalInvitationError } from './join/useJoinInvitation';
+export type {
+  JoinInvitationInput,
+  JoinInvitationResult,
+  JoinInvitationStep,
+} from './join/useJoinInvitation';
 export type {
   UseDelegatedBootstrapOptions,
   UseDelegatedBootstrapResult,
