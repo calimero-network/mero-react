@@ -82,6 +82,14 @@ const STATE_KEY = 'calimero.enrol.state';
  */
 // TEMPORARY — see the connect effect below.
 const TEMP_RELAY_URL = 'https://node-mul80epb.relay.cloud.calimero.network';
+/** `localStorage['calimero.delegated.relay-url']` overrides it, e.g. for a local relay rig. */
+function tempRelayUrl(): string {
+  try {
+    return localStorage.getItem('calimero.delegated.relay-url')?.trim() || TEMP_RELAY_URL;
+  } catch {
+    return TEMP_RELAY_URL;
+  }
+}
 const HOSTED_WALLET = 'https://wallet.cloud.calimero.network/account-enroll';
 
 export interface ConnectButtonAccountProps {
@@ -406,7 +414,7 @@ export function ConnectButtonAccount({
         // instead of asking the cloud. Revert before merging.
         void cloud;
         void chooseRelay;
-        const chosen = { relayUrl: TEMP_RELAY_URL, note: null as string | null };
+        const chosen = { relayUrl: tempRelayUrl(), note: null as string | null };
         // Connected either way — see `chooseRelay`. A null relay is an
         // authenticated account with nowhere to write yet, and the note says
         // what changes that.
