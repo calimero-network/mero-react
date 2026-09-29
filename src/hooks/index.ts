@@ -785,10 +785,21 @@ export function useSubscription(
  * Fetch contexts for the current node, optionally filtered by application ID.
  */
 export function useContexts(applicationId?: string | null) {
-  const { mero } = useMero();
+  const { mero, isDelegated } = useMero();
   const { data, loading, error, refetch } = useAsyncResource<ApplicationContextRecord[]>(
     mero
       ? async () => {
+          // A delegated session may list only its own contexts: the
+          // per-application listing is node-wide, so a relay refuses it (403).
+          // The caller-scoped `getContexts` carries each context's application,
+          // so filter here instead.
+          if (isDelegated) {
+            const response = await mero.admin.getContexts();
+            const own = (response.contexts ?? []).filter(
+              (c) => !applicationId || c.applicationId === applicationId,
+            );
+            return mapApplicationContexts(own);
+          }
           const response = applicationId
             ? await mero.admin.getContextsForApplication(applicationId)
             : await mero.admin.getContexts();
@@ -796,7 +807,7 @@ export function useContexts(applicationId?: string | null) {
         }
       : null,
     [],
-    [mero, applicationId],
+    [mero, applicationId, isDelegated],
   );
   return { contexts: data, loading, error, refetch };
 }
