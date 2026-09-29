@@ -25,6 +25,10 @@ export {
   clearDelegatedCredential,
   pinRelayNodeKey,
   readPinnedRelayNodeKey,
+  listDelegatedContexts,
+  readRelayMap,
+  relayForContext,
+  rememberRelay,
 } from './delegated/session';
 
 // Bootstrapping an account that is a member of nothing, from an invitation —

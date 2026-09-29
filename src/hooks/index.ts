@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { compareSemver } from '@calimero-network/mero-js';
 import { useMero } from '../context';
 import { base58ToHex } from '../utils/base58';
+import { listDelegatedContexts, readDelegatedSession } from '../delegated/session';
 import type {
   Codec,
   EphemeralClient,
@@ -794,8 +795,11 @@ export function useContexts(applicationId?: string | null) {
           // The caller-scoped `getContexts` carries each context's application,
           // so filter here instead.
           if (isDelegated) {
-            const response = await mero.admin.getContexts();
-            const own = (response.contexts ?? []).filter(
+            // Across every relay this account uses: its namespaces may each be
+            // served by a different one, and each relay lists only its own.
+            const session = readDelegatedSession();
+            const listed = session ? await listDelegatedContexts(session) : [];
+            const own = listed.filter(
               (c) => !applicationId || c.applicationId === applicationId,
             );
             return mapApplicationContexts(own);

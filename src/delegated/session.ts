@@ -376,3 +376,102 @@ export function buildDelegatedClient(
     observe: nodeKey ? { nodeKey } : undefined,
   });
 }
+
+// ------------------------------------------------------------------ relay map
+//
+// An account's namespaces may be served by different relays. A relay admits
+// the account to a namespace and then serves that namespace's contexts, so the
+// client keeps, per account, which relay serves which namespace and context:
+//
+//   namespaces: { <namespace id>: <relay url> }  — learned when a join succeeds
+//   contexts:   { <context id>:   <relay url> }  — learned from each relay's
+//                                                  caller-scoped listing
+//
+// In localStorage, beside the pinned node keys: URLs and ids only, nothing
+// secret, and it has to survive a reload for the open context to find its
+// relay. Losing it costs a re-listing, not access.
+
+const RELAY_MAP_PREFIX = 'calimero.delegated.relays.';
+
+export interface RelayMap {
+  namespaces: Record<string, string>;
+  contexts: Record<string, string>;
+}
+
+export function readRelayMap(account: string): RelayMap {
+  try {
+    const raw = localStorage.getItem(RELAY_MAP_PREFIX + account);
+    const parsed = raw ? (JSON.parse(raw) as Partial<RelayMap>) : {};
+    return { namespaces: parsed.namespaces ?? {}, contexts: parsed.contexts ?? {} };
+  } catch {
+    return { namespaces: {}, contexts: {} };
+  }
+}
+
+function writeRelayMap(account: string, map: RelayMap): void {
+  try {
+    localStorage.setItem(RELAY_MAP_PREFIX + account, JSON.stringify(map));
+  } catch {
+    /* unpersisted: this page view still routes from what it lists */
+  }
+}
+
+/** Record the relay that admitted this account to a namespace (and, when known, the context it came for). */
+export function rememberRelay(
+  account: string,
+  relayUrl: string,
+  at: { namespaceId?: string; contextId?: string },
+): void {
+  const map = readRelayMap(account);
+  const url = relayOrigin(relayUrl);
+  if (at.namespaceId) map.namespaces[at.namespaceId] = url;
+  if (at.contextId) map.contexts[at.contextId] = url;
+  writeRelayMap(account, map);
+}
+
+/** The relay that serves a context, if this account has learned it. */
+export function relayForContext(account: string, contextId: string): string | null {
+  return readRelayMap(account).contexts[contextId] ?? null;
+}
+
+/** Every relay this account is known to use: the session's, and each in the map. */
+export function knownRelays(s: DelegatedSession): string[] {
+  const map = readRelayMap(s.account);
+  const all = [s.relayUrl, ...Object.values(map.namespaces), ...Object.values(map.contexts)]
+    .filter((u): u is string => typeof u === 'string' && u.length > 0)
+    .map(relayOrigin);
+  return [...new Set(all)];
+}
+
+type ListedContext = Awaited<ReturnType<MeroClient['admin']['getContexts']>>['contexts'][number];
+
+/**
+ * This account's contexts on every relay it knows, each tagged with the relay
+ * that listed it — and that relay recorded as the one serving it.
+ *
+ * Each relay answers only for itself and only for this caller, so the union is
+ * exactly the account's contexts across relays. A relay that cannot be reached
+ * or logged in to is skipped (its contexts simply do not appear), not fatal.
+ */
+export async function listDelegatedContexts(
+  s: DelegatedSession,
+): Promise<Array<ListedContext & { relayUrl: string }>> {
+  const out: Array<ListedContext & { relayUrl: string }> = [];
+  const map = readRelayMap(s.account);
+  for (const relayUrl of knownRelays(s)) {
+    try {
+      if (!(await resolveRelayNodeKey(relayUrl))) continue;
+      const client = buildDelegatedClient({ ...s, relayUrl }, null);
+      if (!client) continue;
+      const { contexts } = await client.admin.getContexts();
+      for (const c of contexts ?? []) {
+        out.push({ ...c, relayUrl });
+        map.contexts[c.id] = relayUrl;
+      }
+    } catch (e) {
+      console.warn(`[mero-react] could not list contexts on ${relayUrl}`, e);
+    }
+  }
+  writeRelayMap(s.account, map);
+  return out;
+}

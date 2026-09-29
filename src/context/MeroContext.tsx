@@ -39,7 +39,9 @@ import {
   clearDelegatedCredential,
   clearDelegatedSession,
   readDelegatedSession,
+  listDelegatedContexts,
   readPinnedRelayNodeKey,
+  relayForContext,
   resolveRelayNodeKey,
   saveDelegatedCredential,
   saveDelegatedSession,
@@ -301,7 +303,13 @@ export function MeroProvider({
     // why `contextId` is a dependency. The context itself is NOT set from here —
     // it comes from storage (the initializer above) or from whatever the app's
     // own picker selected, exactly as on the node-login path.
-    const client = buildDelegatedClient(delegated, contextId);
+    // The open context's own relay: an account's namespaces may each be served
+    // by a different one. Unknown (no context yet, or one not listed yet) →
+    // the session's relay, which is the one that admitted it most recently.
+    const relayUrl =
+      (contextId ? relayForContext(delegated.account, contextId) : null) ?? delegated.relayUrl;
+    const routed = { ...delegated, relayUrl };
+    const client = buildDelegatedClient(routed, contextId);
     // `null` when the account holds no relay yet, and the session is still
     // authenticated. Being signed in is how an account comes to be invited, so a
     // relay cannot be a precondition for it — and `mero: null` is what makes a
@@ -309,7 +317,7 @@ export function MeroProvider({
     setMero(client);
     setIsAuthenticated(true);
     setIsOnline(true);
-    setNodeUrlState(delegated.relayUrl);
+    setNodeUrlState(relayUrl);
     setIsLoading(false);
 
     /*
@@ -335,20 +343,19 @@ export function MeroProvider({
       // No relay, so no client and nothing to ask. A brand-new account is a
       // member of nothing — there are no contexts to derive an application from,
       // which is exactly the state an invitation changes.
-      if (!client || !delegated.relayUrl) return;
+      if (!client || !relayUrl) return;
       // Admin reads and events need a session the relay accepts, which needs
       // its node key. Pinned, or learned from the relay's attestation; learned
       // now, the client is rebuilt so its session and events use it too. With
       // neither, a hosted relay answers the proof-only path with 401: do not ask.
-      let reader = client;
-      if (!readPinnedRelayNodeKey(delegated.relayUrl)) {
-        const nodeKey = await resolveRelayNodeKey(delegated.relayUrl);
+      if (!readPinnedRelayNodeKey(relayUrl)) {
+        const nodeKey = await resolveRelayNodeKey(relayUrl);
         if (!nodeKey || !active) return;
-        reader = buildDelegatedClient(delegated, contextId) ?? client;
-        setMero(reader);
+        setMero(buildDelegatedClient(routed, contextId) ?? client);
       }
       try {
-        const { contexts } = await reader.admin.getContexts();
+        // Across every relay this account uses, each answering for itself.
+        const contexts = await listDelegatedContexts(delegated);
         const apps = [
           ...new Set((contexts ?? []).map((c) => c.applicationId).filter(Boolean)),
         ];

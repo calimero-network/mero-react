@@ -22,6 +22,7 @@ import {
 import {
   readDelegatedCredential,
   readDelegatedSession,
+  rememberRelay,
   type DelegatedCredential,
 } from './session';
 
@@ -64,6 +65,8 @@ export interface UseDelegatedBootstrapResult {
      * a local rig's, or one a future invitation carries.
      */
     readonly nodeUrl?: string;
+    /** The context the invitation is for, so its relay is known before any listing. */
+    readonly contextId?: string;
   }) => Promise<BootstrapResult>;
 }
 
@@ -91,6 +94,7 @@ export function useDelegatedBootstrap(
       namespaceId: string;
       invitation: SignedGroupOpenInvitation;
       nodeUrl?: string;
+      contextId?: string;
     }): Promise<BootstrapResult> => {
       const held = readDelegatedCredential();
       if (!held) {
@@ -117,7 +121,17 @@ export function useDelegatedBootstrap(
         // Connected only on a node that actually took the join. A session
         // installed after a refusal would look connected and refuse every write,
         // which is the failure this whole path exists to avoid.
-        if (outcome.ok) connectWithAccount(outcome.session);
+        if (outcome.ok) {
+          // Added to the account's relay map, never replacing it: the relays
+          // that serve its other namespaces stay reachable.
+          if (outcome.session.relayUrl) {
+            rememberRelay(held.account, outcome.session.relayUrl, {
+              namespaceId: input.namespaceId,
+              contextId: input.contextId,
+            });
+          }
+          connectWithAccount(outcome.session);
+        }
         return outcome;
       } finally {
         setRunning(false);
