@@ -40,6 +40,7 @@ import {
   clearDelegatedSession,
   readDelegatedSession,
   readPinnedRelayNodeKey,
+  resolveRelayNodeKey,
   saveDelegatedCredential,
   saveDelegatedSession,
   type DelegatedSession,
@@ -334,13 +335,20 @@ export function MeroProvider({
       // No relay, so no client and nothing to ask. A brand-new account is a
       // member of nothing — there are no contexts to derive an application from,
       // which is exactly the state an invitation changes.
-      if (!client) return;
-      // Admin reads need a session the relay accepts, which exists only once
-      // its node key is pinned (see `buildDelegatedClient`). A hosted relay
-      // answers the proof-only path with 401, so do not ask.
-      if (!delegated.relayUrl || !readPinnedRelayNodeKey(delegated.relayUrl)) return;
+      if (!client || !delegated.relayUrl) return;
+      // Admin reads and events need a session the relay accepts, which needs
+      // its node key. Pinned, or learned from the relay's attestation; learned
+      // now, the client is rebuilt so its session and events use it too. With
+      // neither, a hosted relay answers the proof-only path with 401: do not ask.
+      let reader = client;
+      if (!readPinnedRelayNodeKey(delegated.relayUrl)) {
+        const nodeKey = await resolveRelayNodeKey(delegated.relayUrl);
+        if (!nodeKey || !active) return;
+        reader = buildDelegatedClient(delegated, contextId) ?? client;
+        setMero(reader);
+      }
       try {
-        const { contexts } = await client.admin.getContexts();
+        const { contexts } = await reader.admin.getContexts();
         const apps = [
           ...new Set((contexts ?? []).map((c) => c.applicationId).filter(Boolean)),
         ];

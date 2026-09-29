@@ -14,6 +14,7 @@
  * the same application code in both.
  */
 import {
+  attestRelayNodeKey,
   createMeroClient,
   defaultAudience,
   login,
@@ -229,6 +230,37 @@ export function readPinnedRelayNodeKey(relayUrl: string): string | null {
     const v = localStorage.getItem(RELAY_NODE_KEY_PREFIX + relayOrigin(relayUrl));
     return v && /^[0-9a-f]{64}$/.test(v) ? v : null;
   } catch {
+    return null;
+  }
+}
+
+function isLoopback(relayUrl: string): boolean {
+  try {
+    const { hostname } = new URL(relayUrl);
+    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The relay's node key: the pinned one, or else learned from the relay's TEE
+ * attestation (see mero-js `attestRelayNodeKey`) and pinned for next time.
+ *
+ * A mock quote proves nothing about hardware, so one is accepted only from a
+ * loopback relay — a local rig. A real quote needs signature and measurement
+ * verification this client does not do yet, so a real relay still needs its
+ * key pinned; `null` then, and admin reads and events stay off.
+ */
+export async function resolveRelayNodeKey(relayUrl: string): Promise<string | null> {
+  const pinned = readPinnedRelayNodeKey(relayUrl);
+  if (pinned) return pinned;
+  try {
+    const { nodeKey } = await attestRelayNodeKey({ relayUrl, allowMock: isLoopback(relayUrl) });
+    pinRelayNodeKey(relayUrl, nodeKey);
+    return nodeKey;
+  } catch (e) {
+    console.warn('[mero-react] could not learn the relay node key from its attestation', e);
     return null;
   }
 }
