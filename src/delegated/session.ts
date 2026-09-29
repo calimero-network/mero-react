@@ -338,5 +338,9 @@ export function buildDelegatedClient(
     // one every admin read there is a 401. Given a session the client uses it
     // for every admin call; a relay with no pinned key keeps the proof path.
     session: nodeKey ? relaySession({ ...s, relayUrl: s.relayUrl }, nodeKey) : undefined,
+    // Events too. `/sse` on a relay sits behind the same forward-auth, so the
+    // proof above gets a 401 there; with the node key the client observes
+    // through its own device-certificate login instead.
+    observe: nodeKey ? { nodeKey } : undefined,
   });
 }
