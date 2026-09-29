@@ -83,6 +83,13 @@ const STATE_KEY = 'calimero.enrol.state';
 // TEMPORARY — see the connect effect below.
 const TEMP_RELAY_URL = 'https://node-mul80epb.relay.cloud.calimero.network';
 /** `localStorage['calimero.delegated.relay-url']` overrides it, e.g. for a local relay rig. */
+function tempWalletUrl(): string | null {
+  try {
+    return localStorage.getItem('calimero.delegated.wallet-url')?.trim() || null;
+  } catch {
+    return null;
+  }
+}
 function tempRelayUrl(): string {
   try {
     return localStorage.getItem('calimero.delegated.relay-url')?.trim() || TEMP_RELAY_URL;
@@ -272,7 +279,9 @@ export function ConnectButtonAccount({
   const [note, setNote] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const walletUrl = defaults.walletUrl ?? HOSTED_WALLET;
+  // TEMPORARY: `localStorage['calimero.delegated.wallet-url']` points enrolment at
+  // another wallet, e.g. one run locally. Revert with the relay hardcode.
+  const walletUrl = defaults.walletUrl ?? tempWalletUrl() ?? HOSTED_WALLET;
 
   const resolvedTheme = useMemo(() => (theme ? resolveMeroTheme(theme) : null), [theme]);
   const themeVars = useMemo(
