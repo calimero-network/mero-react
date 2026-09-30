@@ -154,7 +154,11 @@ export async function createDelegatedPrivateContext(
  */
 export async function foundDelegatedNamespace(
   s: DelegatedSession,
-  req: { readonly defaultCapabilities?: number } = {},
+  req: {
+    readonly defaultCapabilities?: number;
+    /** The application the namespace runs; without one no context can be created in it. */
+    readonly application?: { applicationId: string; package: string; version: string };
+  } = {},
   deps: { fetch?: typeof fetch } = {},
 ): Promise<{ namespaceId: string; teeEnabled: boolean }> {
   const relays = knownRelays(s).map((u) => u.replace(/\/+$/, ''));
@@ -173,6 +177,7 @@ export async function foundDelegatedNamespace(
   const founded = await client(s, relay, { next: async () => next++ }, deps.fetch).foundNamespace({
     executorAccount,
     ...(req.defaultCapabilities !== undefined ? { defaultCapabilities: req.defaultCapabilities } : {}),
+    ...(req.application ? { application: req.application } : {}),
   });
   try {
     localStorage.setItem(`calimero.governance-nonce.${relay}.${founded.namespaceId}`, String(next));
@@ -180,5 +185,40 @@ export async function foundDelegatedNamespace(
     /* unpersisted: the clock floor still keeps later warrants above these */
   }
   rememberRelay(s.account, relay, { namespaceId: founded.namespaceId });
+  if (req.application && founded.applicationSet !== true) {
+    // Founded, but no context can be created in it until it has its
+    // application; the same choice can be retried (it is still the first).
+    throw new Error(
+      `founded ${founded.namespaceId} but could not give it its application: ${founded.applicationError ?? 'unknown reason'}`,
+    );
+  }
   return { namespaceId: founded.namespaceId, teeEnabled: founded.teeEnabled };
+}
+
+/**
+ * The latest version of `pkg` the registry publishes. Used when the app names
+ * its package but not a version.
+ */
+export async function latestPublishedVersion(
+  registryUrl: string,
+  pkg: string,
+  fetchFn: typeof fetch = globalThis.fetch,
+): Promise<string> {
+  const url = `${registryUrl.replace(/\/+$/, '')}/api/v2/bundles?package=${encodeURIComponent(pkg)}`;
+  const response = await fetchFn(url, { headers: { Accept: 'application/json' } });
+  if (!response.ok) throw new Error(`the registry has no ${pkg} (HTTP ${response.status})`);
+  const bundles = (await response.json()) as Array<{ appVersion?: string }>;
+  const newer = (a: string, b: string) => {
+    const [x, y] = [a, b].map((v) => v.split(/[.-]/).map((n) => Number.parseInt(n, 10) || 0));
+    for (let i = 0; i < Math.max(x.length, y.length); i++) {
+      if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) > (y[i] ?? 0);
+    }
+    return false;
+  };
+  const latest = bundles
+    .map((b) => b.appVersion)
+    .filter((v): v is string => typeof v === 'string' && v.length > 0)
+    .reduce<string | undefined>((best, v) => (!best || newer(v, best) ? v : best), undefined);
+  if (!latest) throw new Error(`the registry lists no version of ${pkg}`);
+  return latest;
 }

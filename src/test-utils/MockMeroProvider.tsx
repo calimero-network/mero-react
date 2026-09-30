@@ -50,6 +50,7 @@ export function MockMeroProvider({
     },
     isDelegated: false,
     can: { createNamespace: true, createContext: true, invite: true },
+    app: {},
     logout: () => {
       console.info('[MockMeroProvider] logout');
     },

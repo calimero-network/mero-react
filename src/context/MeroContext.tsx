@@ -660,14 +660,16 @@ export function MeroProvider({
       connectWithAccount,
       isDelegated: delegated !== null,
       can: delegated !== null
-        // Founding works (useCreateNamespace), but core gives a founded namespace
-        // no target application, so no context could be created in it yet.
-        ? { createNamespace: false, createContext: true, invite: false }
+        // An account founds a namespace through its relay and gives it this
+        // app's application (core#4269): possible only when the app names its
+        // registry package. Invitations are still a node's to mint.
+        ? { createNamespace: Boolean(packageName), createContext: true, invite: false }
         : { createNamespace: true, createContext: true, invite: true },
+      app: { packageName, packageVersion, registryUrl },
       logout,
       isLoading,
     }),
-    [mero, isAuthenticated, isOnline, nodeUrl, applicationId, contextId, contextIdentity, connectToNode, connectWithAccount, delegated, logout, isLoading],
+    [mero, isAuthenticated, isOnline, nodeUrl, applicationId, contextId, contextIdentity, connectToNode, connectWithAccount, delegated, logout, isLoading, packageName, packageVersion, registryUrl],
   );
 
   return (

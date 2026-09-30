@@ -3,7 +3,12 @@ import { classifyError, compareSemver } from '@calimero-network/mero-js';
 import { useMero } from '../context';
 import { base58ToHex } from '../utils/base58';
 import { listDelegatedContexts, listDelegatedNamespaces, readDelegatedSession } from '../delegated/session';
-import { createDelegatedContext, createDelegatedPrivateContext, foundDelegatedNamespace } from '../delegated/create-context';
+import {
+  createDelegatedContext,
+  createDelegatedPrivateContext,
+  foundDelegatedNamespace,
+  latestPublishedVersion,
+} from '../delegated/create-context';
 import type {
   Codec,
   EphemeralClient,
@@ -1407,8 +1412,11 @@ export function useNamespacesForApplication(applicationId?: string | null) {
   return { namespaces: data, loading, error, refetch };
 }
 
+/** Where an app's package is looked up when the provider names no registry. */
+const DEFAULT_REGISTRY_URL = 'https://apps.calimero.network';
+
 export function useCreateNamespace() {
-  const { mero, isDelegated } = useMero();
+  const { mero, isDelegated, app } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const createNamespace = useCallback(
@@ -1418,14 +1426,27 @@ export function useCreateNamespace() {
         // genesis under a governance warrant; delegated/create-context.ts).
         // Members it invites get mero-chat's default mask, so they can create
         // contexts in it without a separate grant.
+        // It is given this app's application in the same call: a namespace
+        // founded through a relay starts with none, and holds no context until
+        // it has one.
         const session = readDelegatedSession();
         if (!session) return null;
-        return run(() => foundDelegatedNamespace(session, { defaultCapabilities: 231 }));
+        const pkg = app.packageName;
+        return run(async () => {
+          if (!pkg) {
+            throw new Error('this app names no registry package, so a founded namespace could not be given its application');
+          }
+          const version = app.packageVersion ?? (await latestPublishedVersion(app.registryUrl ?? DEFAULT_REGISTRY_URL, pkg));
+          return foundDelegatedNamespace(session, {
+            defaultCapabilities: 231,
+            application: { applicationId: request.applicationId, package: pkg, version },
+          });
+        });
       }
       if (!mero) return null;
       return run(() => mero.admin.createNamespace(request));
     },
-    [mero, run, isDelegated],
+    [mero, run, isDelegated, app],
   );
 
   return { createNamespace, loading, error };

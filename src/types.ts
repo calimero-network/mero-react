@@ -155,6 +155,12 @@ export interface MeroContextValue {
    * later becomes available to accounts turns true here with no app change.
    */
   can: MeroCapabilities;
+  /**
+   * The app's registry identity, as the provider was given it. An account
+   * founding a namespace names this application for it, since a namespace
+   * founded through a relay starts with none.
+   */
+  app: { packageName?: string; packageVersion?: string; registryUrl?: string };
   /** Logout and clear tokens */
   logout: () => void;
   /** Loading state */
