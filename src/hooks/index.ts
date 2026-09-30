@@ -3,7 +3,7 @@ import { compareSemver } from '@calimero-network/mero-js';
 import { useMero } from '../context';
 import { base58ToHex } from '../utils/base58';
 import { listDelegatedContexts, listDelegatedNamespaces, readDelegatedSession } from '../delegated/session';
-import { createDelegatedContext } from '../delegated/create-context';
+import { createDelegatedContext, createDelegatedPrivateContext } from '../delegated/create-context';
 import type {
   Codec,
   EphemeralClient,
@@ -1097,9 +1097,8 @@ export function useCreateContext() {
   const createContext = useCallback(
     async (request: CreateContextRequest) => {
       if (isDelegated) {
-        // An account creates a context through the relay serving the namespace
-        // (a signed request; see delegated/create-context.ts — mocked locally
-        // until core ships the route).
+        // An account creates a context through the relay serving the namespace,
+        // under a creation warrant (delegated/create-context.ts).
         const session = readDelegatedSession();
         if (!session || !request.groupId) return null;
         return run(() =>
@@ -1117,6 +1116,58 @@ export function useCreateContext() {
   );
 
   return { createContext, loading, error };
+}
+
+export interface CreatePrivateContextRequest {
+  readonly namespaceId: string;
+  readonly applicationId: string;
+  /** The accounts that share it with you, and nobody else — e.g. the other person of a DM. */
+  readonly members: readonly string[];
+  readonly initializationParams?: number[];
+}
+
+/**
+ * Create a context only you and `members` are in (a DM, a small room): its own
+ * restricted group in the namespace, members added directly — they are in the
+ * namespace already, so nobody is invited. Same call on either connection:
+ *
+ *  - a node login makes the group, adds the members and creates the context
+ *    with its own admin calls (as mero-chat's DMs do);
+ *  - an account has the relay serving the namespace do the same three steps,
+ *    each under its own warrant (delegated/create-context.ts).
+ */
+export function useCreatePrivateContext() {
+  const { mero, isDelegated } = useMero();
+  const { loading, error, run } = useAsyncMutation();
+
+  const createPrivateContext = useCallback(
+    async (request: CreatePrivateContextRequest): Promise<{ contextId: string } | null> => {
+      if (isDelegated) {
+        const session = readDelegatedSession();
+        if (!session) return null;
+        return run(() => createDelegatedPrivateContext(session, request));
+      }
+      if (!mero) return null;
+      return run(async () => {
+        const { groupId } = await mero.admin.createGroupInNamespace(request.namespaceId, {
+          visibility: 'restricted',
+        });
+        // The creator is the new group's admin already; the others join it here.
+        await mero.admin.addGroupMembers(groupId, {
+          members: request.members.map((identity) => ({ identity, role: 'Member' })),
+        });
+        const { contextId } = await mero.admin.createContext({
+          applicationId: request.applicationId,
+          groupId,
+          initializationParams: request.initializationParams,
+        });
+        return { contextId };
+      });
+    },
+    [mero, run, isDelegated],
+  );
+
+  return { createPrivateContext, loading, error };
 }
 
 export function useDeleteContext() {

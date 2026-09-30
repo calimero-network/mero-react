@@ -109,6 +109,7 @@ export {
   useContextGroup,
   useContexts,
   useCreateContext,
+  useCreatePrivateContext,
   useCreateGroupInNamespace,
   useCreateNamespace,
   useCreateNamespaceInvitation,
@@ -175,6 +176,7 @@ export type {
   EphemeralEntry,
   UseEphemeralOptions,
   UseEphemeralResult,
+  CreatePrivateContextRequest,
 } from './hooks';
 
 // Types

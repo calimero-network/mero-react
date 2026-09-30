@@ -206,6 +206,21 @@ function persistedNonces(relayUrl: string, contextId: string | null) {
   };
 }
 
+/**
+ * Record that `nonce` is spent in `contextId`'s ledger for this device, so the
+ * context's intents start above it. A creation warrant's nonce is spent in the
+ * NEW context's own per-device window — the one its later writes draw from.
+ */
+export function markContextNonceSpent(relayUrl: string, contextId: string, nonce: bigint): void {
+  const key = `calimero.nonce.${relayUrl}.${contextId}`;
+  try {
+    const current = BigInt(localStorage.getItem(key) ?? '0');
+    if (current <= nonce) localStorage.setItem(key, String(nonce + 1n));
+  } catch {
+    /* unpersisted: the first write meets a spent nonce once, and retries above it */
+  }
+}
+
 const RELAY_NODE_KEY_PREFIX = 'calimero.delegated.relay-node-key.';
 
 function relayOrigin(relayUrl: string): string {

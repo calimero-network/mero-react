@@ -1,52 +1,86 @@
 /**
- * Create a context as an account, through the relay that serves the namespace.
+ * An account's governance through the relay that serves its namespace: create
+ * a context, and the group ops a private context (a DM) needs.
  *
- * MOCK CONTRACT. Core does not have this route yet; delegated context creation
- * is being added there. This client speaks the shape agreed for it, and on the
- * local rig a stand-in service implements it (poc/local-relay-rig/
- * mock-context-create.py). When core ships the route, change what is signed and
- * where it is sent to match core, and delete the stand-in:
+ * A thin layer over mero-js's `RelayClient.createContext` / `govern` (core's
+ * `/admin-api/groups/{group}/context-intents` and `.../governance-intents`),
+ * adding what only this package knows: which relay serves the namespace (the
+ * relay map), and the nonce bookkeeping across page loads.
  *
- *   POST {relay}/admin-api/namespaces/{ns}/contexts
- *   { applicationId, initializationParams, author, credential, devicePublicKey,
- *     nonce, expiresAt, signature }            ->  { data: { contextId } }
- *
- * The request authorises itself, like a warrant on /intents: the device key
- * signs the domain string followed by the canonical JSON (sorted keys, no
- * whitespace) of {namespaceId, applicationId, initializationParams, author,
- * nonce, expiresAt}, and the certificate says the device belongs to the author.
+ * Nodes check the AUTHOR's rights (CAN_CREATE_CONTEXT, CAN_CREATE_SUBGROUP,
+ * MANAGE_MEMBERS…), never the relay's; the relay only needs standing to act.
  */
-import { signerFromSecret } from '@calimero-network/mero-js';
-import { readRelayMap, rememberRelay, type DelegatedSession } from './session';
+import {
+  groupCreatedOp,
+  memberAddedOp,
+  RelayClient,
+  type GovernanceOp,
+  type NonceSource,
+} from '@calimero-network/mero-js';
+import { markContextNonceSpent, readRelayMap, rememberRelay, type DelegatedSession } from './session';
 
-export const CREATE_CONTEXT_DOMAIN = 'calimero.mock.create-context.v1\n';
+/**
+ * A governance warrant's nonce, for one (relay, group): spent in a sliding
+ * per-(group, device) window 64 wide, so it must never go backwards. A stored
+ * counter, floored at the clock so a cleared storage resumes above anything
+ * spent before rather than replaying it.
+ */
+function governanceNonce(relay: string, group: string): NonceSource {
+  return { next: async () => nextGovernanceNonce(relay, group) };
+}
 
-/** How long a signed creation request stays valid. */
-const LIFETIME_MS = 5 * 60 * 1000;
-
+function nextGovernanceNonce(relay: string, group: string): bigint {
+  const key = `calimero.governance-nonce.${relay}.${group}`;
+  let last = 0n;
+  try {
+    last = BigInt(localStorage.getItem(key) ?? '0');
+  } catch {
+    /* no storage: the clock floor alone */
+  }
+  const next = [last + 1n, BigInt(Date.now())].reduce((a, b) => (a > b ? a : b));
+  try {
+    localStorage.setItem(key, String(next));
+  } catch {
+    /* unpersisted */
+  }
+  return next;
+}
 const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+/** A new subgroup's id: random, as core requires of every subgroup. */
+const random32 = () => hex(crypto.getRandomValues(new Uint8Array(32)));
+
+function relayFor(s: DelegatedSession, namespaceId: string): string {
+  // The relay that serves this namespace: learned when the account joined it.
+  const url = readRelayMap(s.account).namespaces[namespaceId] ?? s.relayUrl;
+  if (!url) throw new Error('no relay is known for this namespace, so there is nowhere to send this');
+  return url.replace(/\/+$/, '');
+}
+
+/** The `init` arguments as the JSON the route takes, from the bytes a caller may hold. */
+function initArgsOf(params: number[] | undefined): unknown {
+  if (!params || params.length === 0) return {};
+  return JSON.parse(new TextDecoder().decode(Uint8Array.from(params)));
+}
 
 export interface CreateDelegatedContextRequest {
   readonly namespaceId: string;
+  /** The group to create it in; the namespace itself when omitted. */
+  readonly groupId?: string;
   readonly applicationId: string;
   readonly initializationParams?: number[];
+  readonly name?: string;
 }
 
-/** The signed fields, in sorted-key order so JSON.stringify is canonical. */
-function signedFields(
-  req: CreateDelegatedContextRequest,
-  author: string,
-  nonce: string,
-  expiresAt: number,
-) {
-  return {
-    applicationId: req.applicationId,
-    author,
-    expiresAt,
-    initializationParams: req.initializationParams ?? [],
-    namespaceId: req.namespaceId,
-    nonce,
-  };
+/** A relay client for these calls: the author's credential, whatever nonces the call needs. */
+function client(s: DelegatedSession, relayUrl: string, nonces: NonceSource, fetch?: typeof globalThis.fetch) {
+  return new RelayClient({
+    relayUrl,
+    authorAccount: s.account,
+    authorProof: s.credential,
+    deviceSecret: s.deviceSecret,
+    nonces,
+    fetch,
+  });
 }
 
 export async function createDelegatedContext(
@@ -54,41 +88,56 @@ export async function createDelegatedContext(
   req: CreateDelegatedContextRequest,
   deps: { fetch?: typeof fetch } = {},
 ): Promise<{ contextId: string }> {
-  // The relay that serves this namespace: learned when the account joined it.
-  const relayUrl = readRelayMap(s.account).namespaces[req.namespaceId] ?? s.relayUrl;
-  if (!relayUrl) {
-    throw new Error('no relay is known for this namespace, so there is nowhere to create a context');
-  }
-  const signer = await signerFromSecret(s.deviceSecret, 'deviceSecret');
-  const nonce = hex(crypto.getRandomValues(new Uint8Array(16)));
-  const expiresAt = Date.now() + LIFETIME_MS;
-  const fields = signedFields(req, s.account, nonce, expiresAt);
-  const message = new TextEncoder().encode(CREATE_CONTEXT_DOMAIN + JSON.stringify(fields));
-  const signature = hex(await signer.sign(message));
+  const relay = relayFor(s, req.namespaceId);
+  // The creation warrant's nonce is spent in the NEW context's per-device
+  // window — the one its writes draw from, empty until now — so the first
+  // number is free, and the context's writes then start above it.
+  const creationNonce = 0n;
+  const created = await client(s, relay, { next: async () => creationNonce }, deps.fetch).createContext({
+    groupId: req.groupId ?? req.namespaceId,
+    applicationId: req.applicationId,
+    initArgs: initArgsOf(req.initializationParams),
+    name: req.name,
+  });
+  markContextNonceSpent(relay, created.contextId, creationNonce);
+  rememberRelay(s.account, relay, { namespaceId: req.namespaceId, contextId: created.contextId });
+  return { contextId: created.contextId };
+}
 
-  const url = `${relayUrl.replace(/\/+$/, '')}/admin-api/namespaces/${req.namespaceId}/contexts`;
-  const init = {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({
-      ...fields,
-      credential: s.credential,
-      devicePublicKey: signer.publicKey,
-      signature,
-    }),
-  };
-  const response = deps.fetch ? await deps.fetch(url, init) : await globalThis.fetch(url, init);
-  const text = await response.text();
-  let body: { data?: { contextId?: string } | null; error?: string } = {};
-  try {
-    body = text ? JSON.parse(text) : {};
-  } catch {
-    /* reported below */
+/** Publish one delegable governance op through the namespace's relay. */
+export async function delegatedGovernance(
+  s: DelegatedSession,
+  req: { namespaceId: string; group: string; op: GovernanceOp },
+  deps: { fetch?: typeof fetch } = {},
+): Promise<{ groupId: string }> {
+  const relay = relayFor(s, req.namespaceId);
+  return client(s, relay, governanceNonce(relay, req.group), deps.fetch).govern({ groupId: req.group, op: req.op });
+}
+
+/**
+ * A context only the author and `members` are in (a DM, a small room): a
+ * restricted subgroup of the namespace (a root op, posted to the namespace),
+ * each member added to it directly — they are in the namespace already, so
+ * nobody is invited — and the context created inside it. The relay that
+ * creates the subgroup is seated in it with CAN_AUTHOR_ON_BEHALF by core.
+ */
+export async function createDelegatedPrivateContext(
+  s: DelegatedSession,
+  req: CreateDelegatedContextRequest & { readonly members: readonly string[] },
+  deps: { fetch?: typeof fetch } = {},
+): Promise<{ contextId: string; groupId: string }> {
+  const { groupId } = await delegatedGovernance(
+    s,
+    {
+      namespaceId: req.namespaceId,
+      group: req.namespaceId,
+      op: groupCreatedOp({ groupId: random32(), parentId: req.namespaceId, restricted: true, admin: s.account }),
+    },
+    deps,
+  );
+  for (const member of req.members) {
+    await delegatedGovernance(s, { namespaceId: req.namespaceId, group: groupId, op: memberAddedOp(member, 'Member') }, deps);
   }
-  const contextId = body.data?.contextId;
-  if (!response.ok || !contextId) {
-    throw new Error(`the relay did not create the context (HTTP ${response.status}): ${body.error ?? text}`);
-  }
-  rememberRelay(s.account, relayUrl, { namespaceId: req.namespaceId, contextId });
-  return { contextId };
+  const { contextId } = await createDelegatedContext(s, { ...req, groupId }, deps);
+  return { contextId, groupId };
 }

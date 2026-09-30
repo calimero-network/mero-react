@@ -19,6 +19,7 @@ function node(over: Partial<CloudNamespaceNode> = {}): CloudNamespaceNode {
     canAdmit: true,
     authorshipReady: true,
     canExecute: true,
+    teeRole: null,
     ...over,
   };
 }
