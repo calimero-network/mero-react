@@ -4,6 +4,27 @@ import { useMero } from '../context';
 import { base58ToHex } from '../utils/base58';
 import { listDelegatedContexts, listDelegatedNamespaces, readDelegatedSession } from '../delegated/session';
 import {
+  contextDetachedOp,
+  contextMetadataSetOp,
+  defaultCapabilitiesSetOp,
+  groupCreatedOp,
+  groupDeletedOp,
+  groupMetadataSetOp,
+  groupReparentedOp,
+  memberAddedOp,
+  memberJoinedOpenOp,
+  memberMetadataSetOp,
+  memberRemovedOp,
+  memberRoleSetOp,
+  signerFromSecret,
+  subgroupVisibilitySetOp,
+  type GovernanceMemberRole,
+} from '@calimero-network/mero-js';
+import { governGroup, governRoot, rememberGroupNamespace } from '../delegated/govern';
+/** A new subgroup's id: random, as core requires of every subgroup. */
+const randomGroupId = () =>
+  Array.from(crypto.getRandomValues(new Uint8Array(32)), (b) => b.toString(16).padStart(2, '0')).join('');
+import {
   createDelegatedContext,
   createDelegatedPrivateContext,
   foundDelegatedNamespace,
@@ -1231,15 +1252,26 @@ export function useJoinContext(options: MutationOptions = {}) {
 }
 
 export function useJoinSubgroupInheritance() {
-  const { mero } = useMero();
+  const { mero, isDelegated } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const joinSubgroupInheritance = useCallback(
     async (groupId: string) => {
+      if (isDelegated) {
+        const session = readDelegatedSession();
+        if (!session) return null;
+        // Joining an open subgroup yourself: a root op carrying your own credential.
+        return run(async () => {
+          await governRoot(session, groupId, memberJoinedOpenOp({ member: session.account, groupId, credential: session.credential }));
+          // An account's identity in the subgroup is its device key: what its ops are signed with.
+          const { publicKey } = await signerFromSecret(session.deviceSecret);
+          return { groupId, memberPublicKey: publicKey, wasInherited: false };
+        });
+      }
       if (!mero) return null;
       return run(() => mero.admin.joinSubgroupInheritance(groupId));
     },
-    [mero, run],
+    [mero, run, isDelegated],
   );
 
   return { joinSubgroupInheritance, loading, error };
@@ -1268,15 +1300,20 @@ export function useGroupInfo(groupId?: string | null) {
 }
 
 export function useDeleteGroup() {
-  const { mero } = useMero();
+  const { mero, isDelegated } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const deleteGroup = useCallback(
     async (groupId: string) => {
+      if (isDelegated) {
+        const session = readDelegatedSession();
+        if (!session) return null;
+        return run(() => governRoot(session, groupId, groupDeletedOp(groupId)));
+      }
       if (!mero) return null;
       return run(() => mero.admin.deleteGroup(groupId));
     },
-    [mero, run],
+    [mero, run, isDelegated],
   );
 
   return { deleteGroup, loading, error };
@@ -1304,15 +1341,24 @@ export function useSyncGroup() {
  * round-tripped from an add is the wrong one to remove with.
  */
 export function useAddGroupMembers() {
-  const { mero } = useMero();
+  const { mero, isDelegated } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const addGroupMembers = useCallback(
     async (groupId: string, request: AddGroupMembersRequest) => {
+      if (isDelegated) {
+        const session = readDelegatedSession();
+        if (!session) return null;
+        return run(async () => {
+          for (const m of request.members) {
+            await governGroup(session, groupId, memberAddedOp(m.identity, m.role as GovernanceMemberRole));
+          }
+        });
+      }
       if (!mero) return null;
       return run(() => mero.admin.addGroupMembers(groupId, request));
     },
-    [mero, run],
+    [mero, run, isDelegated],
   );
 
   return { addGroupMembers, loading, error };
@@ -1324,15 +1370,22 @@ export function useAddGroupMembers() {
  * Both are 32-byte strings, so passing a key names nobody and raises nothing.
  */
 export function useRemoveGroupMembers() {
-  const { mero } = useMero();
+  const { mero, isDelegated } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const removeGroupMembers = useCallback(
     async (groupId: string, request: RemoveGroupMembersRequest) => {
+      if (isDelegated) {
+        const session = readDelegatedSession();
+        if (!session) return null;
+        return run(async () => {
+          for (const member of request.members) await governGroup(session, groupId, memberRemovedOp(member));
+        });
+      }
       if (!mero) return null;
       return run(() => mero.admin.removeGroupMembers(groupId, request));
     },
-    [mero, run],
+    [mero, run, isDelegated],
   );
 
   return { removeGroupMembers, loading, error };
@@ -1552,15 +1605,37 @@ export function useRedeemInvitation() {
 }
 
 export function useCreateGroupInNamespace() {
-  const { mero } = useMero();
+  const { mero, isDelegated } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const createGroupInNamespace = useCallback(
     async (namespaceId: string, request?: CreateGroupInNamespaceRequest) => {
+      if (isDelegated) {
+        const session = readDelegatedSession();
+        if (!session) return null;
+        // A subgroup's id is chosen by its creator; remembered so later root
+        // ops on it (delete, move, join) know which namespace to post to.
+        return run(async () => {
+          // The relay answers with the subgroup's id as core records it, which
+          // is the one to keep (it need not be the one proposed).
+          const { groupId } = await governRoot(
+            session,
+            namespaceId,
+            groupCreatedOp({
+              groupId: randomGroupId(),
+              parentId: namespaceId,
+              restricted: request?.visibility !== 'open',
+              admin: session.account,
+            }),
+          );
+          rememberGroupNamespace(session.account, groupId, namespaceId);
+          return { groupId };
+        });
+      }
       if (!mero) return null;
       return run(() => mero.admin.createGroupInNamespace(namespaceId, request));
     },
-    [mero, run],
+    [mero, run, isDelegated],
   );
 
   return { createGroupInNamespace, loading, error };
@@ -1584,45 +1659,62 @@ export function useNamespaceGroups(namespaceId?: string | null) {
  * Both are 32-byte strings, so passing a key names nobody and raises nothing.
  */
 export function useUpdateMemberRole() {
-  const { mero } = useMero();
+  const { mero, isDelegated } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const updateMemberRole = useCallback(
     async (groupId: string, identity: string, request: UpdateMemberRoleRequest) => {
+      if (isDelegated) {
+        const session = readDelegatedSession();
+        if (!session) return null;
+        return run(() => governGroup(session, groupId, memberRoleSetOp(identity, request.role as GovernanceMemberRole)));
+      }
       if (!mero) return null;
       return run(() => mero.admin.updateMemberRole(groupId, identity, request));
     },
-    [mero, run],
+    [mero, run, isDelegated],
   );
 
   return { updateMemberRole, loading, error };
 }
 
 export function useSetDefaultCapabilities() {
-  const { mero } = useMero();
+  const { mero, isDelegated } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const setDefaultCapabilities = useCallback(
     async (groupId: string, request: SetDefaultCapabilitiesRequest) => {
+      if (isDelegated) {
+        const session = readDelegatedSession();
+        if (!session) return null;
+        return run(() => governGroup(session, groupId, defaultCapabilitiesSetOp(request.defaultCapabilities)));
+      }
       if (!mero) return null;
       return run(() => mero.admin.setDefaultCapabilities(groupId, request));
     },
-    [mero, run],
+    [mero, run, isDelegated],
   );
 
   return { setDefaultCapabilities, loading, error };
 }
 
 export function useSetSubgroupVisibility() {
-  const { mero } = useMero();
+  const { mero, isDelegated } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const setSubgroupVisibility = useCallback(
     async (groupId: string, request: SetSubgroupVisibilityRequest) => {
+      if (isDelegated) {
+        const session = readDelegatedSession();
+        if (!session) return null;
+        return run(() =>
+          governGroup(session, groupId, subgroupVisibilitySetOp(request.subgroupVisibility === 'open' ? 'open' : 'restricted')),
+        );
+      }
       if (!mero) return null;
       return run(() => mero.admin.setSubgroupVisibility(groupId, request));
     },
-    [mero, run],
+    [mero, run, isDelegated],
   );
 
   return { setSubgroupVisibility, loading, error };
@@ -1666,15 +1758,20 @@ export function useSetTeeAdmissionPolicy() {
 // ---- Metadata Hooks ----
 
 export function useSetGroupMetadata() {
-  const { mero } = useMero();
+  const { mero, isDelegated } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const setGroupMetadata = useCallback(
     async (groupId: string, request: SetMetadataInput) => {
+      if (isDelegated) {
+        const session = readDelegatedSession();
+        if (!session) return null;
+        return run(() => governGroup(session, groupId, groupMetadataSetOp(request)));
+      }
       if (!mero) return null;
       return run(() => mero.admin.setGroupMetadata(groupId, request));
     },
-    [mero, run],
+    [mero, run, isDelegated],
   );
 
   return { setGroupMetadata, loading, error };
@@ -1686,30 +1783,40 @@ export function useSetGroupMetadata() {
  * Both are 32-byte strings, so passing a key names nobody and raises nothing.
  */
 export function useSetMemberMetadata() {
-  const { mero } = useMero();
+  const { mero, isDelegated } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const setMemberMetadata = useCallback(
     async (groupId: string, identity: string, request: SetMetadataInput) => {
+      if (isDelegated) {
+        const session = readDelegatedSession();
+        if (!session) return null;
+        return run(() => governGroup(session, groupId, memberMetadataSetOp(identity, request)));
+      }
       if (!mero) return null;
       return run(() => mero.admin.setMemberMetadata(groupId, identity, request));
     },
-    [mero, run],
+    [mero, run, isDelegated],
   );
 
   return { setMemberMetadata, loading, error };
 }
 
 export function useSetContextMetadata() {
-  const { mero } = useMero();
+  const { mero, isDelegated } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const setContextMetadata = useCallback(
     async (groupId: string, contextId: string, request: SetMetadataInput) => {
+      if (isDelegated) {
+        const session = readDelegatedSession();
+        if (!session) return null;
+        return run(() => governGroup(session, groupId, contextMetadataSetOp(contextId, request)));
+      }
       if (!mero) return null;
       return run(() => mero.admin.setContextMetadata(groupId, contextId, request));
     },
-    [mero, run],
+    [mero, run, isDelegated],
   );
 
   return { setContextMetadata, loading, error };
@@ -1938,15 +2045,23 @@ export function useRetryGroupUpgrade() {
 
 /** Move `childGroupId` under a new parent. */
 export function useReparentGroup() {
-  const { mero } = useMero();
+  const { mero, isDelegated } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const reparentGroup = useCallback(
     async (childGroupId: string, request: ReparentGroupRequest) => {
+      if (isDelegated) {
+        const session = readDelegatedSession();
+        if (!session) return null;
+        return run(async () => {
+          await governRoot(session, childGroupId, groupReparentedOp(childGroupId, request.newParentId));
+          return { reparented: true };
+        });
+      }
       if (!mero) return null;
       return run(() => mero.admin.reparentGroup(childGroupId, request));
     },
-    [mero, run],
+    [mero, run, isDelegated],
   );
 
   return { reparentGroup, loading, error };
@@ -1965,15 +2080,20 @@ export function useSubgroups(groupId?: string | null) {
 // ---- Context-Group Relationship ----
 
 export function useDetachContextFromGroup() {
-  const { mero } = useMero();
+  const { mero, isDelegated } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const detachContextFromGroup = useCallback(
     async (groupId: string, contextId: string) => {
+      if (isDelegated) {
+        const session = readDelegatedSession();
+        if (!session) return null;
+        return run(() => governGroup(session, groupId, contextDetachedOp(contextId)));
+      }
       if (!mero) return null;
       return run(() => mero.admin.detachContextFromGroup(groupId, contextId));
     },
-    [mero, run],
+    [mero, run, isDelegated],
   );
 
   return { detachContextFromGroup, loading, error };
