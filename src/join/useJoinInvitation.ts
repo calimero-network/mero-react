@@ -85,24 +85,6 @@ export function isFinalInvitationError(message: string | undefined | null): bool
   ].some((t) => m.includes(t));
 }
 
-/**
- * TEMPORARY, for a local rig: `localStorage['calimero.delegated.admitter-urls']`
- * = `{ "<admitter account>": "<url>" }` sends an account's join straight to the
- * admitter the invitation names, where the cloud would otherwise be asked
- * (it knows no local relays). Unset, nothing changes.
- */
-function pinnedAdmitterUrl(admitters: readonly string[]): string | undefined {
-  try {
-    const byAccount = JSON.parse(
-      localStorage.getItem('calimero.delegated.admitter-urls') ?? '{}',
-    ) as Record<string, string>;
-    const url = admitters.map((a) => byAccount[a]).find((u) => typeof u === 'string' && u.trim());
-    return url?.trim() || undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 export function useJoinInvitation(): {
   joinInvitation: (input: JoinInvitationInput) => Promise<JoinInvitationResult>;
   joining: boolean;
@@ -124,7 +106,6 @@ export function useJoinInvitation(): {
             namespaceId: input.namespaceId,
             invitation: input.invitation,
             contextId: input.contextId,
-            nodeUrl: pinnedAdmitterUrl(input.invitation.invitation.admitters ?? []),
           });
           if (outcome.ok) return { ok: true };
           return {
