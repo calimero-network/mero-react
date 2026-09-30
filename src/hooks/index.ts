@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { compareSemver } from '@calimero-network/mero-js';
+import { classifyError, compareSemver } from '@calimero-network/mero-js';
 import { useMero } from '../context';
 import { base58ToHex } from '../utils/base58';
 import { listDelegatedContexts, listDelegatedNamespaces, readDelegatedSession } from '../delegated/session';
@@ -46,6 +46,8 @@ import type {
   AppVersionChangedEvent,
   GroupMembershipEventData,
   GroupMigrationEventData,
+  ClassifiedError,
+  RedeemOutcome,
 } from '@calimero-network/mero-js';
 import type {
   ApplicationContextRecord,
@@ -529,25 +531,43 @@ function useMountedRef() {
   return mountedRef;
 }
 
-function useAsyncMutation() {
+/** Options a mutation hook that can fail meaningfully accepts. */
+export interface MutationOptions {
+  /**
+   * Rethrow a failed request from the action, after recording it in `error`
+   * and `failure`.
+   *
+   * By default an action resolves `null` on failure, which a caller awaiting it
+   * cannot tell apart from "not connected" — and a `catch` around it never
+   * runs, so a refused join reads as a successful one. Set this when the
+   * caller branches on the outcome.
+   */
+  throwOnError?: boolean;
+}
+
+function useAsyncMutation({ throwOnError = false }: MutationOptions = {}) {
   const mountedRef = useMountedRef();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+  const [failure, setFailure] = useState<ClassifiedError | null>(null);
 
   const run = useCallback(
     async <T,>(action: () => Promise<T>): Promise<T | null> => {
       if (mountedRef.current) {
         setLoading(true);
         setError(null);
+        setFailure(null);
       }
 
       try {
         return await action();
       } catch (err) {
-        const errorValue = toError(err);
         if (mountedRef.current) {
-          setError(errorValue);
+          setError(toError(err));
+          setFailure(classifyError(err));
         }
+        // The original error, not the wrapped one: it carries the status.
+        if (throwOnError) throw err;
         return null;
       } finally {
         if (mountedRef.current) {
@@ -555,10 +575,10 @@ function useAsyncMutation() {
         }
       }
     },
-    [mountedRef],
+    [mountedRef, throwOnError],
   );
 
-  return { loading, error, run, setError };
+  return { loading, error, failure, run, setError };
 }
 
 /**
@@ -1185,9 +1205,14 @@ export function useDeleteContext() {
   return { deleteContext, loading, error };
 }
 
-export function useJoinContext() {
+/**
+ * Join a context. `failure` says what kind of refusal a failed join was, and
+ * whether trying again later could work; pass `{ throwOnError: true }` to have
+ * `joinContext` reject instead of resolving `null`.
+ */
+export function useJoinContext(options: MutationOptions = {}) {
   const { mero } = useMero();
-  const { loading, error, run } = useAsyncMutation();
+  const { loading, error, failure, run } = useAsyncMutation(options);
 
   const joinContext = useCallback(
     async (contextId: string) => {
@@ -1197,7 +1222,7 @@ export function useJoinContext() {
     [mero, run],
   );
 
-  return { joinContext, loading, error };
+  return { joinContext, loading, error, failure };
 }
 
 export function useJoinSubgroupInheritance() {
@@ -1430,9 +1455,18 @@ export function useCreateNamespaceInvitation() {
   return { createNamespaceInvitation, loading, error };
 }
 
-export function useJoinNamespace() {
+/**
+ * Join a namespace by invitation. `failure` says what kind of refusal a failed
+ * join was, and whether trying again later could work; pass
+ * `{ throwOnError: true }` to have `joinNamespace` reject instead of resolving
+ * `null`.
+ *
+ * To follow an invitation link, prefer {@link useRedeemInvitation}: it also
+ * recognises a join that landed although its request failed.
+ */
+export function useJoinNamespace(options: MutationOptions = {}) {
   const { mero } = useMero();
-  const { loading, error, run } = useAsyncMutation();
+  const { loading, error, failure, run } = useAsyncMutation(options);
 
   const joinNamespace = useCallback(
     async (namespaceId: string, request: JoinNamespaceRequest) => {
@@ -1442,7 +1476,49 @@ export function useJoinNamespace() {
     [mero, run],
   );
 
-  return { joinNamespace, loading, error };
+  return { joinNamespace, loading, error, failure };
+}
+
+/**
+ * Follow an invitation: join its namespace once, then check membership, and
+ * report what happened as a {@link RedeemOutcome}.
+ *
+ * Unlike {@link useJoinNamespace}, a request that failed but whose join landed
+ * anyway — the desktop proxy aborts at 30s, a join with no member online takes
+ * longer — is `already-member`, not a failure. `shouldRetain(outcome)` from
+ * mero-js says whether to keep the invitation for another attempt.
+ *
+ * `redeem` resolves `null` only when there is no client to send it through.
+ */
+export function useRedeemInvitation() {
+  const { mero } = useMero();
+  const mountedRef = useMountedRef();
+  const [loading, setLoading] = useState(false);
+  const [outcome, setOutcome] = useState<RedeemOutcome | null>(null);
+
+  const redeem = useCallback(
+    async (
+      namespaceId: string,
+      invitation: JoinNamespaceRequest['invitation'],
+      options: { groupName?: string; teamName?: string } = {},
+    ): Promise<RedeemOutcome | null> => {
+      if (!mero) return null;
+      if (mountedRef.current) {
+        setLoading(true);
+        setOutcome(null);
+      }
+      try {
+        const result = await mero.admin.redeemInvitation(namespaceId, invitation, options);
+        if (mountedRef.current) setOutcome(result);
+        return result;
+      } finally {
+        if (mountedRef.current) setLoading(false);
+      }
+    },
+    [mero, mountedRef],
+  );
+
+  return { redeem, outcome, loading };
 }
 
 export function useCreateGroupInNamespace() {

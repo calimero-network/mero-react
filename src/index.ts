@@ -130,6 +130,7 @@ export {
   useJoinContext,
   useJoinGroup,
   useJoinNamespace,
+  useRedeemInvitation,
   useJoinSubgroupInheritance,
   useMemberMetadata,
   useNamespace,
@@ -167,6 +168,7 @@ export {
 } from './hooks';
 export type {
   BlobHookOptions,
+  MutationOptions,
   UseBlobUrlOptions,
   SetMetadataInput,
   SubscriptionInput,
