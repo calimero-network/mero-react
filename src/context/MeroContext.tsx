@@ -660,6 +660,8 @@ export function MeroProvider({
       connectWithAccount,
       isDelegated: delegated !== null,
       can: delegated !== null
+        // Founding works (useCreateNamespace), but core gives a founded namespace
+        // no target application, so no context could be created in it yet.
         ? { createNamespace: false, createContext: true, invite: false }
         : { createNamespace: true, createContext: true, invite: true },
       logout,

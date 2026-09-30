@@ -17,7 +17,7 @@ import {
   type GovernanceOp,
   type NonceSource,
 } from '@calimero-network/mero-js';
-import { markContextNonceSpent, readRelayMap, rememberRelay, type DelegatedSession } from './session';
+import { knownRelays, markContextNonceSpent, readRelayMap, rememberRelay, type DelegatedSession } from './session';
 
 /**
  * A governance warrant's nonce, for one (relay, group): spent in a sliding
@@ -140,4 +140,45 @@ export async function createDelegatedPrivateContext(
   }
   const { contextId } = await createDelegatedContext(s, { ...req, groupId }, deps);
   return { contextId, groupId };
+}
+
+/**
+ * Found a namespace as the account, through a relay it already uses. The
+ * account becomes founder, owner and admin; the relay is seated in it (and a
+ * TEE relay admits itself as its first TEE), so contexts can be created in it
+ * through the same relay straight away.
+ *
+ * The relay's executor account cannot be asked about a namespace that does
+ * not exist yet, so it is learned from one the account already has on that
+ * relay. A brand-new account, in nothing yet, is told to join one first.
+ */
+export async function foundDelegatedNamespace(
+  s: DelegatedSession,
+  req: { readonly defaultCapabilities?: number } = {},
+  deps: { fetch?: typeof fetch } = {},
+): Promise<{ namespaceId: string; teeEnabled: boolean }> {
+  const relays = knownRelays(s).map((u) => u.replace(/\/+$/, ''));
+  const relay = relays[0];
+  if (!relay) throw new Error('no relay is known for this account, so there is nowhere to found a namespace');
+  const known = Object.entries(readRelayMap(s.account).namespaces).find(
+    ([, url]) => url.replace(/\/+$/, '') === relay,
+  )?.[0];
+  if (!known) {
+    throw new Error("join a namespace on this relay first: its executor account is learned from one you are in");
+  }
+  const { executorAccount } = await client(s, relay, governanceNonce(relay, known), deps.fetch).describeGovernance(known);
+  // The founding warrant and, with a default mask, a second one are both spent
+  // in the NEW namespace's window, which is empty: any rising pair will do.
+  let next = BigInt(Date.now());
+  const founded = await client(s, relay, { next: async () => next++ }, deps.fetch).foundNamespace({
+    executorAccount,
+    ...(req.defaultCapabilities !== undefined ? { defaultCapabilities: req.defaultCapabilities } : {}),
+  });
+  try {
+    localStorage.setItem(`calimero.governance-nonce.${relay}.${founded.namespaceId}`, String(next));
+  } catch {
+    /* unpersisted: the clock floor still keeps later warrants above these */
+  }
+  rememberRelay(s.account, relay, { namespaceId: founded.namespaceId });
+  return { namespaceId: founded.namespaceId, teeEnabled: founded.teeEnabled };
 }

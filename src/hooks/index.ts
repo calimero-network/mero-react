@@ -3,7 +3,7 @@ import { classifyError, compareSemver } from '@calimero-network/mero-js';
 import { useMero } from '../context';
 import { base58ToHex } from '../utils/base58';
 import { listDelegatedContexts, listDelegatedNamespaces, readDelegatedSession } from '../delegated/session';
-import { createDelegatedContext, createDelegatedPrivateContext } from '../delegated/create-context';
+import { createDelegatedContext, createDelegatedPrivateContext, foundDelegatedNamespace } from '../delegated/create-context';
 import type {
   Codec,
   EphemeralClient,
@@ -1408,15 +1408,24 @@ export function useNamespacesForApplication(applicationId?: string | null) {
 }
 
 export function useCreateNamespace() {
-  const { mero } = useMero();
+  const { mero, isDelegated } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const createNamespace = useCallback(
     async (request: CreateNamespaceRequest) => {
+      if (isDelegated) {
+        // An account founds it through a relay it already uses (a signed
+        // genesis under a governance warrant; delegated/create-context.ts).
+        // Members it invites get mero-chat's default mask, so they can create
+        // contexts in it without a separate grant.
+        const session = readDelegatedSession();
+        if (!session) return null;
+        return run(() => foundDelegatedNamespace(session, { defaultCapabilities: 231 }));
+      }
       if (!mero) return null;
       return run(() => mero.admin.createNamespace(request));
     },
-    [mero, run],
+    [mero, run, isDelegated],
   );
 
   return { createNamespace, loading, error };
