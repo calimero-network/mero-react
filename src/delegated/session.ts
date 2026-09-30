@@ -15,10 +15,17 @@
  */
 import {
   attestRelayNodeKey,
+  cloudNodeReleaseUrl,
   createMeroClient,
+  createSignedReleaseVerifier,
+  DEFAULT_RELEASE_MIRROR,
   defaultAudience,
+  fetchNodeRelease,
+  fetchNodeReleaseVersion,
   login,
+  type DcapVerify,
   type MeroClient,
+  type VerifyTransportQuote,
 } from '@calimero-network/mero-js';
 
 /** Where the per-tab record lives. */
@@ -267,11 +274,57 @@ function isLoopback(relayUrl: string): boolean {
  * verification this client does not do yet, so a real relay still needs its
  * key pinned; `null` then, and admin reads and events stay off.
  */
+/** The one relay image trusted: no shell, so nobody reads the TD. */
+const TRUSTED_RELAY_PROFILE = 'locked-read-only';
+/**
+ * The oldest relay release trusted: the first that serves delegated context
+ * creation and governance at the namespace-op schema this client signs.
+ */
+const MIN_RELAY_RELEASE = '2.3.99';
+
+let loadedDcap: Promise<DcapVerify> | undefined;
+
+/**
+ * A verifier for a hosted relay's quote: the signed mero-tee release it says it
+ * runs (fetched from the public mirror, trusted only for its signature), Intel's
+ * chain, and all five registers of that release's image.
+ *
+ * `@phala/dcap-qvl` is loaded on the first quote it checks: it is most of the
+ * weight, and an app that never meets a real relay never needs it. A failed
+ * download is forgotten, so the next attempt tries again.
+ */
+function relayQuoteVerifier(relayUrl: string): VerifyTransportQuote {
+  const verify: VerifyTransportQuote = async (attestation) => {
+    loadedDcap ??= import('@phala/dcap-qvl').then(
+      ({ verify: dcapVerify }) => dcapVerify as DcapVerify,
+      (error: unknown) => {
+        loadedDcap = undefined;
+        throw error;
+      },
+    );
+    return createSignedReleaseVerifier({
+      dcapVerify: await loadedDcap,
+      release: async () =>
+        fetchNodeRelease(cloudNodeReleaseUrl(DEFAULT_RELEASE_MIRROR, await fetchNodeReleaseVersion(relayUrl))),
+      profile: TRUSTED_RELAY_PROFILE,
+      minReleaseVersion: MIN_RELAY_RELEASE,
+    })(attestation);
+  };
+  return Object.assign(verify, { includeCollateral: true as const });
+}
+
 export async function resolveRelayNodeKey(relayUrl: string): Promise<string | null> {
   const pinned = readPinnedRelayNodeKey(relayUrl);
   if (pinned) return pinned;
   try {
-    const { nodeKey } = await attestRelayNodeKey({ relayUrl, allowMock: isLoopback(relayUrl) });
+    // A loopback relay is a dev rig answering with mock quotes; anything else
+    // must prove its image.
+    const local = isLoopback(relayUrl);
+    const { nodeKey } = await attestRelayNodeKey({
+      relayUrl,
+      allowMock: local,
+      ...(local ? {} : { verify: relayQuoteVerifier(relayUrl) }),
+    });
     pinRelayNodeKey(relayUrl, nodeKey);
     return nodeKey;
   } catch (e) {
