@@ -310,15 +310,20 @@ export function MeroProvider({
       (contextId ? relayForContext(delegated.account, contextId) : null) ?? delegated.relayUrl;
     const routed = { ...delegated, relayUrl };
     const client = buildDelegatedClient(routed, contextId);
+    // A relay whose node key is not known yet: learn it before handing the app a
+    // client. Published without it, the app's subscriptions open `/sse` on a
+    // client with no session, which a hosted relay refuses with a 401 — the
+    // client rebuilt a moment later reconnects, but the refusal is noise.
+    const awaitingKey = Boolean(client && relayUrl && !readPinnedRelayNodeKey(relayUrl));
     // `null` when the account holds no relay yet, and the session is still
     // authenticated. Being signed in is how an account comes to be invited, so a
     // relay cannot be a precondition for it — and `mero: null` is what makes a
     // write say "there is no relay" instead of failing against a guessed node.
-    setMero(client);
+    if (!awaitingKey) setMero(client);
     setIsAuthenticated(true);
     setIsOnline(true);
     setNodeUrlState(relayUrl);
-    setIsLoading(false);
+    setIsLoading(awaitingKey);
 
     /*
      * Which application this tab is for, asked rather than told.
@@ -348,10 +353,14 @@ export function MeroProvider({
       // its node key. Pinned, or learned from the relay's attestation; learned
       // now, the client is rebuilt so its session and events use it too. With
       // neither, a hosted relay answers the proof-only path with 401: do not ask.
-      if (!readPinnedRelayNodeKey(relayUrl)) {
+      if (awaitingKey) {
         const nodeKey = await resolveRelayNodeKey(relayUrl);
-        if (!nodeKey || !active) return;
-        setMero(buildDelegatedClient(routed, contextId) ?? client);
+        if (!active) return;
+        // Without a key the client still writes (intents carry their own
+        // warrant); only admin reads and events need the session it enables.
+        setMero(nodeKey ? (buildDelegatedClient(routed, contextId) ?? client) : client);
+        setIsLoading(false);
+        if (!nodeKey) return;
       }
       try {
         // Across every relay this account uses, each answering for itself.
