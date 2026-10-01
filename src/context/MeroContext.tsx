@@ -16,7 +16,8 @@ import {
   HTTPError,
 } from '@calimero-network/mero-js';
 import { AppMode } from '../types';
-import type { AuthCallbackResult, MeroClient, TokenStore } from '@calimero-network/mero-js';
+import type { AdminApiClient, AuthCallbackResult, MeroClient, TokenStore } from '@calimero-network/mero-js';
+import { createAccountAdmin } from '../delegated/account-admin';
 import { resolveTrustedNodeUrl } from '../auth/node-trust';
 import { resolveTokenAdoption } from '../auth/token-adoption';
 import {
@@ -647,6 +648,19 @@ export function MeroProvider({
     // relay's node key — which `buildDelegatedClient` wires up itself.
   }, [isAuthenticated, mero, checkAuth, logout, delegated]);
 
+  // The admin API an app writes against, whatever the session: on a node, the
+  // node's own admin client itself; on an account, the account admin, whose
+  // reads go to the relay and whose writes go through it as delegated ops.
+  const admin = useMemo<AdminApiClient | null>(() => {
+    if (!mero) return null;
+    if (delegated === null) return (mero as { admin: AdminApiClient }).admin;
+    return createAccountAdmin({
+      session: delegated,
+      read: (mero as unknown as { admin: AdminApiClient }).admin,
+      app: { packageName, packageVersion, registryUrl },
+    });
+  }, [mero, delegated, packageName, packageVersion, registryUrl]);
+
   const contextValue = useMemo<MeroContextValue>(
     () => ({
       mero,
@@ -659,17 +673,20 @@ export function MeroProvider({
       connectToNode,
       connectWithAccount,
       isDelegated: delegated !== null,
+      admin,
       can: delegated !== null
         // An account founds a namespace through its relay and gives it this
-        // app's application (core#4269): possible only when the app names its
-        // registry package. Invitations are still a node's to mint.
-        ? { createNamespace: Boolean(packageName), createContext: true, invite: false }
-        : { createNamespace: true, createContext: true, invite: true },
+        // app's application (core#4269), possible only when the app names its
+        // registry package, and signs its own invitations (mero-js #221). Only
+        // upgrades stay a node's: just a group's first application choice can
+        // go through a relay.
+        ? { createNamespace: Boolean(packageName), createContext: true, invite: true, upgrade: false }
+        : { createNamespace: true, createContext: true, invite: true, upgrade: true },
       app: { packageName, packageVersion, registryUrl },
       logout,
       isLoading,
     }),
-    [mero, isAuthenticated, isOnline, nodeUrl, applicationId, contextId, contextIdentity, connectToNode, connectWithAccount, delegated, logout, isLoading, packageName, packageVersion, registryUrl],
+    [mero, admin, isAuthenticated, isOnline, nodeUrl, applicationId, contextId, contextIdentity, connectToNode, connectWithAccount, delegated, logout, isLoading, packageName, packageVersion, registryUrl],
   );
 
   return (

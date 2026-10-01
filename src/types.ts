@@ -156,6 +156,12 @@ export interface MeroContextValue {
    */
   can: MeroCapabilities;
   /**
+   * The admin API to write against, whatever the session: the node's own admin
+   * client on a node, the account admin (`createAccountAdmin`) on an account.
+   * `null` until connected.
+   */
+  admin: import('@calimero-network/mero-js').AdminApiClient | null;
+  /**
    * The app's registry identity, as the provider was given it. An account
    * founding a namespace names this application for it, since a namespace
    * founded through a relay starts with none.
@@ -210,4 +216,6 @@ export interface MeroCapabilities {
   readonly createContext: boolean;
   /** Mint an invitation to a namespace. */
   readonly invite: boolean;
+  /** Upgrade a group's application. A node's only: a relay carries just the first choice. */
+  readonly upgrade: boolean;
 }

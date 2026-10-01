@@ -49,7 +49,8 @@ export function MockMeroProvider({
       console.info('[MockMeroProvider] connectWithAccount →', session.relayUrl);
     },
     isDelegated: false,
-    can: { createNamespace: true, createContext: true, invite: true },
+    admin: null,
+    can: { createNamespace: true, createContext: true, invite: true, upgrade: true },
     app: {},
     logout: () => {
       console.info('[MockMeroProvider] logout');
