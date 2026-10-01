@@ -145,6 +145,12 @@ export function createAccountAdmin(
     },
     async joinContext(contextId: string) {
       const groupId = String(await relay().getContextGroup(contextId));
+      // Already a member: nothing to join, as on a node. Core refuses
+      // MemberJoinedOpen from a direct member, so asking would be a 409.
+      const { members } = await relay().listGroupMembers(groupId);
+      if (members.some((m) => m.identity.toLowerCase() === s.account.toLowerCase())) {
+        return { contextId, memberPublicKey: '' };
+      }
       await root(s, groupId, memberJoinedOpenOp({ member: s.account, groupId, credential: s.credential }));
       return { contextId, memberPublicKey: '' };
     },

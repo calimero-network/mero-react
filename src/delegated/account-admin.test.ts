@@ -87,9 +87,18 @@ describe('createAccountAdmin', () => {
 
   it('joins an open channel by its context: MemberJoinedOpen on the context group', async () => {
     const { admin, govern, read } = rig();
+    read.listGroupMembers.mockResolvedValueOnce({ members: [{ identity: BOB, role: 'Admin' }] });
     await expect(admin.joinContext(CTX)).resolves.toEqual({ contextId: CTX, memberPublicKey: '' });
     expect(read.getContextGroup).toHaveBeenCalledWith(CTX);
     expect(govern.root).toHaveBeenCalledWith(S, SUB, expect.objectContaining({ kind: 'root' }));
+  });
+
+  it('joining a context whose group it already belongs to is a no-op, as on a node', async () => {
+    // Core refuses MemberJoinedOpen from a direct member (409), and a node's
+    // joinContext for a context it already holds just succeeds.
+    const { admin, govern } = rig();
+    await expect(admin.joinContext(CTX)).resolves.toEqual({ contextId: CTX, memberPublicKey: '' });
+    expect(govern.root).not.toHaveBeenCalled();
   });
 
   it('creates a context through the relay, in the group it names', async () => {
