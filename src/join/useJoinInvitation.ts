@@ -12,10 +12,21 @@
  * is FINAL — worth discarding the invitation for — or worth retrying.
  */
 import { useCallback, useState } from 'react';
-import type { SignedGroupOpenInvitation } from '@calimero-network/mero-js';
+import type { InviteRedeemer, SignedGroupOpenInvitation } from '@calimero-network/mero-js';
 import { useMero } from '../context';
 import { useDelegatedBootstrap } from '../delegated/useDelegatedBootstrap';
 import type { BootstrapFailure } from '../delegated/bootstrap-from-invitation';
+import { listDelegatedNamespaces, readDelegatedSession } from '../delegated/session';
+
+/** The HTTP status an error carries, read the way mero-js's classifier reads it. */
+function statusOf(err: unknown): number | undefined {
+  if (!err || typeof err !== 'object') return undefined;
+  const e = err as { status?: unknown; statusCode?: unknown; response?: { status?: unknown } };
+  for (const c of [e.status, e.response?.status, e.statusCode]) {
+    if (typeof c === 'number' && Number.isFinite(c)) return c;
+  }
+  return undefined;
+}
 
 export interface JoinInvitationInput {
   readonly namespaceId: string;
@@ -34,6 +45,8 @@ export type JoinInvitationResult =
       readonly reason: string;
       /** True when no retry can succeed: a fresh invitation is the only cure. */
       readonly final: boolean;
+      /** The HTTP status of the refusal, when there was one. */
+      readonly status?: number;
     };
 
 /** Which step failed, in the words a person can act on. */
@@ -88,6 +101,15 @@ export function isFinalInvitationError(message: string | undefined | null): bool
 export function useJoinInvitation(): {
   joinInvitation: (input: JoinInvitationInput) => Promise<JoinInvitationResult>;
   joining: boolean;
+  /** The namespaces this connection is a member of: a node's own, or an account's across its relays. */
+  memberships: () => Promise<string[]>;
+  /**
+   * The `{ join, memberships }` pair mero-js's `redeemInvitation` drives, for
+   * whichever connection this is, so an app redeems an invitation (join once,
+   * then check membership) with no transport of its own. `join` throws on a
+   * refusal, carrying its HTTP status for the outcome's reason.
+   */
+  invitationRedeemer: (input: JoinInvitationInput) => InviteRedeemer;
 } {
   const { mero, isDelegated } = useMero();
   const { credential, bootstrap } = useDelegatedBootstrap();
@@ -113,6 +135,7 @@ export function useJoinInvitation(): {
             step: outcome.step,
             reason: `${STEP_LABEL[outcome.step]}. ${outcome.reason}`,
             final: accountJoinIsFinal(outcome),
+            ...(outcome.status !== undefined ? { status: outcome.status } : {}),
           };
         }
 
@@ -126,7 +149,14 @@ export function useJoinInvitation(): {
         return { ok: true };
       } catch (e) {
         const reason = e instanceof Error ? e.message : String(e);
-        return { ok: false, step: 'node-join', reason, final: isFinalInvitationError(reason) };
+        const status = statusOf(e);
+        return {
+          ok: false,
+          step: 'node-join',
+          reason,
+          final: isFinalInvitationError(reason),
+          ...(status !== undefined ? { status } : {}),
+        };
       } finally {
         setJoining(false);
       }
@@ -134,5 +164,30 @@ export function useJoinInvitation(): {
     [mero, isDelegated, credential, bootstrap],
   );
 
-  return { joinInvitation, joining };
+  const memberships = useCallback(async (): Promise<string[]> => {
+    const asAccount = isDelegated || (credential !== null && mero === null);
+    const ids = (list: ReadonlyArray<{ namespaceId?: string; groupId?: string; id?: string }>) =>
+      list.map((n) => n.namespaceId ?? n.groupId ?? n.id ?? '').filter(Boolean);
+    if (asAccount) {
+      const session = readDelegatedSession();
+      return session ? ids(await listDelegatedNamespaces(session)) : [];
+    }
+    if (!mero) return [];
+    return ids((await mero.admin.listNamespaces()) as Array<{ namespaceId?: string; groupId?: string; id?: string }>);
+  }, [mero, isDelegated, credential]);
+
+  const invitationRedeemer = useCallback(
+    (input: JoinInvitationInput): InviteRedeemer => ({
+      join: async () => {
+        const outcome = await joinInvitation(input);
+        if (!outcome.ok) {
+          throw Object.assign(new Error(outcome.reason), outcome.status !== undefined ? { status: outcome.status } : {});
+        }
+      },
+      memberships,
+    }),
+    [joinInvitation, memberships],
+  );
+
+  return { joinInvitation, joining, memberships, invitationRedeemer };
 }
