@@ -135,6 +135,28 @@ describe('createAccountAdmin', () => {
     expect(out).toMatchObject({ invitation: { inviter_signature: 'sig' } });
   });
 
+  // Whoever claims an account's invitation may have no node, and only a relay
+  // can admit a joiner with none. An admin's own node is not reachable by one.
+  it("names the namespace's relays as the admitters of an account's invitation", async () => {
+    const { admin, deps, read } = rig();
+    read.listGroupMembers.mockResolvedValueOnce({
+      members: [
+        { identity: ME, role: 'Admin' },
+        { identity: 'ee'.repeat(32), role: 'RelayTee' },
+        { identity: BOB, role: 'Member' },
+      ],
+    });
+    await admin.createNamespaceInvitation(NS);
+    expect(deps.signInvitation).toHaveBeenCalledWith(expect.objectContaining({ admitters: ['ee'.repeat(32)] }));
+  });
+
+  it("falls back to the admins when the namespace has no relay", async () => {
+    const { admin, deps } = rig();
+    await admin.createNamespaceInvitation(NS);
+    const call = (deps.signInvitation.mock.calls[0] as unknown as [{ admitters?: string[] }])[0];
+    expect(call.admitters ?? []).toEqual([]);
+  });
+
   it('a node-only write is refused by name, never sent to a node route', async () => {
     const { admin } = rig();
     await expect(admin.upgradeGroup(NS, {} as never)).rejects.toBeInstanceOf(NotForAccountError);

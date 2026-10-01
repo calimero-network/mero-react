@@ -177,10 +177,17 @@ export function createAccountAdmin(
     },
     async createNamespaceInvitation(namespaceId: string) {
       const [{ members }, info] = await Promise.all([relay().listGroupMembers(namespaceId), relay().getGroupInfo(namespaceId)]);
+      // The relays admit: whoever claims an account's invitation may have no
+      // node, and only a relay can admit a joiner with none. With no relay in
+      // the namespace, leave it to the admins (signGroupInvitation's default).
+      const relays = members
+        .filter((m) => m.role === 'RelayTee')
+        .map((m) => m.identity.toLowerCase());
       const invitation = await signInvitation({
         groupId: namespaceId,
         inviterAccount: s.account,
         deviceSecret: s.deviceSecret,
+        ...(relays.length > 0 ? { admitters: relays } : {}),
         members: members as never,
         applicationId: (info as { targetApplicationId?: string }).targetApplicationId,
         appKey: (info as { appKey?: string }).appKey,
