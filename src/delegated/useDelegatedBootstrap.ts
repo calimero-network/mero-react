@@ -12,7 +12,7 @@
  * connection mechanism — the only difference is how the relay was found.
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useMemo } from 'react';
 import type { SignedGroupOpenInvitation } from '@calimero-network/mero-js';
 import { useMero } from '../context';
 import {
@@ -81,7 +81,17 @@ export function useDelegatedBootstrap(
   // enrolment return in `ConnectButtonAccount`, in the same tab but outside
   // React's knowledge, so a cached copy would be stale exactly once — on the
   // load where it matters.
-  const credential = readDelegatedCredential();
+  //
+  // Read every render, but the same object while its contents are the same:
+  // a fresh parse each time made every callback below new on every render, and
+  // an app with any of them in an effect's dependencies looped ("Maximum update
+  // depth exceeded").
+  const read = readDelegatedCredential();
+  const credential = useMemo(
+    () => read,
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the contents, not the parsed object
+    [read?.account, read?.credential, read?.deviceSecret],
+  );
   // The stored record rather than the context's `nodeUrl`: that one is seeded
   // from `getNodeUrl()`, which can still hold a node URL from an earlier
   // node-login on this origin, and a stale value there would hide the very state
