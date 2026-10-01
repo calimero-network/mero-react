@@ -7,7 +7,7 @@ import {
   contextDetachedOp,
   contextMetadataSetOp,
   defaultCapabilitiesSetOp,
-  groupCreatedOp,
+  subgroupCreation,
   groupDeletedOp,
   groupMetadataSetOp,
   groupReparentedOp,
@@ -21,9 +21,6 @@ import {
   type GovernanceMemberRole,
 } from '@calimero-network/mero-js';
 import { governGroup, governRoot, rememberGroupNamespace } from '../delegated/govern';
-/** A new subgroup's id: random, as core requires of every subgroup. */
-const randomGroupId = () =>
-  Array.from(crypto.getRandomValues(new Uint8Array(32)), (b) => b.toString(16).padStart(2, '0')).join('');
 import {
   createDelegatedContext,
   createDelegatedPrivateContext,
@@ -1613,7 +1610,7 @@ export function useCreateGroupInNamespace() {
       if (isDelegated) {
         const session = readDelegatedSession();
         if (!session) return null;
-        // A subgroup's id is chosen by its creator; remembered so later root
+        // A subgroup's id is derived from its creator and a salt; remembered so later root
         // ops on it (delete, move, join) know which namespace to post to.
         return run(async () => {
           // The relay answers with the subgroup's id as core records it, which
@@ -1621,12 +1618,14 @@ export function useCreateGroupInNamespace() {
           const { groupId } = await governRoot(
             session,
             namespaceId,
-            groupCreatedOp({
-              groupId: randomGroupId(),
-              parentId: namespaceId,
-              restricted: request?.visibility !== 'open',
-              admin: session.account,
-            }),
+            // The id is derived from a fresh salt (core#4244); a node refuses any other.
+            (
+              await subgroupCreation({
+                parentId: namespaceId,
+                restricted: request?.visibility !== 'open',
+                admin: session.account,
+              })
+            ).op,
           );
           rememberGroupNamespace(session.account, groupId, namespaceId);
           return { groupId };

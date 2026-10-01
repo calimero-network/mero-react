@@ -11,9 +11,9 @@
  * MANAGE_MEMBERS…), never the relay's; the relay only needs standing to act.
  */
 import {
-  groupCreatedOp,
   memberAddedOp,
   RelayClient,
+  subgroupCreation,
   type GovernanceOp,
   type NonceSource,
 } from '@calimero-network/mero-js';
@@ -45,9 +45,6 @@ function nextGovernanceNonce(relay: string, group: string): bigint {
   }
   return next;
 }
-const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
-/** A new subgroup's id: random, as core requires of every subgroup. */
-const random32 = () => hex(crypto.getRandomValues(new Uint8Array(32)));
 
 function relayFor(s: DelegatedSession, namespaceId: string): string {
   // The relay that serves this namespace: learned when the account joined it.
@@ -131,7 +128,8 @@ export async function createDelegatedPrivateContext(
     {
       namespaceId: req.namespaceId,
       group: req.namespaceId,
-      op: groupCreatedOp({ groupId: random32(), parentId: req.namespaceId, restricted: true, admin: s.account }),
+      // The id is derived from a fresh salt (core#4244); a node refuses any other.
+      op: (await subgroupCreation({ parentId: req.namespaceId, restricted: true, admin: s.account })).op,
     },
     deps,
   );
