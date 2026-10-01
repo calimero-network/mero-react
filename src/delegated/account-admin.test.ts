@@ -15,6 +15,10 @@ function rig() {
     getGroupInfo: vi.fn(async () => ({ groupId: NS, targetApplicationId: 'ap'.repeat(32), appKey: 'ak'.repeat(32), namespaceId: NS })),
     listNamespaces: vi.fn(async () => [{ namespaceId: NS }]),
   };
+  read.listNamespaces.mockResolvedValue([
+    { namespaceId: NS, targetApplicationId: 'ap'.repeat(32) },
+    { namespaceId: SUB, targetApplicationId: 'zz'.repeat(32) },
+  ] as never);
   const deps = {
     govern,
     createContext: vi.fn(async () => ({ contextId: CTX })),
@@ -32,8 +36,17 @@ function rig() {
 describe('createAccountAdmin', () => {
   it('reads go to the relay read client unchanged', async () => {
     const { admin, read } = rig();
-    await expect(admin.listNamespaces()).resolves.toEqual([{ namespaceId: NS }]);
+    await expect(admin.listNamespaces()).resolves.toHaveLength(2);
     expect(read.listNamespaces).toHaveBeenCalledOnce();
+  });
+
+  it('lists its namespaces for an application from its own scoped list', async () => {
+    // The node-wide `for-application` route is not caller-scoped, so the relay
+    // refuses it to an account; its own list, filtered, is the same answer.
+    const { admin } = rig();
+    await expect(admin.listNamespacesForApplication('ap'.repeat(32))).resolves.toEqual([
+      { namespaceId: NS, targetApplicationId: 'ap'.repeat(32) },
+    ]);
   });
 
   it('is the account itself when asked who it is', async () => {
@@ -124,6 +137,7 @@ describe('createAccountAdmin with no relay yet', () => {
   it('is a member of nothing: the listings are empty', async () => {
     await expect(fresh.listNamespaces()).resolves.toEqual([]);
     await expect(fresh.getContexts()).resolves.toEqual({ contexts: [] });
+    await expect(fresh.listNamespacesForApplication('ap'.repeat(32))).resolves.toEqual([]);
   });
 
   it('still knows who it is', async () => {

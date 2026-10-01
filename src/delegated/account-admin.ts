@@ -37,6 +37,7 @@ export class NoRelayError extends Error {
 /** What an account with no relay answers: it is a member of nothing. */
 const EMPTY_READS: Partial<Record<keyof AdminApiClient, () => Promise<unknown>>> = {
   listNamespaces: async () => [],
+  listNamespacesForApplication: async () => [],
   getContexts: async () => ({ contexts: [] }),
 };
 
@@ -74,6 +75,11 @@ export function createAccountAdmin(
   };
 
   const writes: Partial<Record<keyof AdminApiClient, unknown>> = {
+    // The node-wide `for-application` listing is not caller-scoped, so a relay
+    // refuses it to an account. Its own scoped list, filtered, is the answer.
+    async listNamespacesForApplication(applicationId: string) {
+      return (await relay().listNamespaces()).filter((ns) => ns.targetApplicationId === applicationId);
+    },
     async getNodeIdentity() {
       return { accountId: s.account, deviceId: null, publicKey: '', deviceCertified: true };
     },
