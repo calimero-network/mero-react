@@ -189,17 +189,19 @@ export function clearDelegatedCredential(): void {
  * counter locally is the only option, and losing storage means burning refusals
  * until the counter catches up.
  */
-function persistedNonces(relayUrl: string, contextId: string | null) {
-  // `null` only before a context is chosen, when no intent can be presented
-  // either — `rpc.execute` takes a context id, so nothing draws from this
-  // ledger yet. Spelled out rather than left as `undefined` in the key, so a
-  // later context's counter can never inherit whatever this one reached.
-  const key = `calimero.nonce.${relayUrl}.${contextId ?? 'no-context'}`;
+export function persistedNonces(relayUrl: string) {
+  // ONE sequence per relay, not one per context. A client is rebuilt whenever
+  // the chosen context changes, and every client calls `execute` for any
+  // context — so a per-context counter handed the same (context, device) ledger
+  // two sequences, and whichever lagged was refused as a replay. The ledger is a
+  // window that accepts any unseen nonce above its floor, so a single rising
+  // sequence shared by every context only ever skips, which is free.
+  const key = nonceKey(relayUrl);
   return {
     next: async (): Promise<bigint> => {
       let n = 0n;
       try {
-        n = BigInt(localStorage.getItem(key) ?? '0');
+        n = readNonceFloor(relayUrl);
       } catch {
         n = 0n;
       }
@@ -213,16 +215,37 @@ function persistedNonces(relayUrl: string, contextId: string | null) {
   };
 }
 
+function nonceKey(relayUrl: string): string {
+  return `calimero.nonce.${relayUrl}`;
+}
+
 /**
- * Record that `nonce` is spent in `contextId`'s ledger for this device, so the
- * context's intents start above it. A creation warrant's nonce is spent in the
- * NEW context's own per-device window — the one its later writes draw from.
+ * Where this relay's sequence stands: its own counter, or — the first time,
+ * before one exists — the highest of the per-context counters an earlier build
+ * kept, so moving to one sequence replays nothing.
  */
-export function markContextNonceSpent(relayUrl: string, contextId: string, nonce: bigint): void {
-  const key = `calimero.nonce.${relayUrl}.${contextId}`;
+function readNonceFloor(relayUrl: string): bigint {
+  const own = localStorage.getItem(nonceKey(relayUrl));
+  if (own !== null) return BigInt(own);
+  const legacy = `${nonceKey(relayUrl)}.`;
+  let max = 0n;
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (!k?.startsWith(legacy)) continue;
+    const v = BigInt(localStorage.getItem(k) ?? '0');
+    if (v > max) max = v;
+  }
+  return max;
+}
+
+/**
+ * Record that `nonce` is spent for this device, so later intents start above
+ * it. A creation warrant's nonce is spent in the NEW context's own window; one
+ * sequence per relay covers that context like any other.
+ */
+export function markContextNonceSpent(relayUrl: string, _contextId: string, nonce: bigint): void {
   try {
-    const current = BigInt(localStorage.getItem(key) ?? '0');
-    if (current <= nonce) localStorage.setItem(key, String(nonce + 1n));
+    if (readNonceFloor(relayUrl) <= nonce) localStorage.setItem(nonceKey(relayUrl), String(nonce + 1n));
   } catch {
     /* unpersisted: the first write meets a spent nonce once, and retries above it */
   }
@@ -396,7 +419,8 @@ function relaySession(s: DelegatedSession & { relayUrl: string }, nodeKey: strin
  */
 export function buildDelegatedClient(
   s: DelegatedSession,
-  contextId: string | null,
+  // Kept for callers; the client no longer depends on the chosen context.
+  _contextId: string | null,
 ): MeroClient | null {
   // No relay, no client — and deliberately no placeholder either.
   //
@@ -415,10 +439,9 @@ export function buildDelegatedClient(
       authorAccount: s.account,
       authorProof: s.credential,
       deviceSecret: s.deviceSecret,
-      // The active context, passed in rather than stored on the record: the
-      // relay client holds ONE nonce source while `execute` takes a context per
-      // call, so the ledger has to be re-keyed when the chosen context changes.
-      nonces: persistedNonces(s.relayUrl, contextId),
+      // One sequence per relay, whatever context is chosen: `execute` takes a
+      // context per call, so the nonce source must not depend on this one.
+      nonces: persistedNonces(s.relayUrl),
     },
     // The certificate authenticates the requests too, not just the writes.
     //
