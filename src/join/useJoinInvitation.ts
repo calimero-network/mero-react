@@ -30,7 +30,8 @@ function statusOf(err: unknown): number | undefined {
 
 export interface JoinInvitationInput {
   readonly namespaceId: string;
-  readonly contextId: string;
+  /** The context the invitation was for, when it names one; a workspace invitation names none. */
+  readonly contextId?: string;
   readonly invitation: SignedGroupOpenInvitation;
 }
 
@@ -145,7 +146,7 @@ export function useJoinInvitation(): {
         // The admin client directly, not the join hooks: those swallow errors
         // (they resolve to null), which would report a failed join as joined.
         await mero.admin.joinNamespace(input.namespaceId, { invitation: input.invitation });
-        await mero.admin.joinContext(input.contextId);
+        if (input.contextId) await mero.admin.joinContext(input.contextId);
         return { ok: true };
       } catch (e) {
         const reason = e instanceof Error ? e.message : String(e);
