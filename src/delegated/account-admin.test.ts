@@ -88,7 +88,7 @@ describe('createAccountAdmin', () => {
   it('joins an open channel by its context: MemberJoinedOpen on the context group', async () => {
     const { admin, govern, read } = rig();
     read.listGroupMembers.mockResolvedValueOnce({ members: [{ identity: BOB, role: 'Admin' }] });
-    await expect(admin.joinContext(CTX)).resolves.toEqual({ contextId: CTX, memberPublicKey: '' });
+    await expect(admin.joinContext(CTX)).resolves.toEqual({ contextId: CTX, memberPublicKey: ME });
     expect(read.getContextGroup).toHaveBeenCalledWith(CTX);
     expect(govern.root).toHaveBeenCalledWith(S, SUB, expect.objectContaining({ kind: 'root' }));
   });
@@ -97,8 +97,22 @@ describe('createAccountAdmin', () => {
     // Core refuses MemberJoinedOpen from a direct member (409), and a node's
     // joinContext for a context it already holds just succeeds.
     const { admin, govern } = rig();
-    await expect(admin.joinContext(CTX)).resolves.toEqual({ contextId: CTX, memberPublicKey: '' });
+    await expect(admin.joinContext(CTX)).resolves.toEqual({ contextId: CTX, memberPublicKey: ME });
     expect(govern.root).not.toHaveBeenCalled();
+  });
+
+  // An account runs as itself in every context it can reach: the relay executes
+  // as the account, so the account IS its identity there. Answering with it is
+  // what lets an app tell "joined" from "not joined" the way it does on a node.
+  it('owns its account as the identity of a context whose group it belongs to', async () => {
+    const { admin } = rig();
+    await expect(admin.getContextIdentitiesOwned(CTX)).resolves.toEqual({ identities: [ME] });
+  });
+
+  it('owns no identity in a context whose group it has not joined', async () => {
+    const { admin, read } = rig();
+    read.listGroupMembers.mockResolvedValueOnce({ members: [{ identity: BOB, role: 'Admin' }] });
+    await expect(admin.getContextIdentitiesOwned(CTX)).resolves.toEqual({ identities: [] });
   });
 
   it('creates a context through the relay, in the group it names', async () => {

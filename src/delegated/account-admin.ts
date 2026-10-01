@@ -74,6 +74,12 @@ export function createAccountAdmin(
     return read;
   };
 
+  async function isMemberOfContextGroup(contextId: string, knownGroupId?: string): Promise<boolean> {
+    const groupId = knownGroupId ?? String(await relay().getContextGroup(contextId));
+    const { members } = await relay().listGroupMembers(groupId);
+    return members.some((m) => m.identity.toLowerCase() === s.account.toLowerCase());
+  }
+
   const writes: Partial<Record<keyof AdminApiClient, unknown>> = {
     // The node-wide `for-application` listing is not caller-scoped, so a relay
     // refuses it to an account. Its own scoped list, filtered, is the answer.
@@ -143,16 +149,22 @@ export function createAccountAdmin(
       const groupId = await relay().getContextGroup(contextId);
       await group(s, String(groupId), memberLeftOp(s.account));
     },
+    // An account runs as itself in every context it can reach (the relay
+    // executes as the account), so its identity there is the account. Owned
+    // when its account is a member of the context's group, as on a node a
+    // context identity is owned once the node has joined.
+    async getContextIdentitiesOwned(contextId: string) {
+      return { identities: (await isMemberOfContextGroup(contextId)) ? [s.account] : [] };
+    },
     async joinContext(contextId: string) {
       const groupId = String(await relay().getContextGroup(contextId));
       // Already a member: nothing to join, as on a node. Core refuses
       // MemberJoinedOpen from a direct member, so asking would be a 409.
-      const { members } = await relay().listGroupMembers(groupId);
-      if (members.some((m) => m.identity.toLowerCase() === s.account.toLowerCase())) {
-        return { contextId, memberPublicKey: '' };
+      if (await isMemberOfContextGroup(contextId, groupId)) {
+        return { contextId, memberPublicKey: s.account };
       }
       await root(s, groupId, memberJoinedOpenOp({ member: s.account, groupId, credential: s.credential }));
-      return { contextId, memberPublicKey: '' };
+      return { contextId, memberPublicKey: s.account };
     },
     async createContext(req: { applicationId: string; groupId: string; name?: string; initializationParams?: number[] }) {
       const info = await relay().getGroupInfo(req.groupId);
