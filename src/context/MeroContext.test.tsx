@@ -773,7 +773,7 @@ describe('MeroProvider — admin and can, per session', () => {
     localStorage.clear();
   });
 
-  it('a node session gets mero.admin itself, and may upgrade', async () => {
+  it('a node session gets the node admin over mero.admin, and may upgrade', async () => {
     localStorage.setItem('mero:node_url', 'https://node-a.example.com');
     mockParseAuthCallback.mockReturnValue(null as never);
     const store = makeStore();
@@ -794,7 +794,9 @@ describe('MeroProvider — admin and can, per session', () => {
     );
     await settled();
 
-    expect(seen!.admin).toBe(instance.admin);
+    // The node's own client underneath: reads pass straight through.
+    await seen!.admin!.getContexts();
+    expect(instance.admin.getContexts).toHaveBeenCalled();
     expect(seen!.can).toMatchObject({ invite: true, upgrade: true });
   });
 
@@ -816,5 +818,21 @@ describe('MeroProvider — admin and can, per session', () => {
     expect(seen!.admin).not.toBe((seen!.mero as unknown as { admin?: unknown }).admin);
     await expect(seen!.admin!.getNodeIdentity()).resolves.toMatchObject({ accountId: account });
     expect(seen!.can).toMatchObject({ invite: true, upgrade: false });
+  });
+
+  it('an account with no relay yet still gets an admin: a member of nothing', async () => {
+    const account = 'aa'.repeat(32);
+    saveDelegatedSession({ account, credential: 'cc', deviceSecret: '11'.repeat(32), relayUrl: null });
+
+    render(
+      <MeroProvider mode={AppMode.MultiContext} packageName="com.calimero.chat">
+        <Capture />
+      </MeroProvider>,
+    );
+    await waitFor(() => expect(seen?.isAuthenticated).toBe(true));
+
+    expect(seen!.admin).not.toBeNull();
+    await expect(seen!.admin!.listNamespaces()).resolves.toEqual([]);
+    await expect(seen!.admin!.getNodeIdentity()).resolves.toMatchObject({ accountId: account });
   });
 });

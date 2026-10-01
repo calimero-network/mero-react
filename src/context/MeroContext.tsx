@@ -17,6 +17,7 @@ import {
 } from '@calimero-network/mero-js';
 import { AppMode } from '../types';
 import type { AdminApiClient, AuthCallbackResult, MeroClient, TokenStore } from '@calimero-network/mero-js';
+import { createNodeAdmin } from '../admin/node-admin';
 import { createAccountAdmin } from '../delegated/account-admin';
 import { resolveTrustedNodeUrl } from '../auth/node-trust';
 import { resolveTokenAdoption } from '../auth/token-adoption';
@@ -648,17 +649,23 @@ export function MeroProvider({
     // relay's node key — which `buildDelegatedClient` wires up itself.
   }, [isAuthenticated, mero, checkAuth, logout, delegated]);
 
-  // The admin API an app writes against, whatever the session: on a node, the
-  // node's own admin client itself; on an account, the account admin, whose
+  // The admin API an app writes against, whatever the session, with the same
+  // calls and results on both: on a node, the node's client (installing the
+  // app when a namespace needs it); on an account, the account admin, whose
   // reads go to the relay and whose writes go through it as delegated ops.
+  // Never null for a signed-in account: one with no relay yet is a member of
+  // nothing, and says so, rather than leaving the app to special-case it.
   const admin = useMemo<AdminApiClient | null>(() => {
-    if (!mero) return null;
-    if (delegated === null) return (mero as { admin: AdminApiClient }).admin;
-    return createAccountAdmin({
-      session: delegated,
-      read: (mero as unknown as { admin: AdminApiClient }).admin,
-      app: { packageName, packageVersion, registryUrl },
-    });
+    const app = { packageName, packageVersion, registryUrl };
+    if (delegated !== null) {
+      // No relay at all: the empty admin. A relay still being connected to (its
+      // node key not learned yet) is loading, not empty — null until it is up.
+      if (delegated.relayUrl === null) return createAccountAdmin({ session: delegated, read: null, app });
+      if (!mero) return null;
+      return createAccountAdmin({ session: delegated, read: (mero as unknown as { admin: AdminApiClient }).admin, app });
+    }
+    const nodeAdmin = (mero as { admin?: AdminApiClient } | null)?.admin;
+    return nodeAdmin ? createNodeAdmin({ admin: nodeAdmin, app }) : null;
   }, [mero, delegated, packageName, packageVersion, registryUrl]);
 
   const contextValue = useMemo<MeroContextValue>(

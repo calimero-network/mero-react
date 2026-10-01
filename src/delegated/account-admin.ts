@@ -23,6 +23,23 @@ export class NotForAccountError extends Error {
   }
 }
 
+/**
+ * An account that has enrolled but joined nothing has no relay: nothing serves
+ * it yet. Its listings are empty, which is true; anything else names this.
+ */
+export class NoRelayError extends Error {
+  constructor(readonly method: string) {
+    super(`${method} needs a relay, and this account has none yet: join from an invitation first`);
+    this.name = 'NoRelayError';
+  }
+}
+
+/** What an account with no relay answers: it is a member of nothing. */
+const EMPTY_READS: Partial<Record<keyof AdminApiClient, () => Promise<unknown>>> = {
+  listNamespaces: async () => [],
+  getContexts: async () => ({ contexts: [] }),
+};
+
 export interface AccountAdminDeps {
   govern?: { group: typeof governGroup; root: typeof governRoot };
   createContext?: typeof createDelegatedContext;
@@ -38,7 +55,7 @@ const NODE_ONLY = new Set([
 ]);
 
 export function createAccountAdmin(
-  input: { session: DelegatedSession; read: AdminApiClient; app: { packageName?: string; packageVersion?: string; registryUrl?: string } },
+  input: { session: DelegatedSession; read: AdminApiClient | null; app: { packageName?: string; packageVersion?: string; registryUrl?: string } },
   deps: AccountAdminDeps = {},
 ): AdminApiClient {
   const { session: s, read, app } = input;
@@ -48,6 +65,13 @@ export function createAccountAdmin(
   const found = deps.found ?? foundDelegatedNamespace;
   const latestVersion = deps.latestVersion ?? latestPublishedVersion;
   const signInvitation = deps.signInvitation ?? signGroupInvitation;
+
+  // Only reached through the relay proxy below, so a null here is unreachable;
+  // the guard keeps the types honest rather than asserting it away.
+  const relay = (): AdminApiClient => {
+    if (read === null) throw new NoRelayError('this call');
+    return read;
+  };
 
   const writes: Partial<Record<keyof AdminApiClient, unknown>> = {
     async getNodeIdentity() {
@@ -110,16 +134,16 @@ export function createAccountAdmin(
     },
     // An account holds no context identity: leaving a context is leaving its group.
     async leaveContext(contextId: string) {
-      const groupId = await read.getContextGroup(contextId);
+      const groupId = await relay().getContextGroup(contextId);
       await group(s, String(groupId), memberLeftOp(s.account));
     },
     async joinContext(contextId: string) {
-      const groupId = String(await read.getContextGroup(contextId));
+      const groupId = String(await relay().getContextGroup(contextId));
       await root(s, groupId, memberJoinedOpenOp({ member: s.account, groupId, credential: s.credential }));
       return { contextId, memberPublicKey: '' };
     },
     async createContext(req: { applicationId: string; groupId: string; name?: string; initializationParams?: number[] }) {
-      const info = await read.getGroupInfo(req.groupId);
+      const info = await relay().getGroupInfo(req.groupId);
       const namespaceId = (info as { namespaceId?: string }).namespaceId ?? req.groupId;
       const { contextId } = await createContext(s, {
         namespaceId, groupId: req.groupId, applicationId: req.applicationId,
@@ -128,7 +152,7 @@ export function createAccountAdmin(
       return { contextId, memberPublicKey: '', groupId: req.groupId };
     },
     async createNamespaceInvitation(namespaceId: string) {
-      const [{ members }, info] = await Promise.all([read.listGroupMembers(namespaceId), read.getGroupInfo(namespaceId)]);
+      const [{ members }, info] = await Promise.all([relay().listGroupMembers(namespaceId), relay().getGroupInfo(namespaceId)]);
       const invitation = await signInvitation({
         groupId: namespaceId,
         inviterAccount: s.account,
@@ -144,6 +168,19 @@ export function createAccountAdmin(
       return { groupId, synced: true };
     },
   };
+
+  if (read === null) {
+    return new Proxy({} as AdminApiClient, {
+      get(_target, prop) {
+        if (typeof prop !== 'string') return undefined;
+        if (prop === 'getNodeIdentity') return writes.getNodeIdentity;
+        if (prop in EMPTY_READS) return EMPTY_READS[prop as keyof AdminApiClient];
+        return async () => {
+          throw new NoRelayError(prop);
+        };
+      },
+    });
+  }
 
   return new Proxy(read, {
     get(target, prop, receiver) {

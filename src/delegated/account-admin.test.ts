@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createAccountAdmin, NotForAccountError } from './account-admin';
+import { createAccountAdmin, NoRelayError, NotForAccountError } from './account-admin';
 
 const S = { account: 'aa'.repeat(32), credential: 'cc', deviceSecret: '11'.repeat(32), relayUrl: 'http://relay' };
 const NS = '01'.repeat(32), SUB = '02'.repeat(32), CTX = '03'.repeat(32), ME = S.account, BOB = 'bb'.repeat(32);
@@ -115,5 +115,23 @@ describe('createAccountAdmin', () => {
     const NS2 = '09'.repeat(32);
     await admin.createGroupInNamespace(NS2, { groupName: 'general' });
     expect(govern.root).toHaveBeenLastCalledWith(S, NS2, expect.anything());
+  });
+});
+
+describe('createAccountAdmin with no relay yet', () => {
+  const fresh = createAccountAdmin({ session: { ...S, relayUrl: null } as never, read: null, app: {} });
+
+  it('is a member of nothing: the listings are empty', async () => {
+    await expect(fresh.listNamespaces()).resolves.toEqual([]);
+    await expect(fresh.getContexts()).resolves.toEqual({ contexts: [] });
+  });
+
+  it('still knows who it is', async () => {
+    await expect(fresh.getNodeIdentity()).resolves.toMatchObject({ accountId: ME });
+  });
+
+  it('refuses anything else by name, as a missing relay', async () => {
+    await expect(fresh.getGroupInfo(NS)).rejects.toBeInstanceOf(NoRelayError);
+    await expect(fresh.setGroupMetadata(NS, { name: 'x' })).rejects.toBeInstanceOf(NoRelayError);
   });
 });
