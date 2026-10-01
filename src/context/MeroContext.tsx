@@ -120,6 +120,7 @@ export function MeroProvider({
   packageName,
   packageVersion,
   registryUrl,
+  cloudBaseUrl,
   timeoutMs = 30000,
   allowedNodeUrls,
   tokenStore: tokenStoreProp,
@@ -690,10 +691,11 @@ export function MeroProvider({
         ? { createNamespace: Boolean(packageName), createContext: true, invite: true, upgrade: false }
         : { createNamespace: true, createContext: true, invite: true, upgrade: true },
       app: { packageName, packageVersion, registryUrl },
+      cloudBaseUrl,
       logout,
       isLoading,
     }),
-    [mero, admin, isAuthenticated, isOnline, nodeUrl, applicationId, contextId, contextIdentity, connectToNode, connectWithAccount, delegated, logout, isLoading, packageName, packageVersion, registryUrl],
+    [mero, admin, isAuthenticated, isOnline, nodeUrl, applicationId, contextId, contextIdentity, connectToNode, connectWithAccount, delegated, logout, isLoading, packageName, packageVersion, registryUrl, cloudBaseUrl],
   );
 
   return (

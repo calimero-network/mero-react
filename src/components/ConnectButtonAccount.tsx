@@ -253,7 +253,7 @@ export function ConnectButtonAccount({
   theme,
   defaults = {},
 }: ConnectButtonAccountProps) {
-  const { isAuthenticated, isOnline, nodeUrl, isDelegated, connectToNode, connectWithAccount, logout } =
+  const { isAuthenticated, isOnline, nodeUrl, isDelegated, connectToNode, connectWithAccount, logout, cloudBaseUrl } =
     useMero();
 
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -395,6 +395,7 @@ export function ConnectButtonAccount({
         });
 
         const cloud = new CloudClient({
+          cloudBaseUrl,
           routingCredential: {
             credential: enrolled.credential,
             deviceSecret: keys.signSk,
@@ -432,7 +433,7 @@ export function ConnectButtonAccount({
     return () => {
       cancelled = true;
     };
-  }, [connectWithAccount]);
+  }, [connectWithAccount, cloudBaseUrl]);
 
   const goToWallet = useCallback(async () => {
     // No inputs to validate: there is nothing left to ask for.

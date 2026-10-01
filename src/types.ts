@@ -167,6 +167,8 @@ export interface MeroContextValue {
    * founded through a relay starts with none.
    */
   app: { packageName?: string; packageVersion?: string; registryUrl?: string };
+  /** The cloud an account asks for routing; the hosted one when unset. */
+  cloudBaseUrl?: string;
   /** Logout and clear tokens */
   logout: () => void;
   /** Loading state */
@@ -185,6 +187,12 @@ export interface MeroProviderConfig {
   packageVersion?: string;
   /** Registry URL (optional) */
   registryUrl?: string;
+  /**
+   * The cloud an account asks which relay serves a namespace or an account.
+   * Unset is the hosted cloud, which is right for every deployed app; this is
+   * for a local or staging setup whose namespaces the hosted cloud never saw.
+   */
+  cloudBaseUrl?: string;
   /** Request timeout in milliseconds */
   timeoutMs?: number;
   /**

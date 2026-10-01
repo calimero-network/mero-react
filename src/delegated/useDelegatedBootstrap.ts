@@ -73,7 +73,7 @@ export interface UseDelegatedBootstrapResult {
 export function useDelegatedBootstrap(
   options: UseDelegatedBootstrapOptions = {},
 ): UseDelegatedBootstrapResult {
-  const { connectWithAccount } = useMero();
+  const { connectWithAccount, cloudBaseUrl: providerCloud } = useMero();
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<BootstrapResult | null>(null);
 
@@ -98,7 +98,7 @@ export function useDelegatedBootstrap(
   // this reports.
   const relayUrl = readDelegatedSession()?.relayUrl ?? null;
 
-  const { cloudBaseUrl } = options;
+  const cloudBaseUrl = options.cloudBaseUrl ?? providerCloud;
   const bootstrap = useCallback(
     async (input: {
       namespaceId: string;
