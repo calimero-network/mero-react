@@ -59,6 +59,8 @@ export type {
 } from './delegated/bootstrap-from-invitation';
 export { useDelegatedBootstrap } from './delegated/useDelegatedBootstrap';
 export { createDelegatedContext } from './delegated/create-context';
+export { createAccountAdmin, NotForAccountError } from './delegated/account-admin';
+export type { AccountAdminDeps } from './delegated/account-admin';
 
 // One call to join from an invitation, whatever the connection.
 export { useJoinInvitation, isFinalInvitationError } from './join/useJoinInvitation';
