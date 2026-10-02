@@ -11,6 +11,8 @@ import {
   groupDeletedOp, groupMetadataSetOp, groupReparentedOp, memberAddedOp, memberCapabilitySetOp,
   memberJoinedOpenOp, memberLeftOp, memberMetadataSetOp, memberRemovedOp, contextMetadataSetOp,
   defaultCapabilitiesSetOp, signGroupInvitation, subgroupCreation, subgroupVisibilitySetOp,
+  memberRoleSetOp, contextDetachedOp,
+  type GovernanceMemberRole, type SignedGroupOpenInvitation,
 } from '@calimero-network/mero-js';
 import type { DelegatedSession } from './session';
 import { governGroup, governRoot, rememberGroupNamespace } from './govern';
@@ -47,12 +49,39 @@ export interface AccountAdminDeps {
   found?: typeof foundDelegatedNamespace;
   latestVersion?: (registryUrl: string, pkg: string) => Promise<string>;
   signInvitation?: typeof signGroupInvitation;
+  /**
+   * Redeem an invitation for this account: resolve the relay the invitation
+   * names, have it admit the account, and switch the session onto that relay.
+   * The provider supplies it (it owns the session); without it a join is
+   * refused by name. Rejects with the refusal's reason and HTTP `status`.
+   */
+  join?: (namespaceId: string, invitation: SignedGroupOpenInvitation) => Promise<{ namespaceId: string }>;
 }
 
-/** Writes with no account form. Everything else not overridden is a read. */
+/**
+ * Calls with no account form: refused by name, so an app sees why rather than
+ * the bare 403 a relay gives a call its session may not make. Everything not
+ * listed and not overridden below is a read, answered by the relay.
+ *
+ * - Upgrades, installs, a node's own context identity: a node's to do.
+ * - `deleteContext`: a node drops its own copy and the group keeps the context.
+ *   An account's copy is the relay's, shared with every account it serves;
+ *   removing a context for the group is `detachContextFromGroup` or
+ *   `deleteGroup`.
+ * - Aliases, deleting a namespace, legacy group invitations and joins, TEE
+ *   policy, blob deletion: core has no delegated form for them.
+ * - Account devices: the wallet manages them, not an app.
+ * - Upgrade and migration status: core serves them to a node session only.
+ */
 const NODE_ONLY = new Set([
   'upgradeGroup', 'retryGroupUpgrade', 'abortMigration', 'installApplication', 'installDevApplication',
-  'uninstallApplication', 'generateContextIdentity', 'deleteContext', 'createAlias', 'deleteAlias',
+  'uninstallApplication', 'generateContextIdentity', 'deleteContext',
+  'createContextAlias', 'createApplicationAlias', 'createDeviceAlias',
+  'deleteContextAlias', 'deleteApplicationAlias', 'deleteDeviceAlias',
+  'deleteNamespace', 'createGroupInvitation', 'joinGroup',
+  'setTeeAdmissionPolicy', 'getTeeAdmissionPolicy', 'deleteBlob',
+  'listAccountDevices', 'revokeAccountDevice',
+  'getGroupUpgradeStatus', 'getMigrationStatus', 'getCascadeStatus',
 ]);
 
 export function createAccountAdmin(
@@ -66,6 +95,13 @@ export function createAccountAdmin(
   const found = deps.found ?? foundDelegatedNamespace;
   const latestVersion = deps.latestVersion ?? latestPublishedVersion;
   const signInvitation = deps.signInvitation ?? signGroupInvitation;
+  const join = deps.join;
+
+  // Reachable with or without a relay: the join is how an account gets one.
+  async function joinNamespace(namespaceId: string, req: { invitation: SignedGroupOpenInvitation }) {
+    if (!join) throw new NotForAccountError('joinNamespace without a join handler');
+    return join(namespaceId, req.invitation);
+  }
 
   // Only reached through the relay proxy below, so a null here is unreachable;
   // the guard keeps the types honest rather than asserting it away.
@@ -198,6 +234,24 @@ export function createAccountAdmin(
     async syncGroup(groupId: string) {
       return { groupId, synced: true };
     },
+    async syncContext() {},
+    joinNamespace,
+    async updateMemberRole(groupId: string, identity: string, req: { role: string }) {
+      await group(s, groupId, memberRoleSetOp(identity, req.role as GovernanceMemberRole));
+    },
+    // An open subgroup is joined the way `joinContext` joins one: MemberJoinedOpen
+    // on the subgroup, and nothing to do for a member already in it.
+    async joinSubgroupInheritance(groupId: string) {
+      const { members } = await relay().listGroupMembers(groupId);
+      if (members.some((m) => m.identity.toLowerCase() === s.account.toLowerCase())) {
+        return { groupId, memberPublicKey: s.account, wasInherited: false };
+      }
+      await root(s, groupId, memberJoinedOpenOp({ member: s.account, groupId, credential: s.credential }));
+      return { groupId, memberPublicKey: s.account, wasInherited: true };
+    },
+    async detachContextFromGroup(groupId: string, contextId: string) {
+      await group(s, groupId, contextDetachedOp(contextId));
+    },
   };
 
   if (read === null) {
@@ -205,6 +259,7 @@ export function createAccountAdmin(
       get(_target, prop) {
         if (typeof prop !== 'string') return undefined;
         if (prop === 'getNodeIdentity') return writes.getNodeIdentity;
+        if (prop === 'joinNamespace') return joinNamespace;
         if (prop in EMPTY_READS) return EMPTY_READS[prop as keyof AdminApiClient];
         return async () => {
           throw new NoRelayError(prop);

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { contextDetachedOp, memberJoinedOpenOp, memberRoleSetOp } from '@calimero-network/mero-js';
 import { createAccountAdmin, NoRelayError, NotForAccountError } from './account-admin';
 
 const S = { account: 'aa'.repeat(32), credential: 'cc', deviceSecret: '11'.repeat(32), relayUrl: 'http://relay' };
@@ -19,7 +20,9 @@ function rig() {
     { namespaceId: NS, targetApplicationId: 'ap'.repeat(32) },
     { namespaceId: SUB, targetApplicationId: 'zz'.repeat(32) },
   ] as never);
+  const join = vi.fn(async (namespaceId: string) => ({ namespaceId }));
   const deps = {
+    join,
     govern,
     createContext: vi.fn(async () => ({ contextId: CTX })),
     found: vi.fn(async () => ({ namespaceId: NS, teeEnabled: true })),
@@ -30,7 +33,7 @@ function rig() {
     { session: S, read: read as never, app: { packageName: 'com.calimero.chat', registryUrl: 'https://reg' } },
     deps as never,
   );
-  return { admin, govern, read, deps };
+  return { admin, govern, read, deps, join };
 }
 
 describe('createAccountAdmin', () => {
@@ -176,6 +179,84 @@ describe('createAccountAdmin', () => {
   });
 });
 
+describe('createAccountAdmin: the rest of the admin surface', () => {
+  const INVITATION = { invitation: { group_id: NS }, inviter_signature: 'sig' } as never;
+
+  it('joins a namespace from an invitation through the relay it names', async () => {
+    const { admin, join } = rig();
+    await expect(admin.joinNamespace(NS, { invitation: INVITATION })).resolves.toMatchObject({ namespaceId: NS });
+    expect(join).toHaveBeenCalledWith(NS, INVITATION);
+  });
+
+  it('a join refused by the admitter rejects with its reason and status', async () => {
+    const { admin, join } = rig();
+    join.mockRejectedValueOnce(Object.assign(new Error('The admitter refused the join'), { status: 403 }));
+    await expect(admin.joinNamespace(NS, { invitation: INVITATION })).rejects.toMatchObject({ status: 403 });
+  });
+
+  it("sets a member's role as MemberRoleSet on the group", async () => {
+    const { admin, govern } = rig();
+    await admin.updateMemberRole(SUB, BOB, { role: 'Admin' });
+    expect(govern.group).toHaveBeenCalledWith(S, SUB, memberRoleSetOp(BOB, 'Admin'));
+  });
+
+  it('inherits into an open subgroup with MemberJoinedOpen, as joining its context does', async () => {
+    const { admin, govern, read } = rig();
+    read.listGroupMembers.mockResolvedValueOnce({ members: [{ identity: BOB, role: 'Admin' }] });
+    await expect(admin.joinSubgroupInheritance(SUB)).resolves.toMatchObject({ groupId: SUB, memberPublicKey: ME });
+    expect(govern.root).toHaveBeenCalledWith(S, SUB, memberJoinedOpenOp({ member: ME, groupId: SUB, credential: S.credential }));
+  });
+
+  it('inheriting into a subgroup it already belongs to sends nothing', async () => {
+    const { admin, govern } = rig();
+    await expect(admin.joinSubgroupInheritance(SUB)).resolves.toMatchObject({ groupId: SUB, wasInherited: false });
+    expect(govern.root).not.toHaveBeenCalled();
+  });
+
+  it('detaches a context from its group as ContextDetached', async () => {
+    const { admin, govern } = rig();
+    await admin.detachContextFromGroup(SUB, CTX);
+    expect(govern.group).toHaveBeenCalledWith(S, SUB, contextDetachedOp(CTX));
+  });
+
+  it('syncing a context is a no-op: an account holds no local copy, the relay syncs it', async () => {
+    const { admin, govern } = rig();
+    await expect(admin.syncContext(CTX)).resolves.toBeUndefined();
+    expect(govern.group).not.toHaveBeenCalled();
+  });
+
+  it('deleting a context is refused by name: an account has no copy of its own to delete', async () => {
+    // A node's deleteContext drops that node's copy; the group keeps the context.
+    // An account's copy is the relay's, shared with every account it serves, and
+    // detaching it from the group is a different, group-wide act.
+    const { admin, govern } = rig();
+    await expect(admin.deleteContext(CTX)).rejects.toBeInstanceOf(NotForAccountError);
+    expect(govern.group).not.toHaveBeenCalled();
+    expect(govern.root).not.toHaveBeenCalled();
+  });
+
+  it('refuses by name what core has no account form for, rather than a bare 403 from the relay', async () => {
+    const { admin } = rig();
+    const refused = [
+      () => admin.createContextAlias({} as never),
+      () => admin.deleteContextAlias('a'),
+      () => admin.createApplicationAlias({} as never),
+      () => admin.deleteNamespace(NS),
+      () => admin.createGroupInvitation(SUB),
+      () => admin.joinGroup({} as never),
+      () => admin.setTeeAdmissionPolicy(NS, {} as never),
+      () => admin.getTeeAdmissionPolicy(NS),
+      () => admin.deleteBlob('b'),
+      () => admin.listAccountDevices(),
+      () => admin.revokeAccountDevice(NS, {} as never),
+      () => admin.getGroupUpgradeStatus(NS),
+      () => admin.getMigrationStatus(NS),
+      () => admin.getCascadeStatus(NS),
+    ];
+    for (const call of refused) await expect(call()).rejects.toBeInstanceOf(NotForAccountError);
+  });
+});
+
 describe('createAccountAdmin with no relay yet', () => {
   const fresh = createAccountAdmin({ session: { ...S, relayUrl: null } as never, read: null, app: {} });
 
@@ -187,6 +268,13 @@ describe('createAccountAdmin with no relay yet', () => {
 
   it('still knows who it is', async () => {
     await expect(fresh.getNodeIdentity()).resolves.toMatchObject({ accountId: ME });
+  });
+
+  it('joins from an invitation: the join is what gives it its first relay', async () => {
+    const join = vi.fn(async (namespaceId: string) => ({ namespaceId }));
+    const admin = createAccountAdmin({ session: { ...S, relayUrl: null } as never, read: null, app: {} }, { join } as never);
+    await expect(admin.joinNamespace(NS, { invitation: {} as never })).resolves.toMatchObject({ namespaceId: NS });
+    expect(join).toHaveBeenCalledOnce();
   });
 
   it('refuses anything else by name, as a missing relay', async () => {
