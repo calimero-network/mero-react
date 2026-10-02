@@ -89,7 +89,7 @@ export function useDelegatedBootstrap(
   const read = readDelegatedCredential();
   const credential = useMemo(
     () => read,
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the contents, not the parsed object
+    // Keyed on the contents, not the parsed object.
     [read?.account, read?.credential, read?.deviceSecret],
   );
   // The stored record rather than the context's `nodeUrl`: that one is seeded

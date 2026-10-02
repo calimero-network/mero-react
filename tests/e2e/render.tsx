@@ -24,8 +24,9 @@ export function meroContextValue(mero: MeroJs): MeroContextValue {
     connectToNode: () => {},
     // A node session, as the provider gives one: the hooks never read these.
     connectWithAccount: () => {},
+    admin: mero.admin,
     isDelegated: false,
-    can: { createNamespace: true, createContext: true, invite: true },
+    can: { createNamespace: true, createContext: true, invite: true, upgrade: true },
     app: { packageName: undefined, packageVersion: undefined, registryUrl: undefined },
     logout: () => {},
     isLoading: false,
