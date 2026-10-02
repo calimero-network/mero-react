@@ -74,9 +74,9 @@ export interface AccountAdminDeps {
  *   deletion: core has no delegated form for them.
  * - Account devices: the wallet manages them, not an app.
  *
- * Upgrade and cascade status are NOT here: core 0.11.0-rc.76 (#4392) serves an
- * account its own groups' status, so those go to the relay. Migration status
- * stays until core checks the caller rather than the relay for it.
+ * Upgrade, cascade and migration status are NOT here: core serves an account
+ * its own groups' status (#4392, rc.76), and migration status to the account
+ * that administers the namespace (#4400, rc.77), so they go to the relay.
  */
 const NODE_ONLY = new Set([
   'upgradeGroup', 'retryGroupUpgrade', 'abortMigration', 'installApplication', 'installDevApplication',
@@ -92,10 +92,6 @@ const NODE_ONLY = new Set([
   'deleteNamespace', 'createGroupInvitation', 'joinGroup',
   'setTeeAdmissionPolicy', 'getTeeAdmissionPolicy', 'deleteBlob',
   'listAccountDevices', 'revokeAccountDevice',
-  // Core rc.76 asks the NODE to be the namespace admin for this read, which a
-  // relay is not, so an account that is the admin is answered a bare 403.
-  // Refused by name until core checks the caller, as it does for the other two.
-  'getMigrationStatus',
 ]);
 
 /**
