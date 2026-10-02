@@ -4,9 +4,9 @@
  * namespace.
  *
  * A group op goes to the group it acts on; a root op (create, delete, move a
- * subgroup; join an open one) goes to the NAMESPACE. An account cannot read a
- * group's details, so the namespace of a subgroup is known only if this
- * account created it or was told it — remembered here per account.
+ * subgroup; join an open one) goes to the NAMESPACE. The namespace of a
+ * subgroup is remembered here per account: when this account created it, and
+ * when the account admin asked the relay for it (`getGroupInfo`).
  */
 import { type GovernanceOp } from '@calimero-network/mero-js';
 import { delegatedGovernance } from './create-context';
@@ -14,16 +14,23 @@ import { readRelayMap, type DelegatedSession } from './session';
 
 const GROUP_NAMESPACE_PREFIX = 'calimero.delegated.group-namespace.';
 
+// What this page has learned, whether or not storage keeps it: a private window
+// or blocked site data must not turn a known subgroup back into an unknown one.
+const learned = new Map<string, Record<string, string>>();
+
 function readGroupNamespaces(account: string): Record<string, string> {
+  let stored: Record<string, string> = {};
   try {
-    return JSON.parse(localStorage.getItem(GROUP_NAMESPACE_PREFIX + account) ?? '{}') as Record<string, string>;
+    stored = JSON.parse(localStorage.getItem(GROUP_NAMESPACE_PREFIX + account) ?? '{}') as Record<string, string>;
   } catch {
-    return {};
+    /* no storage: what this page learned still stands */
   }
+  return { ...stored, ...learned.get(account) };
 }
 
 /** Record that `groupId` is a subgroup of `namespaceId`, for this account. */
 export function rememberGroupNamespace(account: string, groupId: string, namespaceId: string): void {
+  learned.set(account, { ...learned.get(account), [groupId]: namespaceId });
   try {
     const all = readGroupNamespaces(account);
     all[groupId] = namespaceId;

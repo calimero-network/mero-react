@@ -443,6 +443,7 @@ describe('getPermissionsForMode — grants requested at login (scope-enforced co
   it('MultiContext requests context + namespace/group/blob/alias grants', () => {
     expect(getPermissionsForMode(AppMode.MultiContext)).toEqual([
       'context:create',
+      'context:delete',
       'context:list',
       'context:execute',
       'context:subscribe',
@@ -478,6 +479,13 @@ describe('getPermissionsForMode — grants requested at login (scope-enforced co
       expect(getPermissionsForMode(mode)).toContain('context:subscribe');
     },
   );
+
+  // useDeleteContext is offered to every app that can create a context, and
+  // core maps DELETE /admin-api/contexts/:id to `context:delete`: without it the
+  // app's own delete is refused 403 on a node.
+  it('MultiContext can delete the contexts it can create', () => {
+    expect(getPermissionsForMode(AppMode.MultiContext)).toContain('context:delete');
+  });
 
   it('Admin is unchanged', () => {
     expect(getPermissionsForMode(AppMode.Admin)).toEqual(['admin']);

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { contextDetachedOp, memberJoinedOpenOp, memberRoleSetOp } from '@calimero-network/mero-js';
 import { createAccountAdmin, NoRelayError, NotForAccountError } from './account-admin';
+import { namespaceOfGroup } from './govern';
 
 const S = { account: 'aa'.repeat(32), credential: 'cc', deviceSecret: '11'.repeat(32), relayUrl: 'http://relay' };
 const NS = '01'.repeat(32), SUB = '02'.repeat(32), CTX = '03'.repeat(32), ME = S.account, BOB = 'bb'.repeat(32);
@@ -86,6 +87,26 @@ describe('createAccountAdmin', () => {
     expect(govern.root).toHaveBeenCalledTimes(2);
     await admin.leaveGroup(SUB);
     expect(govern.group).toHaveBeenLastCalledWith(S, SUB, expect.objectContaining({ kind: 'group' }));
+  });
+
+  it('governs a subgroup it neither created nor was told about, learning its namespace from the relay', async () => {
+    // A member leaving an open channel someone else made: the account never
+    // recorded that subgroup's namespace, and the relay answers it.
+    const { admin, govern, read } = rig();
+    const OTHER = '04'.repeat(32);
+    expect(namespaceOfGroup(S as never, OTHER)).toBeUndefined();
+    await admin.leaveGroup(OTHER);
+    expect(read.getGroupInfo).toHaveBeenCalledWith(OTHER);
+    expect(namespaceOfGroup(S as never, OTHER)).toBe(NS);
+    expect(govern.group).toHaveBeenLastCalledWith(S, OTHER, expect.objectContaining({ kind: 'group' }));
+  });
+
+  it('asks the relay for a namespace only once per subgroup', async () => {
+    const { admin, read } = rig();
+    const OTHER = '05'.repeat(32);
+    await admin.setGroupMetadata(OTHER, { name: 'a' });
+    await admin.setGroupMetadata(OTHER, { name: 'b' });
+    expect(read.getGroupInfo.mock.calls.filter((c) => (c as unknown[])[0] === OTHER)).toHaveLength(1);
   });
 
   it('joins an open channel by its context: MemberJoinedOpen on the context group', async () => {
