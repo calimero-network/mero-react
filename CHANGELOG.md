@@ -1,3 +1,9 @@
+## [9.6.0](https://github.com/calimero-network/mero-react/compare/mero-react-v9.5.0...mero-react-v9.6.0) (2026-10-02)
+
+### Features
+
+* **connect:** Node and Cloud tabs in the connect dialog ([#80](https://github.com/calimero-network/mero-react/issues/80)) ([dd8d9ea](https://github.com/calimero-network/mero-react/commit/dd8d9ea7371a0e9b019abcb84fdab9d95f76fca9))
+
 ## [9.5.0](https://github.com/calimero-network/mero-react/compare/mero-react-v9.4.0...mero-react-v9.5.0) (2026-10-02)
 
 ### Features
