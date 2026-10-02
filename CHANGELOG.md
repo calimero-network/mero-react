@@ -1,3 +1,9 @@
+## [9.6.2](https://github.com/calimero-network/mero-react/compare/mero-react-v9.6.1...mero-react-v9.6.2) (2026-10-02)
+
+### Bug Fixes
+
+* **account:** join as a node joins, and refuse leaveContext by name ([#83](https://github.com/calimero-network/mero-react/issues/83)) ([2432dcd](https://github.com/calimero-network/mero-react/commit/2432dcd755f8f955a2687c2eddffe11cf3e1b7d1))
+
 ## [9.6.1](https://github.com/calimero-network/mero-react/compare/mero-react-v9.6.0...mero-react-v9.6.1) (2026-10-02)
 
 ### Bug Fixes
