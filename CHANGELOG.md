@@ -1,3 +1,9 @@
+## [9.6.3](https://github.com/calimero-network/mero-react/compare/mero-react-v9.6.2...mero-react-v9.6.3) (2026-10-02)
+
+### Bug Fixes
+
+* **account:** refuse alias reads by name, and read upgrade and cascade status through the relay ([#84](https://github.com/calimero-network/mero-react/issues/84)) ([f953266](https://github.com/calimero-network/mero-react/commit/f953266adfde116ed936fc7d9fd8688298178b5e))
+
 ## [9.6.2](https://github.com/calimero-network/mero-react/compare/mero-react-v9.6.1...mero-react-v9.6.2) (2026-10-02)
 
 ### Bug Fixes
