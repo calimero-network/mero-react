@@ -1,3 +1,9 @@
+## [9.6.4](https://github.com/calimero-network/mero-react/compare/mero-react-v9.6.3...mero-react-v9.6.4) (2026-10-02)
+
+### Bug Fixes
+
+* **account:** read migration status through the relay, now that core checks the caller ([#85](https://github.com/calimero-network/mero-react/issues/85)) ([f8ac128](https://github.com/calimero-network/mero-react/commit/f8ac128ead42389fe5551529aa11680fb7a3d771))
+
 ## [9.6.3](https://github.com/calimero-network/mero-react/compare/mero-react-v9.6.2...mero-react-v9.6.3) (2026-10-02)
 
 ### Bug Fixes
