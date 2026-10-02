@@ -4,6 +4,11 @@ import { createAccountAdmin, NoRelayError, NotForAccountError } from './account-
 import { namespaceOfGroup } from './govern';
 
 const S = { account: 'aa'.repeat(32), credential: 'cc', deviceSecret: '11'.repeat(32), relayUrl: 'http://relay' };
+/** What the relay answers a direct member's MemberJoinedOpen with (core's `AlreadyDirectMember`). */
+const DIRECT_MEMBER_REFUSAL = Object.assign(
+  new Error(`HTTP 409 Conflict: signer ${'aa'.repeat(32)} is a direct member; use MemberJoined or add_group_members instead`),
+  { status: 409 },
+);
 const NS = '01'.repeat(32), SUB = '02'.repeat(32), CTX = '03'.repeat(32), ME = S.account, BOB = 'bb'.repeat(32);
 
 function rig() {
@@ -117,12 +122,26 @@ describe('createAccountAdmin', () => {
     expect(govern.root).toHaveBeenCalledWith(S, SUB, expect.objectContaining({ kind: 'root' }));
   });
 
-  it('joining a context whose group it already belongs to is a no-op, as on a node', async () => {
-    // Core refuses MemberJoinedOpen from a direct member (409), and a node's
-    // joinContext for a context it already holds just succeeds.
+  // Core's member list includes members who only INHERIT through Open subgroups,
+  // and a node's join turns such a member into a direct one (MemberJoinedOpen);
+  // only a DIRECT member's join is a no-op. Listing cannot tell the two apart,
+  // so the account sends the join, as the node does, and core says which.
+  it('an inherited member joining a context still joins: MemberJoinedOpen, as on a node', async () => {
     const { admin, govern } = rig();
     await expect(admin.joinContext(CTX)).resolves.toEqual({ contextId: CTX, memberPublicKey: ME });
-    expect(govern.root).not.toHaveBeenCalled();
+    expect(govern.root).toHaveBeenCalledWith(S, SUB, memberJoinedOpenOp({ member: ME, groupId: SUB, credential: S.credential }));
+  });
+
+  it('a direct member joining a context is a no-op: core refuses its MemberJoinedOpen, as a node skips it', async () => {
+    const { admin, govern } = rig();
+    govern.root.mockRejectedValueOnce(DIRECT_MEMBER_REFUSAL);
+    await expect(admin.joinContext(CTX)).resolves.toEqual({ contextId: CTX, memberPublicKey: ME });
+  });
+
+  it('any other refusal of the join is still an error', async () => {
+    const { admin, govern } = rig();
+    govern.root.mockRejectedValueOnce(Object.assign(new Error('HTTP 403 Forbidden: signer has no membership path'), { status: 403 }));
+    await expect(admin.joinContext(CTX)).rejects.toThrow(/no membership path/);
   });
 
   // An account runs as itself in every context it can reach: the relay executes
@@ -228,10 +247,16 @@ describe('createAccountAdmin: the rest of the admin surface', () => {
     expect(govern.root).toHaveBeenCalledWith(S, SUB, memberJoinedOpenOp({ member: ME, groupId: SUB, credential: S.credential }));
   });
 
-  it('inheriting into a subgroup it already belongs to sends nothing', async () => {
+  it('an inherited member inheriting into a subgroup becomes direct, as on a node', async () => {
     const { admin, govern } = rig();
+    await expect(admin.joinSubgroupInheritance(SUB)).resolves.toMatchObject({ groupId: SUB, wasInherited: true });
+    expect(govern.root).toHaveBeenCalledWith(S, SUB, memberJoinedOpenOp({ member: ME, groupId: SUB, credential: S.credential }));
+  });
+
+  it('a direct member inheriting into its own subgroup is a no-op, as on a node', async () => {
+    const { admin, govern } = rig();
+    govern.root.mockRejectedValueOnce(DIRECT_MEMBER_REFUSAL);
     await expect(admin.joinSubgroupInheritance(SUB)).resolves.toMatchObject({ groupId: SUB, wasInherited: false });
-    expect(govern.root).not.toHaveBeenCalled();
   });
 
   it('detaches a context from its group as ContextDetached', async () => {
@@ -252,6 +277,17 @@ describe('createAccountAdmin: the rest of the admin surface', () => {
     // detaching it from the group is a different, group-wide act.
     const { admin, govern } = rig();
     await expect(admin.deleteContext(CTX)).rejects.toBeInstanceOf(NotForAccountError);
+    expect(govern.group).not.toHaveBeenCalled();
+    expect(govern.root).not.toHaveBeenCalled();
+  });
+
+  it("leaving a context is refused by name: a node's leave is local, and an account has nothing local", async () => {
+    // A node's leaveContext is a local-only opt-out (a tombstone and its own
+    // identity rows); it publishes nothing and the node stays in the group.
+    // Leaving the group instead would take the account out of every context
+    // there: that is leaveGroup, and it must be asked for as such.
+    const { admin, govern } = rig();
+    await expect(admin.leaveContext(CTX)).rejects.toBeInstanceOf(NotForAccountError);
     expect(govern.group).not.toHaveBeenCalled();
     expect(govern.root).not.toHaveBeenCalled();
   });
