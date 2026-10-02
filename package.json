@@ -30,7 +30,8 @@
     "prepublishOnly": "pnpm build && pnpm typecheck"
   },
   "dependencies": {
-    "@calimero-network/mero-js": "^21.3.0"
+    "@calimero-network/mero-js": "^23.4.0",
+    "@phala/dcap-qvl": "0.5.3"
   },
   "peerDependencies": {
     "react": "^18.0.0 || ^19.0.0",

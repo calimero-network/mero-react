@@ -45,6 +45,12 @@ export function MockMeroProvider({
     connectToNode: (url: string) => {
       console.info('[MockMeroProvider] connectToNode →', url);
     },
+    connectWithAccount: (session) => {
+      console.info('[MockMeroProvider] connectWithAccount →', session.relayUrl);
+    },
+    isDelegated: false,
+    can: { createNamespace: true, createContext: true, invite: true },
+    app: {},
     logout: () => {
       console.info('[MockMeroProvider] logout');
     },

@@ -2,6 +2,31 @@ import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { classifyError, compareSemver } from '@calimero-network/mero-js';
 import { useMero } from '../context';
 import { base58ToHex } from '../utils/base58';
+import { listDelegatedContexts, listDelegatedNamespaces, readDelegatedSession } from '../delegated/session';
+import {
+  contextDetachedOp,
+  contextMetadataSetOp,
+  defaultCapabilitiesSetOp,
+  subgroupCreation,
+  groupDeletedOp,
+  groupMetadataSetOp,
+  groupReparentedOp,
+  memberAddedOp,
+  memberJoinedOpenOp,
+  memberMetadataSetOp,
+  memberRemovedOp,
+  memberRoleSetOp,
+  signerFromSecret,
+  subgroupVisibilitySetOp,
+  type GovernanceMemberRole,
+} from '@calimero-network/mero-js';
+import { governGroup, governRoot, rememberGroupNamespace } from '../delegated/govern';
+import {
+  createDelegatedContext,
+  createDelegatedPrivateContext,
+  foundDelegatedNamespace,
+  latestPublishedVersion,
+} from '../delegated/create-context';
 import type {
   Codec,
   EphemeralClient,
@@ -684,7 +709,7 @@ function extractAliasContextId(value: unknown): string | null {
  * Tracks loading/error state. Unmount-safe.
  */
 export function useExecute(contextId: string | null, executorId: string | null) {
-  const { mero } = useMero();
+  const { mero, isDelegated } = useMero();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const mountedRef = useRef(true);
@@ -697,7 +722,22 @@ export function useExecute(contextId: string | null, executorId: string | null) 
   const execute = useCallback(
     async <T = unknown>(method: string, params?: Record<string, unknown>): Promise<T | null> => {
       if (!mero || !contextId || !executorId) {
-        if (mountedRef.current) setError(new Error('Not connected'));
+        // A delegated session with no client is one specific, ordinary state —
+        // an account that has not been invited anywhere yet, so the cloud names
+        // no relay for it — and it must not report as "Not connected", because
+        // the account IS connected and re-authenticating cures nothing. The cure
+        // is an invitation, so the message says so.
+        if (mountedRef.current) {
+          setError(
+            new Error(
+              !mero && isDelegated
+                ? 'No relay for this account yet, so there is nowhere to send this write. ' +
+                  'Redeeming an invitation admits the account to a namespace and gives it a ' +
+                  'relay; reads and events resume with it.'
+                : 'Not connected',
+            ),
+          );
+        }
         return null;
       }
 
@@ -721,7 +761,7 @@ export function useExecute(contextId: string | null, executorId: string | null) 
         if (mountedRef.current) setLoading(false);
       }
     },
-    [mero, contextId, executorId],
+    [mero, contextId, executorId, isDelegated],
   );
 
   return { execute, loading, error };
@@ -790,10 +830,24 @@ export function useSubscription(
  * Fetch contexts for the current node, optionally filtered by application ID.
  */
 export function useContexts(applicationId?: string | null) {
-  const { mero } = useMero();
+  const { mero, isDelegated } = useMero();
   const { data, loading, error, refetch } = useAsyncResource<ApplicationContextRecord[]>(
     mero
       ? async () => {
+          // A delegated session may list only its own contexts: the
+          // per-application listing is node-wide, so a relay refuses it (403).
+          // The caller-scoped `getContexts` carries each context's application,
+          // so filter here instead.
+          if (isDelegated) {
+            // Across every relay this account uses: its namespaces may each be
+            // served by a different one, and each relay lists only its own.
+            const session = readDelegatedSession();
+            const listed = session ? await listDelegatedContexts(session) : [];
+            const own = listed.filter(
+              (c) => !applicationId || c.applicationId === applicationId,
+            );
+            return mapApplicationContexts(own);
+          }
           const response = applicationId
             ? await mero.admin.getContextsForApplication(applicationId)
             : await mero.admin.getContexts();
@@ -801,7 +855,7 @@ export function useContexts(applicationId?: string | null) {
         }
       : null,
     [],
-    [mero, applicationId],
+    [mero, applicationId, isDelegated],
   );
   return { contexts: data, loading, error, refetch };
 }
@@ -1080,18 +1134,83 @@ export function useContextDiscovery(options: ContextDiscoveryOptions): ContextDi
 // ---- Context CRUD Hooks ----
 
 export function useCreateContext() {
-  const { mero } = useMero();
+  const { mero, isDelegated } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const createContext = useCallback(
     async (request: CreateContextRequest) => {
+      if (isDelegated) {
+        // An account creates a context through the relay serving the namespace,
+        // under a creation warrant (delegated/create-context.ts).
+        const session = readDelegatedSession();
+        if (!session || !request.groupId) return null;
+        return run(() =>
+          createDelegatedContext(session, {
+            namespaceId: request.groupId!,
+            applicationId: request.applicationId,
+            initializationParams: request.initializationParams as number[] | undefined,
+          }),
+        );
+      }
       if (!mero) return null;
       return run(() => mero.admin.createContext(request));
     },
-    [mero, run],
+    [mero, run, isDelegated],
   );
 
   return { createContext, loading, error };
+}
+
+export interface CreatePrivateContextRequest {
+  readonly namespaceId: string;
+  readonly applicationId: string;
+  /** The accounts that share it with you, and nobody else — e.g. the other person of a DM. */
+  readonly members: readonly string[];
+  readonly initializationParams?: number[];
+}
+
+/**
+ * Create a context only you and `members` are in (a DM, a small room): its own
+ * restricted group in the namespace, members added directly — they are in the
+ * namespace already, so nobody is invited. Same call on either connection:
+ *
+ *  - a node login makes the group, adds the members and creates the context
+ *    with its own admin calls (as mero-chat's DMs do);
+ *  - an account has the relay serving the namespace do the same three steps,
+ *    each under its own warrant (delegated/create-context.ts).
+ */
+export function useCreatePrivateContext() {
+  const { mero, isDelegated } = useMero();
+  const { loading, error, run } = useAsyncMutation();
+
+  const createPrivateContext = useCallback(
+    async (request: CreatePrivateContextRequest): Promise<{ contextId: string } | null> => {
+      if (isDelegated) {
+        const session = readDelegatedSession();
+        if (!session) return null;
+        return run(() => createDelegatedPrivateContext(session, request));
+      }
+      if (!mero) return null;
+      return run(async () => {
+        const { groupId } = await mero.admin.createGroupInNamespace(request.namespaceId, {
+          visibility: 'restricted',
+        });
+        // The creator is the new group's admin already; the others join it here.
+        await mero.admin.addGroupMembers(groupId, {
+          members: request.members.map((identity) => ({ identity, role: 'Member' })),
+        });
+        const { contextId } = await mero.admin.createContext({
+          applicationId: request.applicationId,
+          groupId,
+          initializationParams: request.initializationParams,
+        });
+        return { contextId };
+      });
+    },
+    [mero, run, isDelegated],
+  );
+
+  return { createPrivateContext, loading, error };
 }
 
 export function useDeleteContext() {
@@ -1130,15 +1249,26 @@ export function useJoinContext(options: MutationOptions = {}) {
 }
 
 export function useJoinSubgroupInheritance() {
-  const { mero } = useMero();
+  const { mero, isDelegated } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const joinSubgroupInheritance = useCallback(
     async (groupId: string) => {
+      if (isDelegated) {
+        const session = readDelegatedSession();
+        if (!session) return null;
+        // Joining an open subgroup yourself: a root op carrying your own credential.
+        return run(async () => {
+          await governRoot(session, groupId, memberJoinedOpenOp({ member: session.account, groupId, credential: session.credential }));
+          // An account's identity in the subgroup is its device key: what its ops are signed with.
+          const { publicKey } = await signerFromSecret(session.deviceSecret);
+          return { groupId, memberPublicKey: publicKey, wasInherited: false };
+        });
+      }
       if (!mero) return null;
       return run(() => mero.admin.joinSubgroupInheritance(groupId));
     },
-    [mero, run],
+    [mero, run, isDelegated],
   );
 
   return { joinSubgroupInheritance, loading, error };
@@ -1167,15 +1297,20 @@ export function useGroupInfo(groupId?: string | null) {
 }
 
 export function useDeleteGroup() {
-  const { mero } = useMero();
+  const { mero, isDelegated } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const deleteGroup = useCallback(
     async (groupId: string) => {
+      if (isDelegated) {
+        const session = readDelegatedSession();
+        if (!session) return null;
+        return run(() => governRoot(session, groupId, groupDeletedOp(groupId)));
+      }
       if (!mero) return null;
       return run(() => mero.admin.deleteGroup(groupId));
     },
-    [mero, run],
+    [mero, run, isDelegated],
   );
 
   return { deleteGroup, loading, error };
@@ -1203,15 +1338,24 @@ export function useSyncGroup() {
  * round-tripped from an add is the wrong one to remove with.
  */
 export function useAddGroupMembers() {
-  const { mero } = useMero();
+  const { mero, isDelegated } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const addGroupMembers = useCallback(
     async (groupId: string, request: AddGroupMembersRequest) => {
+      if (isDelegated) {
+        const session = readDelegatedSession();
+        if (!session) return null;
+        return run(async () => {
+          for (const m of request.members) {
+            await governGroup(session, groupId, memberAddedOp(m.identity, m.role as GovernanceMemberRole));
+          }
+        });
+      }
       if (!mero) return null;
       return run(() => mero.admin.addGroupMembers(groupId, request));
     },
-    [mero, run],
+    [mero, run, isDelegated],
   );
 
   return { addGroupMembers, loading, error };
@@ -1223,15 +1367,22 @@ export function useAddGroupMembers() {
  * Both are 32-byte strings, so passing a key names nobody and raises nothing.
  */
 export function useRemoveGroupMembers() {
-  const { mero } = useMero();
+  const { mero, isDelegated } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const removeGroupMembers = useCallback(
     async (groupId: string, request: RemoveGroupMembersRequest) => {
+      if (isDelegated) {
+        const session = readDelegatedSession();
+        if (!session) return null;
+        return run(async () => {
+          for (const member of request.members) await governGroup(session, groupId, memberRemovedOp(member));
+        });
+      }
       if (!mero) return null;
       return run(() => mero.admin.removeGroupMembers(groupId, request));
     },
-    [mero, run],
+    [mero, run, isDelegated],
   );
 
   return { removeGroupMembers, loading, error };
@@ -1292,25 +1443,60 @@ export function useNamespaceIdentity(namespaceId?: string | null) {
 }
 
 export function useNamespacesForApplication(applicationId?: string | null) {
-  const { mero } = useMero();
+  const { mero, isDelegated } = useMero();
   const { data, loading, error, refetch } = useAsyncResource<Namespace[]>(
-    mero && applicationId ? () => mero.admin.listNamespacesForApplication(applicationId) : null,
+    mero && applicationId
+      ? isDelegated
+        ? async () => {
+            // The per-application listing is node-wide, so a relay refuses it to
+            // an account; list its own namespaces on every relay and filter.
+            const session = readDelegatedSession();
+            const listed = session ? await listDelegatedNamespaces(session) : [];
+            return listed.filter((ns) => ns.targetApplicationId === applicationId);
+          }
+        : () => mero.admin.listNamespacesForApplication(applicationId)
+      : null,
     [],
-    [mero, applicationId],
+    [mero, applicationId, isDelegated],
   );
   return { namespaces: data, loading, error, refetch };
 }
 
+/** Where an app's package is looked up when the provider names no registry. */
+const DEFAULT_REGISTRY_URL = 'https://apps.calimero.network';
+
 export function useCreateNamespace() {
-  const { mero } = useMero();
+  const { mero, isDelegated, app } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const createNamespace = useCallback(
     async (request: CreateNamespaceRequest) => {
+      if (isDelegated) {
+        // An account founds it through a relay it already uses (a signed
+        // genesis under a governance warrant; delegated/create-context.ts).
+        // Members it invites get mero-chat's default mask, so they can create
+        // contexts in it without a separate grant.
+        // It is given this app's application in the same call: a namespace
+        // founded through a relay starts with none, and holds no context until
+        // it has one.
+        const session = readDelegatedSession();
+        if (!session) return null;
+        const pkg = app.packageName;
+        return run(async () => {
+          if (!pkg) {
+            throw new Error('this app names no registry package, so a founded namespace could not be given its application');
+          }
+          const version = app.packageVersion ?? (await latestPublishedVersion(app.registryUrl ?? DEFAULT_REGISTRY_URL, pkg));
+          return foundDelegatedNamespace(session, {
+            defaultCapabilities: 231,
+            application: { applicationId: request.applicationId, package: pkg, version },
+          });
+        });
+      }
       if (!mero) return null;
       return run(() => mero.admin.createNamespace(request));
     },
-    [mero, run],
+    [mero, run, isDelegated, app],
   );
 
   return { createNamespace, loading, error };
@@ -1416,15 +1602,39 @@ export function useRedeemInvitation() {
 }
 
 export function useCreateGroupInNamespace() {
-  const { mero } = useMero();
+  const { mero, isDelegated } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const createGroupInNamespace = useCallback(
     async (namespaceId: string, request?: CreateGroupInNamespaceRequest) => {
+      if (isDelegated) {
+        const session = readDelegatedSession();
+        if (!session) return null;
+        // A subgroup's id is derived from its creator and a salt; remembered so later root
+        // ops on it (delete, move, join) know which namespace to post to.
+        return run(async () => {
+          // The relay answers with the subgroup's id as core records it, which
+          // is the one to keep (it need not be the one proposed).
+          const { groupId } = await governRoot(
+            session,
+            namespaceId,
+            // The id is derived from a fresh salt (core#4244); a node refuses any other.
+            (
+              await subgroupCreation({
+                parentId: namespaceId,
+                restricted: request?.visibility !== 'open',
+                admin: session.account,
+              })
+            ).op,
+          );
+          rememberGroupNamespace(session.account, groupId, namespaceId);
+          return { groupId };
+        });
+      }
       if (!mero) return null;
       return run(() => mero.admin.createGroupInNamespace(namespaceId, request));
     },
-    [mero, run],
+    [mero, run, isDelegated],
   );
 
   return { createGroupInNamespace, loading, error };
@@ -1448,45 +1658,62 @@ export function useNamespaceGroups(namespaceId?: string | null) {
  * Both are 32-byte strings, so passing a key names nobody and raises nothing.
  */
 export function useUpdateMemberRole() {
-  const { mero } = useMero();
+  const { mero, isDelegated } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const updateMemberRole = useCallback(
     async (groupId: string, identity: string, request: UpdateMemberRoleRequest) => {
+      if (isDelegated) {
+        const session = readDelegatedSession();
+        if (!session) return null;
+        return run(() => governGroup(session, groupId, memberRoleSetOp(identity, request.role as GovernanceMemberRole)));
+      }
       if (!mero) return null;
       return run(() => mero.admin.updateMemberRole(groupId, identity, request));
     },
-    [mero, run],
+    [mero, run, isDelegated],
   );
 
   return { updateMemberRole, loading, error };
 }
 
 export function useSetDefaultCapabilities() {
-  const { mero } = useMero();
+  const { mero, isDelegated } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const setDefaultCapabilities = useCallback(
     async (groupId: string, request: SetDefaultCapabilitiesRequest) => {
+      if (isDelegated) {
+        const session = readDelegatedSession();
+        if (!session) return null;
+        return run(() => governGroup(session, groupId, defaultCapabilitiesSetOp(request.defaultCapabilities)));
+      }
       if (!mero) return null;
       return run(() => mero.admin.setDefaultCapabilities(groupId, request));
     },
-    [mero, run],
+    [mero, run, isDelegated],
   );
 
   return { setDefaultCapabilities, loading, error };
 }
 
 export function useSetSubgroupVisibility() {
-  const { mero } = useMero();
+  const { mero, isDelegated } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const setSubgroupVisibility = useCallback(
     async (groupId: string, request: SetSubgroupVisibilityRequest) => {
+      if (isDelegated) {
+        const session = readDelegatedSession();
+        if (!session) return null;
+        return run(() =>
+          governGroup(session, groupId, subgroupVisibilitySetOp(request.subgroupVisibility === 'open' ? 'open' : 'restricted')),
+        );
+      }
       if (!mero) return null;
       return run(() => mero.admin.setSubgroupVisibility(groupId, request));
     },
-    [mero, run],
+    [mero, run, isDelegated],
   );
 
   return { setSubgroupVisibility, loading, error };
@@ -1530,15 +1757,20 @@ export function useSetTeeAdmissionPolicy() {
 // ---- Metadata Hooks ----
 
 export function useSetGroupMetadata() {
-  const { mero } = useMero();
+  const { mero, isDelegated } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const setGroupMetadata = useCallback(
     async (groupId: string, request: SetMetadataInput) => {
+      if (isDelegated) {
+        const session = readDelegatedSession();
+        if (!session) return null;
+        return run(() => governGroup(session, groupId, groupMetadataSetOp(request)));
+      }
       if (!mero) return null;
       return run(() => mero.admin.setGroupMetadata(groupId, request));
     },
-    [mero, run],
+    [mero, run, isDelegated],
   );
 
   return { setGroupMetadata, loading, error };
@@ -1550,30 +1782,40 @@ export function useSetGroupMetadata() {
  * Both are 32-byte strings, so passing a key names nobody and raises nothing.
  */
 export function useSetMemberMetadata() {
-  const { mero } = useMero();
+  const { mero, isDelegated } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const setMemberMetadata = useCallback(
     async (groupId: string, identity: string, request: SetMetadataInput) => {
+      if (isDelegated) {
+        const session = readDelegatedSession();
+        if (!session) return null;
+        return run(() => governGroup(session, groupId, memberMetadataSetOp(identity, request)));
+      }
       if (!mero) return null;
       return run(() => mero.admin.setMemberMetadata(groupId, identity, request));
     },
-    [mero, run],
+    [mero, run, isDelegated],
   );
 
   return { setMemberMetadata, loading, error };
 }
 
 export function useSetContextMetadata() {
-  const { mero } = useMero();
+  const { mero, isDelegated } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const setContextMetadata = useCallback(
     async (groupId: string, contextId: string, request: SetMetadataInput) => {
+      if (isDelegated) {
+        const session = readDelegatedSession();
+        if (!session) return null;
+        return run(() => governGroup(session, groupId, contextMetadataSetOp(contextId, request)));
+      }
       if (!mero) return null;
       return run(() => mero.admin.setContextMetadata(groupId, contextId, request));
     },
-    [mero, run],
+    [mero, run, isDelegated],
   );
 
   return { setContextMetadata, loading, error };
@@ -1802,15 +2044,23 @@ export function useRetryGroupUpgrade() {
 
 /** Move `childGroupId` under a new parent. */
 export function useReparentGroup() {
-  const { mero } = useMero();
+  const { mero, isDelegated } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const reparentGroup = useCallback(
     async (childGroupId: string, request: ReparentGroupRequest) => {
+      if (isDelegated) {
+        const session = readDelegatedSession();
+        if (!session) return null;
+        return run(async () => {
+          await governRoot(session, childGroupId, groupReparentedOp(childGroupId, request.newParentId));
+          return { reparented: true };
+        });
+      }
       if (!mero) return null;
       return run(() => mero.admin.reparentGroup(childGroupId, request));
     },
-    [mero, run],
+    [mero, run, isDelegated],
   );
 
   return { reparentGroup, loading, error };
@@ -1829,15 +2079,20 @@ export function useSubgroups(groupId?: string | null) {
 // ---- Context-Group Relationship ----
 
 export function useDetachContextFromGroup() {
-  const { mero } = useMero();
+  const { mero, isDelegated } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const detachContextFromGroup = useCallback(
     async (groupId: string, contextId: string) => {
+      if (isDelegated) {
+        const session = readDelegatedSession();
+        if (!session) return null;
+        return run(() => governGroup(session, groupId, contextDetachedOp(contextId)));
+      }
       if (!mero) return null;
       return run(() => mero.admin.detachContextFromGroup(groupId, contextId));
     },
-    [mero, run],
+    [mero, run, isDelegated],
   );
 
   return { detachContextFromGroup, loading, error };
