@@ -1,3 +1,9 @@
+## [9.4.0](https://github.com/calimero-network/mero-react/compare/mero-react-v9.3.0...mero-react-v9.4.0) (2026-10-02)
+
+### Features
+
+* **admin:** one admin for a node and an account; accounts invite, join and own their identity ([#78](https://github.com/calimero-network/mero-react/issues/78)) ([e0bde04](https://github.com/calimero-network/mero-react/commit/e0bde048f95a32abdd9bd16b0301fe94d43e7c76))
+
 ## [9.3.0](https://github.com/calimero-network/mero-react/compare/mero-react-v9.2.0...mero-react-v9.3.0) (2026-10-02)
 
 ### Features
