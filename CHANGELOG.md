@@ -1,3 +1,9 @@
+## [9.3.0](https://github.com/calimero-network/mero-react/compare/mero-react-v9.2.0...mero-react-v9.3.0) (2026-10-02)
+
+### Features
+
+* **delegated:** an account does what a node login does, through a relay ([#76](https://github.com/calimero-network/mero-react/issues/76)) ([5a74203](https://github.com/calimero-network/mero-react/commit/5a74203fc1874b101c533d0a37530b15994163b0))
+
 ## [9.2.0](https://github.com/calimero-network/mero-react/compare/mero-react-v9.1.3...mero-react-v9.2.0) (2026-09-28)
 
 ### Features
