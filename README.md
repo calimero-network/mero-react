@@ -332,6 +332,10 @@ Helpers: `defaultMeroTheme` (the full default palette), `resolveMeroTheme(partia
 | `logoOnly` | `boolean` | `false` | Render only the Calimero logo (square button). The label is still announced via `aria-label`. |
 | `label` | `string \| { connect?, connected?, reconnecting? }` | — | Override default labels. Bare string targets the disconnected state. |
 | `className` / `style` | — | — | Forwarded to the inner `<button>`. |
+| `cloud` | `boolean` | `true` | The modal has two tabs: **Node** (discovery + URL, default) and **Cloud** (sign in with a Calimero account by enrolling at the wallet). `false` removes the Cloud tab. A page coming back from the wallet opens the modal on Cloud automatically. |
+| `accountDefaults` | `{ walletUrl?: string }` | — | Local development only: enrol at a wallet other than the hosted one. |
+
+The account flow without the button is `useAccountEnrolment()` (returns `goToWallet`, `note`, `returning`, `walletUrl`, `customWallet`); its UI is `<AccountSignInPanel>`, and `<LoginModal cloud={...} initialTab="cloud">` renders both tabs.
 
 ## Enums
 
