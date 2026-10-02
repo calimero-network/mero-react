@@ -4,6 +4,14 @@ import { LoginModal } from './LoginModal';
 import type { MeroTheme } from '../theme';
 
 interface FlatArgs {
+  /** Story-only: show the Cloud tab (passes `cloud` to the modal). */
+  withCloud?: boolean;
+  /** Story-only: the tab the modal opens on. */
+  initialTab?: 'node' | 'cloud';
+  /** Story-only: a note from the last enrolment, shown on the Cloud tab. */
+  note?: string;
+  /** Story-only: a wallet override, shown as a hint on the Cloud tab. */
+  walletUrl?: string;
   primary?: string;
   primaryHover?: string;
   primaryText?: string;
@@ -98,6 +106,17 @@ const meta: Meta<FlatArgs> = {
           }}
           onClose={() => setOpen(false)}
           theme={buildTheme(args)}
+          cloud={
+            args.withCloud
+              ? {
+                  onEnrol: () => console.info('[LoginModal] cloud.onEnrol'),
+                  note: args.note ?? null,
+                  walletUrl: args.walletUrl,
+                  customWallet: Boolean(args.walletUrl),
+                }
+              : undefined
+          }
+          initialTab={args.initialTab}
         />
       </div>
     );
@@ -154,6 +173,36 @@ export const FullCustom: Story = {
     docs: {
       description: {
         story: 'Every theme token overridden — warm amber with stone surfaces.',
+      },
+    },
+  },
+};
+
+export const WithCloudTab: Story = {
+  args: { withCloud: true },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'With the `cloud` prop the modal has two tabs: **Node** (the dialog above, unchanged, selected by default) and **Cloud** (sign in with a Calimero account by enrolling at the wallet). This is what `ConnectButton` renders by default.',
+      },
+    },
+  },
+};
+
+export const CloudTab: Story = {
+  args: {
+    withCloud: true,
+    initialTab: 'cloud',
+    walletUrl: 'http://localhost:8090/account-enroll',
+    note:
+      'Signed in, with nowhere to write yet: a new account is a member of nothing, so no node serves it.',
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Opened on the Cloud tab, as `ConnectButton` does when the page comes back from the wallet: the note from the enrolment, and the hint shown when an app points enrolment at a non-hosted wallet.',
       },
     },
   },

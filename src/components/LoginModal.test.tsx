@@ -205,3 +205,116 @@ describe('LoginModal — no node found', () => {
     expect(input.value).toBe('https://saved.example.com');
   });
 });
+
+describe('LoginModal — tabs', () => {
+  it('has no tabs without `cloud`', async () => {
+    vi.stubGlobal('fetch', mockFetch([]));
+    renderModal();
+
+    await screen.findByTestId('node-url-input');
+    expect(screen.queryByRole('tablist')).toBeNull();
+    expect(screen.queryByRole('tab')).toBeNull();
+    expect(screen.queryByRole('tabpanel')).toBeNull();
+    expect(screen.getByTestId('connect-button')).toBeTruthy();
+  });
+
+  it('with `cloud`, shows Node and Cloud tabs with Node selected', async () => {
+    vi.stubGlobal('fetch', mockFetch([]));
+    renderModal({ cloud: { onEnrol: vi.fn() } });
+
+    await screen.findByTestId('node-url-input');
+    const tabs = screen.getAllByRole('tab');
+    expect(tabs.map((t) => t.textContent)).toEqual(['Node', 'Cloud']);
+    const [node, cloud] = tabs;
+    expect(node.getAttribute('aria-selected')).toBe('true');
+    expect(cloud.getAttribute('aria-selected')).toBe('false');
+    expect(node.tabIndex).toBe(0);
+    expect(cloud.tabIndex).toBe(-1);
+    expect(node.getAttribute('aria-controls')).toBe('mero-login-panel-node');
+    const panel = screen.getByRole('tabpanel');
+    expect(panel.getAttribute('aria-labelledby')).toBe(node.id);
+    // The Node body is the existing one.
+    expect(screen.getByTestId('connect-button')).toBeTruthy();
+    expect(screen.queryByTestId('enrol-button')).toBeNull();
+  });
+
+  it('switching to Cloud shows the enrol button, which calls onEnrol', async () => {
+    vi.stubGlobal('fetch', mockFetch([]));
+    const onEnrol = vi.fn();
+    renderModal({ cloud: { onEnrol } });
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Cloud' }));
+    expect(screen.getByRole('tab', { name: 'Cloud' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.queryByTestId('connect-button')).toBeNull();
+    expect(screen.queryByTestId('node-url-input')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Enrol with your account' }));
+    expect(onEnrol).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the note and the custom-wallet hint on the Cloud tab', () => {
+    vi.stubGlobal('fetch', mockFetch([]));
+    renderModal({
+      cloud: {
+        onEnrol: vi.fn(),
+        note: 'Signed in, with nowhere to write yet',
+        walletUrl: 'http://localhost:8090/account-enroll',
+        customWallet: true,
+      },
+      initialTab: 'cloud',
+    });
+
+    expect(screen.getByTestId('account-note').textContent).toContain('nowhere to write yet');
+    expect(screen.getByText('http://localhost:8090/account-enroll')).toBeTruthy();
+  });
+
+  it('hides the wallet hint for the hosted wallet', () => {
+    vi.stubGlobal('fetch', mockFetch([]));
+    renderModal({
+      cloud: { onEnrol: vi.fn(), walletUrl: 'https://wallet.example', customWallet: false },
+      initialTab: 'cloud',
+    });
+    expect(screen.queryByText('https://wallet.example')).toBeNull();
+  });
+
+  it('`initialTab="cloud"` opens on Cloud', () => {
+    vi.stubGlobal('fetch', mockFetch([]));
+    renderModal({ cloud: { onEnrol: vi.fn() }, initialTab: 'cloud' });
+
+    const cloud = screen.getByRole('tab', { name: 'Cloud' });
+    expect(cloud.getAttribute('aria-selected')).toBe('true');
+    expect(cloud.tabIndex).toBe(0);
+    expect(screen.getByTestId('enrol-button')).toBeTruthy();
+  });
+
+  it('arrow keys move selection and focus between tabs', () => {
+    vi.stubGlobal('fetch', mockFetch([]));
+    renderModal({ cloud: { onEnrol: vi.fn() } });
+
+    const node = screen.getByRole('tab', { name: 'Node' });
+    node.focus();
+    fireEvent.keyDown(node, { key: 'ArrowRight' });
+    const cloud = screen.getByRole('tab', { name: 'Cloud' });
+    expect(cloud.getAttribute('aria-selected')).toBe('true');
+    expect(document.activeElement).toBe(cloud);
+
+    fireEvent.keyDown(cloud, { key: 'ArrowRight' });
+    expect(screen.getByRole('tab', { name: 'Node' }).getAttribute('aria-selected')).toBe('true');
+    expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Node' }));
+
+    fireEvent.keyDown(document.activeElement!, { key: 'End' });
+    expect(screen.getByRole('tab', { name: 'Cloud' }).getAttribute('aria-selected')).toBe('true');
+    fireEvent.keyDown(document.activeElement!, { key: 'Home' });
+    expect(screen.getByRole('tab', { name: 'Node' }).getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('a reopen starts on `initialTab` again', () => {
+    vi.stubGlobal('fetch', mockFetch([]));
+    const props = { onConnect: vi.fn(), onClose: vi.fn(), cloud: { onEnrol: vi.fn() } };
+    const { rerender } = render(<LoginModal isOpen {...props} />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Cloud' }));
+    rerender(<LoginModal isOpen={false} {...props} />);
+    rerender(<LoginModal isOpen {...props} />);
+    expect(screen.getByRole('tab', { name: 'Node' }).getAttribute('aria-selected')).toBe('true');
+  });
+});

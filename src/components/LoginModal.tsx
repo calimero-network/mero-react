@@ -9,11 +9,17 @@
  * The old Local/Remote tabs are gone — the "Local" tab pointed at a hardcoded
  * default node (`node1.127.0.0.1.nip.io`) that doesn't resolve in most setups;
  * discovery + manual entry covers both cases properly.
+ *
+ * Opt-in via the `cloud` prop, the modal gains two tabs: **Node** (everything
+ * above, unchanged, selected by default) and **Cloud** (sign in with a Calimero
+ * account — see `AccountSignInPanel` / `useAccountEnrolment`). Without `cloud`
+ * there are no tabs and the modal renders exactly as before.
  */
 
 import { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { CalimeroLogo } from './CalimeroLogo';
+import { AccountSignInPanel } from './AccountSignInPanel';
 import type { ConnectionType, CustomConnectionConfig } from '../types';
 import {
   discoverLocalNodes,
@@ -52,7 +58,37 @@ export interface LoginModalProps {
    * non-standard setups and tests.
    */
   localNodePorts?: readonly number[];
+  /**
+   * Adds a second way in: a **Cloud** tab, signing in with a Calimero account
+   * by enrolling this tab's device key at the wallet. Absent, the modal is
+   * exactly the node dialog, with no tabs.
+   *
+   * The values are `useAccountEnrolment`'s; the modal only renders them.
+   */
+  cloud?: {
+    /** Start enrolment — normally `useAccountEnrolment().goToWallet`. */
+    onEnrol: () => void;
+    /** What the last enrolment had to say, shown on the Cloud tab. */
+    note?: string | null;
+    /** The wallet enrolment goes to. Shown only when `customWallet`. */
+    walletUrl?: string;
+    /** Whether `walletUrl` is an override rather than the hosted wallet. */
+    customWallet?: boolean;
+  };
+  /**
+   * The tab selected when the modal opens. Only meaningful with `cloud`.
+   * Default `'node'`.
+   */
+  initialTab?: LoginModalTab;
 }
+
+/** The two tabs of the connect dialog, when it has a Cloud tab. */
+export type LoginModalTab = 'node' | 'cloud';
+
+const TABS: readonly { id: LoginModalTab; label: string }[] = [
+  { id: 'node', label: 'Node' },
+  { id: 'cloud', label: 'Cloud' },
+];
 
 /**
  * Validate URL format
@@ -324,6 +360,32 @@ function buildStyles(t: ResolvedMeroTheme) {
       borderRadius: '50%',
       animation: 'meroSpin 1s linear infinite',
     },
+    tabList: {
+      display: 'flex',
+      gap: '0.25rem',
+      padding: '0.25rem',
+      marginBottom: '1.5rem',
+      borderRadius: radius,
+      border: `1px solid ${border}`,
+      backgroundColor: bgSecondary,
+    },
+    tab: {
+      flex: 1,
+      padding: '0.5rem 1rem',
+      borderRadius: radius,
+      border: '1px solid transparent',
+      backgroundColor: 'transparent',
+      color: textSecondary,
+      fontSize: '0.875rem',
+      fontWeight: 600,
+      cursor: 'pointer',
+      transition: 'all 0.15s ease',
+    },
+    tabActive: {
+      border: `1px solid ${accent}`,
+      backgroundColor: accentGlow,
+      color: text,
+    },
     spinnerSmall: {
       width: '1.5rem',
       height: '1.5rem',
@@ -344,7 +406,21 @@ export function LoginModal({
   isOpen,
   theme,
   localNodePorts = DEFAULT_LOCAL_NODE_PORTS,
+  cloud,
+  initialTab = 'node',
 }: LoginModalProps) {
+  const [tab, setTab] = useState<LoginModalTab>(initialTab);
+  // Each opening starts on `initialTab`: the modal stays mounted while closed,
+  // so without this a reopen would land on whatever tab was left selected.
+  useEffect(() => {
+    if (isOpen) setTab(initialTab);
+  }, [isOpen, initialTab]);
+  const tabRefs = useRef<Record<LoginModalTab, HTMLButtonElement | null>>({
+    node: null,
+    cloud: null,
+  });
+  const activeTab: LoginModalTab = cloud ? tab : 'node';
+
   // `selected` is a discovered node URL or CUSTOM.
   const [selected, setSelected] = useState<string>(CUSTOM_SELECTION);
   const [discovered, setDiscovered] = useState<string[]>([]);
@@ -568,6 +644,93 @@ export function LoginModal({
     );
   };
 
+  // The node dialog's body, exactly as it was before there were tabs. With a
+  // Cloud tab it is wrapped as the Node tabpanel; without one it is the whole
+  // modal body, with no wrapper, so a direct LoginModal user sees no change.
+  const renderNodeBody = () => {
+    const body = loading ? (
+      <div style={styles.loading}>
+        <p>Connecting to node...</p>
+        <div style={styles.spinner} />
+      </div>
+    ) : (
+      <>
+        {error && <p style={styles.error}>{error}</p>}
+
+        {renderNodeSection()}
+
+        <div style={styles.buttonGroup}>
+          <button
+            onClick={handleConnect}
+            disabled={!canConnect}
+            style={{
+              ...styles.button,
+              ...(!canConnect ? styles.buttonDisabled : {}),
+            }}
+            data-testid="connect-button"
+          >
+            Connect
+          </button>
+        </div>
+      </>
+    );
+    if (!cloud) return body;
+    return (
+      <div
+        role="tabpanel"
+        id="mero-login-panel-node"
+        aria-labelledby="mero-login-tab-node"
+      >
+        {body}
+      </div>
+    );
+  };
+
+  // WAI-ARIA tabs with automatic activation: the selected tab is the one tab
+  // stop, and the arrow keys (plus Home/End) move selection and focus.
+  const selectTab = (id: LoginModalTab) => {
+    setTab(id);
+    tabRefs.current[id]?.focus();
+  };
+  const onTabKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
+    const i = TABS.findIndex((t) => t.id === activeTab);
+    let next: number | null = null;
+    if (e.key === 'ArrowRight') next = (i + 1) % TABS.length;
+    else if (e.key === 'ArrowLeft') next = (i - 1 + TABS.length) % TABS.length;
+    else if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = TABS.length - 1;
+    if (next === null) return;
+    e.preventDefault();
+    selectTab(TABS[next].id);
+  };
+  const renderTabs = () => (
+    <div role="tablist" aria-label="How to connect" style={styles.tabList}>
+      {TABS.map((t) => {
+        const selected = activeTab === t.id;
+        return (
+          <button
+            key={t.id}
+            ref={(el) => {
+              tabRefs.current[t.id] = el;
+            }}
+            type="button"
+            role="tab"
+            id={`mero-login-tab-${t.id}`}
+            aria-selected={selected}
+            aria-controls={`mero-login-panel-${t.id}`}
+            tabIndex={selected ? 0 : -1}
+            onClick={() => setTab(t.id)}
+            onKeyDown={onTabKeyDown}
+            style={{ ...styles.tab, ...(selected ? styles.tabActive : {}) }}
+            data-testid={`login-tab-${t.id}`}
+          >
+            {t.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+
   const modalContent = (
     <>
       <style>{`
@@ -586,31 +749,25 @@ export function LoginModal({
             <h1 style={styles.title}>Connect to Calimero</h1>
           </div>
 
-          {loading ? (
-            <div style={styles.loading}>
-              <p>Connecting to node...</p>
-              <div style={styles.spinner} />
+          {cloud && renderTabs()}
+
+          {activeTab === 'cloud' && cloud ? (
+            <div
+              role="tabpanel"
+              id="mero-login-panel-cloud"
+              aria-labelledby="mero-login-tab-cloud"
+              tabIndex={0}
+            >
+              <AccountSignInPanel
+                onEnrol={cloud.onEnrol}
+                note={cloud.note}
+                walletUrl={cloud.walletUrl}
+                customWallet={cloud.customWallet}
+                theme={theme}
+              />
             </div>
           ) : (
-            <>
-              {error && <p style={styles.error}>{error}</p>}
-
-              {renderNodeSection()}
-
-              <div style={styles.buttonGroup}>
-                <button
-                  onClick={handleConnect}
-                  disabled={!canConnect}
-                  style={{
-                    ...styles.button,
-                    ...(!canConnect ? styles.buttonDisabled : {}),
-                  }}
-                  data-testid="connect-button"
-                >
-                  Connect
-                </button>
-              </div>
-            </>
+            renderNodeBody()
           )}
         </div>
       </div>
