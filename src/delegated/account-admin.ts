@@ -76,6 +76,10 @@ export interface AccountAdminDeps {
 const NODE_ONLY = new Set([
   'upgradeGroup', 'retryGroupUpgrade', 'abortMigration', 'installApplication', 'installDevApplication',
   'uninstallApplication', 'generateContextIdentity', 'deleteContext',
+  // A node's leaveContext is a local opt-out (a tombstone, its own identity rows)
+  // and publishes nothing; an account has nothing local to opt out of, and
+  // leaving the context's group instead is leaveGroup.
+  'leaveContext',
   'createContextAlias', 'createApplicationAlias', 'createDeviceAlias',
   'deleteContextAlias', 'deleteApplicationAlias', 'deleteDeviceAlias',
   'deleteNamespace', 'createGroupInvitation', 'joinGroup',
@@ -83,6 +87,18 @@ const NODE_ONLY = new Set([
   'listAccountDevices', 'revokeAccountDevice',
   'getGroupUpgradeStatus', 'getMigrationStatus', 'getCascadeStatus',
 ]);
+
+/**
+ * Core's refusal of a MemberJoinedOpen from someone already a direct member
+ * (`AlreadyDirectMember`, answered 409): "signer … is a direct member; use
+ * MemberJoined or add_group_members instead". Not to be confused with "is not a
+ * direct member", which a leave by an inherited member gets.
+ */
+function isAlreadyDirectMember(e: unknown): boolean {
+  if (!(e instanceof Error)) return false;
+  const status = (e as { status?: number }).status;
+  return (status === undefined || status === 409) && /signer [0-9a-f]+ is a direct member/i.test(e.message);
+}
 
 export function createAccountAdmin(
   input: { session: DelegatedSession; read: AdminApiClient | null; app: { packageName?: string; packageVersion?: string; registryUrl?: string } },
@@ -126,6 +142,21 @@ export function createAccountAdmin(
     await knowNamespaceOf(groupId);
     return governRootOp(session, groupId, op);
   };
+
+  // MemberJoinedOpen on `groupId`, as a node's join sends it: a member who only
+  // inherits becomes a direct one, and a direct member's join is a no-op. The
+  // member list cannot tell those two apart (it lists inherited members too), so
+  // the join is sent and core's refusal of a direct member is the no-op.
+  // Returns whether this join made the account a member.
+  async function joinOpen(groupId: string): Promise<boolean> {
+    try {
+      await root(s, groupId, memberJoinedOpenOp({ member: s.account, groupId, credential: s.credential }));
+      return true;
+    } catch (e) {
+      if (isAlreadyDirectMember(e)) return false;
+      throw e;
+    }
+  }
 
   async function isMemberOfContextGroup(contextId: string, knownGroupId?: string): Promise<boolean> {
     const groupId = knownGroupId ?? String(await relay().getContextGroup(contextId));
@@ -197,11 +228,6 @@ export function createAccountAdmin(
     async leaveNamespace(namespaceId: string) {
       await group(s, namespaceId, memberLeftOp(s.account));
     },
-    // An account holds no context identity: leaving a context is leaving its group.
-    async leaveContext(contextId: string) {
-      const groupId = await relay().getContextGroup(contextId);
-      await group(s, String(groupId), memberLeftOp(s.account));
-    },
     // An account runs as itself in every context it can reach (the relay
     // executes as the account), so its identity there is the account. Owned
     // when its account is a member of the context's group, as on a node a
@@ -210,13 +236,7 @@ export function createAccountAdmin(
       return { identities: (await isMemberOfContextGroup(contextId)) ? [s.account] : [] };
     },
     async joinContext(contextId: string) {
-      const groupId = String(await relay().getContextGroup(contextId));
-      // Already a member: nothing to join, as on a node. Core refuses
-      // MemberJoinedOpen from a direct member, so asking would be a 409.
-      if (await isMemberOfContextGroup(contextId, groupId)) {
-        return { contextId, memberPublicKey: s.account };
-      }
-      await root(s, groupId, memberJoinedOpenOp({ member: s.account, groupId, credential: s.credential }));
+      await joinOpen(String(await relay().getContextGroup(contextId)));
       return { contextId, memberPublicKey: s.account };
     },
     async createContext(req: { applicationId: string; groupId: string; name?: string; initializationParams?: number[] }) {
@@ -259,12 +279,7 @@ export function createAccountAdmin(
     // An open subgroup is joined the way `joinContext` joins one: MemberJoinedOpen
     // on the subgroup, and nothing to do for a member already in it.
     async joinSubgroupInheritance(groupId: string) {
-      const { members } = await relay().listGroupMembers(groupId);
-      if (members.some((m) => m.identity.toLowerCase() === s.account.toLowerCase())) {
-        return { groupId, memberPublicKey: s.account, wasInherited: false };
-      }
-      await root(s, groupId, memberJoinedOpenOp({ member: s.account, groupId, credential: s.credential }));
-      return { groupId, memberPublicKey: s.account, wasInherited: true };
+      return { groupId, memberPublicKey: s.account, wasInherited: await joinOpen(groupId) };
     },
     async detachContextFromGroup(groupId: string, contextId: string) {
       await group(s, groupId, contextDetachedOp(contextId));
