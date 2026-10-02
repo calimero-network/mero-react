@@ -383,8 +383,16 @@ export function useAccountEnrolment({
   }, [connectWithAccount, cloudBaseUrl]);
 
   const goToWallet = useCallback(async () => {
-    // No inputs to validate: there is nothing left to ask for.
-    const keys = await deviceKeys();
+    // No inputs to validate: there is nothing left to ask for. A device key this
+    // browser cannot make (no X25519, blocked storage) is reported in the note,
+    // where the person is looking, rather than lost as an unhandled rejection.
+    let keys: DeviceKeys;
+    try {
+      keys = await deviceKeys();
+    } catch (e) {
+      setNote(e instanceof Error ? e.message : String(e));
+      return;
+    }
     // Remembered before leaving, so what comes back can be checked against what
     // we sent. Without this the state parameter is decoration: comparing the
     // returned value to itself always passes, which is what it did here.

@@ -142,4 +142,16 @@ describe('useAccountEnrolment', () => {
       Object.defineProperty(window, 'location', { configurable: true, value: original });
     }
   });
+
+  it('a device key that cannot be made becomes the note, not an unhandled rejection', async () => {
+    readEnrolmentCallback.mockReturnValue(null);
+    const generateKey = vi.spyOn(crypto.subtle, 'generateKey').mockRejectedValue(new Error('X25519 is not supported'));
+    try {
+      const { result } = renderHook(() => useAccountEnrolment(), { wrapper });
+      await expect(result.current.goToWallet()).resolves.toBeUndefined();
+      await waitFor(() => expect(result.current.note).toMatch(/X25519 is not supported/));
+    } finally {
+      generateKey.mockRestore();
+    }
+  });
 });
