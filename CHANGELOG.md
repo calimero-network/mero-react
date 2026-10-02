@@ -1,3 +1,9 @@
+## [9.5.0](https://github.com/calimero-network/mero-react/compare/mero-react-v9.4.0...mero-react-v9.5.0) (2026-10-02)
+
+### Features
+
+* **admin:** the account admin covers the rest of the admin surface apps call ([#79](https://github.com/calimero-network/mero-react/issues/79)) ([790ded3](https://github.com/calimero-network/mero-react/commit/790ded3002e5f73ed72e470350c4cb44e7bd2714))
+
 ## [9.4.0](https://github.com/calimero-network/mero-react/compare/mero-react-v9.3.0...mero-react-v9.4.0) (2026-10-02)
 
 ### Features
