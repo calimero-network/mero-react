@@ -5,7 +5,10 @@ export { ConnectButtonAccount } from './ConnectButtonAccount';
 export type { ConnectButtonAccountProps } from './ConnectButtonAccount';
 
 export { LoginModal } from './LoginModal';
-export type { LoginModalProps } from './LoginModal';
+export type { LoginModalProps, LoginModalTab } from './LoginModal';
+
+export { AccountSignInPanel } from './AccountSignInPanel';
+export type { AccountSignInPanelProps } from './AccountSignInPanel';
 
 export { CalimeroLogo } from './CalimeroLogo';
 export type { CalimeroLogoProps } from './CalimeroLogo';
