@@ -12,6 +12,9 @@ import { render, screen, waitFor, act, cleanup } from '@testing-library/react';
 vi.mock('@calimero-network/mero-js', async (importActual) => {
   const actual = await importActual<typeof import('@calimero-network/mero-js')>();
   return {
+    // The real module underneath, so the account path (relay clients) works;
+    // the node path's classes are replaced below.
+    ...actual,
     AuthRevokedError: actual.AuthRevokedError,
     HTTPError: actual.HTTPError,
     MeroJs: vi.fn().mockImplementation(() => ({
@@ -42,6 +45,7 @@ import {
   HTTPError,
 } from '@calimero-network/mero-js';
 import type { TokenStore } from '@calimero-network/mero-js';
+import { saveDelegatedSession } from '../delegated/session';
 
 const meroMock = vi.mocked(MeroJs);
 const mockParseAuthCallback = vi.mocked(parseAuthCallback);
@@ -753,5 +757,82 @@ describe('MeroProvider — an SSE 401 must not destroy the token store', () => {
     expect(store.clear).not.toHaveBeenCalled();
     expect(screen.getByTestId('authed').textContent).toBe('true');
     expect(events.connect).toHaveBeenCalledTimes(2); // initial + reconnect
+  });
+});
+
+describe('MeroProvider — admin and can, per session', () => {
+  let seen: ReturnType<typeof useMero> | null = null;
+  function Capture() {
+    seen = useMero();
+    return <span data-testid="loading">{String(seen.isLoading)}</span>;
+  }
+
+  afterEach(() => {
+    seen = null;
+    sessionStorage.clear();
+    localStorage.clear();
+  });
+
+  it('a node session gets the node admin over mero.admin, and may upgrade', async () => {
+    localStorage.setItem('mero:node_url', 'https://node-a.example.com');
+    mockParseAuthCallback.mockReturnValue(null as never);
+    const store = makeStore();
+    store.getTokens.mockReturnValue({ access_token: 'a.b.c', refresh_token: 'r', expires_at: Date.now() + 3_600_000 });
+    const instance = {
+      admin: { getContexts: vi.fn().mockResolvedValue([]) },
+      auth: { validateToken: vi.fn().mockResolvedValue({ valid: true, status: 200, headers: {} }) },
+      events: { on: vi.fn(), off: vi.fn(), connect: vi.fn().mockResolvedValue(undefined) },
+      clearToken: vi.fn(),
+      close: vi.fn(),
+    };
+    meroMock.mockImplementation(() => instance as never);
+
+    render(
+      <MeroProvider mode={AppMode.MultiContext} tokenStore={store}>
+        <Capture />
+      </MeroProvider>,
+    );
+    await settled();
+
+    // The node's own client underneath: reads pass straight through.
+    await seen!.admin!.getContexts();
+    expect(instance.admin.getContexts).toHaveBeenCalled();
+    expect(seen!.can).toMatchObject({ invite: true, upgrade: true });
+  });
+
+  it('an account session gets the account admin, may invite and may not upgrade', async () => {
+    const account = 'aa'.repeat(32);
+    saveDelegatedSession({ account, credential: 'cc', deviceSecret: '11'.repeat(32), relayUrl: 'https://relay.example.com' });
+
+    render(
+      <MeroProvider mode={AppMode.MultiContext} packageName="com.calimero.chat">
+        <Capture />
+      </MeroProvider>,
+    );
+    // Not `settled()`: a delegated session's loading waits on the relay, which
+    // jsdom cannot reach. The admin exists as soon as the session is restored.
+    await waitFor(() => expect(seen?.admin).toBeTruthy());
+
+    expect(seen!.isDelegated).toBe(true);
+    expect(seen!.admin).not.toBeNull();
+    expect(seen!.admin).not.toBe((seen!.mero as unknown as { admin?: unknown }).admin);
+    await expect(seen!.admin!.getNodeIdentity()).resolves.toMatchObject({ accountId: account });
+    expect(seen!.can).toMatchObject({ invite: true, upgrade: false });
+  });
+
+  it('an account with no relay yet still gets an admin: a member of nothing', async () => {
+    const account = 'aa'.repeat(32);
+    saveDelegatedSession({ account, credential: 'cc', deviceSecret: '11'.repeat(32), relayUrl: null });
+
+    render(
+      <MeroProvider mode={AppMode.MultiContext} packageName="com.calimero.chat">
+        <Capture />
+      </MeroProvider>,
+    );
+    await waitFor(() => expect(seen?.isAuthenticated).toBe(true));
+
+    expect(seen!.admin).not.toBeNull();
+    await expect(seen!.admin!.listNamespaces()).resolves.toEqual([]);
+    await expect(seen!.admin!.getNodeIdentity()).resolves.toMatchObject({ accountId: account });
   });
 });

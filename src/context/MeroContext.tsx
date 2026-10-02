@@ -16,7 +16,9 @@ import {
   HTTPError,
 } from '@calimero-network/mero-js';
 import { AppMode } from '../types';
-import type { AuthCallbackResult, MeroClient, TokenStore } from '@calimero-network/mero-js';
+import type { AdminApiClient, AuthCallbackResult, MeroClient, TokenStore } from '@calimero-network/mero-js';
+import { createNodeAdmin } from '../admin/node-admin';
+import { createAccountAdmin } from '../delegated/account-admin';
 import { resolveTrustedNodeUrl } from '../auth/node-trust';
 import { resolveTokenAdoption } from '../auth/token-adoption';
 import {
@@ -118,6 +120,7 @@ export function MeroProvider({
   packageName,
   packageVersion,
   registryUrl,
+  cloudBaseUrl,
   timeoutMs = 30000,
   allowedNodeUrls,
   tokenStore: tokenStoreProp,
@@ -647,6 +650,25 @@ export function MeroProvider({
     // relay's node key — which `buildDelegatedClient` wires up itself.
   }, [isAuthenticated, mero, checkAuth, logout, delegated]);
 
+  // The admin API an app writes against, whatever the session, with the same
+  // calls and results on both: on a node, the node's client (installing the
+  // app when a namespace needs it); on an account, the account admin, whose
+  // reads go to the relay and whose writes go through it as delegated ops.
+  // Never null for a signed-in account: one with no relay yet is a member of
+  // nothing, and says so, rather than leaving the app to special-case it.
+  const admin = useMemo<AdminApiClient | null>(() => {
+    const app = { packageName, packageVersion, registryUrl };
+    if (delegated !== null) {
+      // No relay at all: the empty admin. A relay still being connected to (its
+      // node key not learned yet) is loading, not empty — null until it is up.
+      if (delegated.relayUrl === null) return createAccountAdmin({ session: delegated, read: null, app });
+      if (!mero) return null;
+      return createAccountAdmin({ session: delegated, read: (mero as unknown as { admin: AdminApiClient }).admin, app });
+    }
+    const nodeAdmin = (mero as { admin?: AdminApiClient } | null)?.admin;
+    return nodeAdmin ? createNodeAdmin({ admin: nodeAdmin, app }) : null;
+  }, [mero, delegated, packageName, packageVersion, registryUrl]);
+
   const contextValue = useMemo<MeroContextValue>(
     () => ({
       mero,
@@ -659,17 +681,21 @@ export function MeroProvider({
       connectToNode,
       connectWithAccount,
       isDelegated: delegated !== null,
+      admin,
       can: delegated !== null
         // An account founds a namespace through its relay and gives it this
-        // app's application (core#4269): possible only when the app names its
-        // registry package. Invitations are still a node's to mint.
-        ? { createNamespace: Boolean(packageName), createContext: true, invite: false }
-        : { createNamespace: true, createContext: true, invite: true },
+        // app's application (core#4269), possible only when the app names its
+        // registry package, and signs its own invitations (mero-js #221). Only
+        // upgrades stay a node's: just a group's first application choice can
+        // go through a relay.
+        ? { createNamespace: Boolean(packageName), createContext: true, invite: true, upgrade: false }
+        : { createNamespace: true, createContext: true, invite: true, upgrade: true },
       app: { packageName, packageVersion, registryUrl },
+      cloudBaseUrl,
       logout,
       isLoading,
     }),
-    [mero, isAuthenticated, isOnline, nodeUrl, applicationId, contextId, contextIdentity, connectToNode, connectWithAccount, delegated, logout, isLoading, packageName, packageVersion, registryUrl],
+    [mero, admin, isAuthenticated, isOnline, nodeUrl, applicationId, contextId, contextIdentity, connectToNode, connectWithAccount, delegated, logout, isLoading, packageName, packageVersion, registryUrl, cloudBaseUrl],
   );
 
   return (

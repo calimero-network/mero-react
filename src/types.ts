@@ -156,11 +156,19 @@ export interface MeroContextValue {
    */
   can: MeroCapabilities;
   /**
+   * The admin API to write against, whatever the session: the node's own admin
+   * client on a node, the account admin (`createAccountAdmin`) on an account.
+   * `null` until connected.
+   */
+  admin: import('@calimero-network/mero-js').AdminApiClient | null;
+  /**
    * The app's registry identity, as the provider was given it. An account
    * founding a namespace names this application for it, since a namespace
    * founded through a relay starts with none.
    */
   app: { packageName?: string; packageVersion?: string; registryUrl?: string };
+  /** The cloud an account asks for routing; the hosted one when unset. */
+  cloudBaseUrl?: string;
   /** Logout and clear tokens */
   logout: () => void;
   /** Loading state */
@@ -179,6 +187,12 @@ export interface MeroProviderConfig {
   packageVersion?: string;
   /** Registry URL (optional) */
   registryUrl?: string;
+  /**
+   * The cloud an account asks which relay serves a namespace or an account.
+   * Unset is the hosted cloud, which is right for every deployed app; this is
+   * for a local or staging setup whose namespaces the hosted cloud never saw.
+   */
+  cloudBaseUrl?: string;
   /** Request timeout in milliseconds */
   timeoutMs?: number;
   /**
@@ -210,4 +224,6 @@ export interface MeroCapabilities {
   readonly createContext: boolean;
   /** Mint an invitation to a namespace. */
   readonly invite: boolean;
+  /** Upgrade a group's application. A node's only: a relay carries just the first choice. */
+  readonly upgrade: boolean;
 }
