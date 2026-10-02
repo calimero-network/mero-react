@@ -306,11 +306,33 @@ describe('createAccountAdmin: the rest of the admin surface', () => {
       () => admin.deleteBlob('b'),
       () => admin.listAccountDevices(),
       () => admin.revokeAccountDevice(NS, {} as never),
-      () => admin.getGroupUpgradeStatus(NS),
+      // Aliases are a node's own names for its contexts, applications and
+      // devices; a relay's are the relay's, so reading them is no more an
+      // account's than writing them. Core gives an account session no alias
+      // permission, and the relay would answer a bare 403.
+      () => admin.lookupContextAlias('a'),
+      () => admin.listContextAliases(),
+      () => admin.lookupApplicationAlias('a'),
+      () => admin.listApplicationAliases(),
+      () => admin.lookupDeviceAlias('a'),
+      () => admin.listDeviceAliases(),
+      // core rc.76 checks the relay, not the account, for this one
       () => admin.getMigrationStatus(NS),
-      () => admin.getCascadeStatus(NS),
     ];
     for (const call of refused) await expect(call()).rejects.toBeInstanceOf(NotForAccountError);
+  });
+
+  // core 0.11.0-rc.76 (#4392) serves an account its own groups' upgrade and
+  // cascade status, refused outside its groups.
+  it('reads its groups\' upgrade and cascade status from the relay', async () => {
+    const { admin, read } = rig();
+    const status = { upgrade: vi.fn(async () => ({ status: 'completed' })), migration: vi.fn(async () => ({ failed: 0 })), cascade: vi.fn(async () => ({ groups: [] })) };
+    Object.assign(read, { getGroupUpgradeStatus: status.upgrade, getMigrationStatus: status.migration, getCascadeStatus: status.cascade });
+    await expect(admin.getGroupUpgradeStatus(NS)).resolves.toEqual({ status: 'completed' });
+    await expect(admin.getCascadeStatus(NS)).resolves.toEqual({ groups: [] });
+    expect(status.upgrade).toHaveBeenCalledWith(NS);
+    expect(status.migration).not.toHaveBeenCalled();
+    expect(status.cascade).toHaveBeenCalledWith(NS);
   });
 });
 

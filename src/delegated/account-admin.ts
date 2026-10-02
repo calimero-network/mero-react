@@ -68,10 +68,15 @@ export interface AccountAdminDeps {
  *   An account's copy is the relay's, shared with every account it serves;
  *   removing a context for the group is `detachContextFromGroup` or
  *   `deleteGroup`.
- * - Aliases, deleting a namespace, legacy group invitations and joins, TEE
- *   policy, blob deletion: core has no delegated form for them.
+ * - Aliases, read or written: they are a node's own names, and a relay's are the
+ *   relay's. Core gives an account session no alias permission.
+ * - Deleting a namespace, legacy group invitations and joins, TEE policy, blob
+ *   deletion: core has no delegated form for them.
  * - Account devices: the wallet manages them, not an app.
- * - Upgrade and migration status: core serves them to a node session only.
+ *
+ * Upgrade and cascade status are NOT here: core 0.11.0-rc.76 (#4392) serves an
+ * account its own groups' status, so those go to the relay. Migration status
+ * stays until core checks the caller rather than the relay for it.
  */
 const NODE_ONLY = new Set([
   'upgradeGroup', 'retryGroupUpgrade', 'abortMigration', 'installApplication', 'installDevApplication',
@@ -82,10 +87,15 @@ const NODE_ONLY = new Set([
   'leaveContext',
   'createContextAlias', 'createApplicationAlias', 'createDeviceAlias',
   'deleteContextAlias', 'deleteApplicationAlias', 'deleteDeviceAlias',
+  'lookupContextAlias', 'lookupApplicationAlias', 'lookupDeviceAlias',
+  'listContextAliases', 'listApplicationAliases', 'listDeviceAliases',
   'deleteNamespace', 'createGroupInvitation', 'joinGroup',
   'setTeeAdmissionPolicy', 'getTeeAdmissionPolicy', 'deleteBlob',
   'listAccountDevices', 'revokeAccountDevice',
-  'getGroupUpgradeStatus', 'getMigrationStatus', 'getCascadeStatus',
+  // Core rc.76 asks the NODE to be the namespace admin for this read, which a
+  // relay is not, so an account that is the admin is answered a bare 403.
+  // Refused by name until core checks the caller, as it does for the other two.
+  'getMigrationStatus',
 ]);
 
 /**
