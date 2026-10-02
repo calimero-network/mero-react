@@ -1,3 +1,9 @@
+## [9.6.1](https://github.com/calimero-network/mero-react/compare/mero-react-v9.6.0...mero-react-v9.6.1) (2026-10-02)
+
+### Bug Fixes
+
+* an account governs any subgroup it is in; a MultiContext app deletes its contexts ([#82](https://github.com/calimero-network/mero-react/issues/82)) ([b02796e](https://github.com/calimero-network/mero-react/commit/b02796e65b5c867f8a348a22fb814d9b6c560703))
+
 ## [9.6.0](https://github.com/calimero-network/mero-react/compare/mero-react-v9.5.0...mero-react-v9.6.0) (2026-10-02)
 
 ### Features
