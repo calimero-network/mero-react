@@ -22,8 +22,10 @@ import { authedMero, ensureApplication, resolveBaseUrl, runId } from './harness'
 /** Keep in sync with getPermissionsForMode(AppMode.MultiContext). */
 const MULTI_CONTEXT_PERMISSIONS = [
   'context:create',
+  'context:delete',
   'context:list',
   'context:execute',
+  'context:subscribe',
   'application:list',
   'namespace',
   'group',
@@ -91,6 +93,13 @@ describe('e2e — multi-context client token (the token real apps hold)', () => 
   it('can create a context in an existing namespace (context:create)', async () => {
     const ctx = await client.admin.createContext({ applicationId, groupId: namespaceId });
     expect(ctx.contextId).toBeTruthy();
+  });
+
+  it('can delete a context it created (context:delete)', async () => {
+    const ctx = await client.admin.createContext({ applicationId, groupId: namespaceId });
+    await client.admin.deleteContext(ctx.contextId);
+    const { contexts } = await client.admin.getContexts();
+    expect(contexts.map((c) => c.id)).not.toContain(ctx.contextId);
   });
 
   it('can execute RPC in its context (context:execute)', async () => {

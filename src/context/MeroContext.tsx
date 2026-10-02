@@ -79,6 +79,10 @@ const isBrowser = typeof window !== 'undefined';
  * the MultiContext list below minus `context:subscribe` gets `403` on
  * `GET /sse`; the same list with it gets `200`.
  *
+ * `context:delete` is what `DELETE /admin-api/contexts/:id` requires
+ * (`validator.rs`). An app that may create contexts may delete them, so
+ * `useDeleteContext` works on a node instead of answering 403.
+ *
  * Exported for tests.
  */
 export function getPermissionsForMode(mode: AppMode): string[] {
@@ -95,6 +99,7 @@ export function getPermissionsForMode(mode: AppMode): string[] {
     case AppMode.MultiContext:
       return [
         'context:create',
+        'context:delete',
         'context:list',
         'context:execute',
         'context:subscribe',
