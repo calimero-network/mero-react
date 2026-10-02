@@ -316,22 +316,21 @@ describe('createAccountAdmin: the rest of the admin surface', () => {
       () => admin.listApplicationAliases(),
       () => admin.lookupDeviceAlias('a'),
       () => admin.listDeviceAliases(),
-      // core rc.76 checks the relay, not the account, for this one
-      () => admin.getMigrationStatus(NS),
     ];
     for (const call of refused) await expect(call()).rejects.toBeInstanceOf(NotForAccountError);
   });
 
-  // core 0.11.0-rc.76 (#4392) serves an account its own groups' upgrade and
-  // cascade status, refused outside its groups.
-  it('reads its groups\' upgrade and cascade status from the relay', async () => {
+  // core serves an account its own groups' upgrade and cascade status (#4392,
+  // rc.76), and migration status when it administers the namespace (#4400, rc.77).
+  it('reads its groups\' upgrade, migration and cascade status from the relay', async () => {
     const { admin, read } = rig();
     const status = { upgrade: vi.fn(async () => ({ status: 'completed' })), migration: vi.fn(async () => ({ failed: 0 })), cascade: vi.fn(async () => ({ groups: [] })) };
     Object.assign(read, { getGroupUpgradeStatus: status.upgrade, getMigrationStatus: status.migration, getCascadeStatus: status.cascade });
     await expect(admin.getGroupUpgradeStatus(NS)).resolves.toEqual({ status: 'completed' });
+    await expect(admin.getMigrationStatus(NS)).resolves.toEqual({ failed: 0 });
     await expect(admin.getCascadeStatus(NS)).resolves.toEqual({ groups: [] });
     expect(status.upgrade).toHaveBeenCalledWith(NS);
-    expect(status.migration).not.toHaveBeenCalled();
+    expect(status.migration).toHaveBeenCalledWith(NS);
     expect(status.cascade).toHaveBeenCalledWith(NS);
   });
 });
