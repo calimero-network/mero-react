@@ -19,6 +19,7 @@ import { AppMode } from '../types';
 import type { AdminApiClient, AuthCallbackResult, MeroClient, TokenStore } from '@calimero-network/mero-js';
 import { createNodeAdmin } from '../admin/node-admin';
 import { createAccountAdmin } from '../delegated/account-admin';
+import { joinAsAccount } from '../delegated/join-as-account';
 import { resolveTrustedNodeUrl } from '../auth/node-trust';
 import { resolveTokenAdoption } from '../auth/token-adoption';
 import {
@@ -661,13 +662,22 @@ export function MeroProvider({
     if (delegated !== null) {
       // No relay at all: the empty admin. A relay still being connected to (its
       // node key not learned yet) is loading, not empty — null until it is up.
-      if (delegated.relayUrl === null) return createAccountAdmin({ session: delegated, read: null, app });
+      // `admin.joinNamespace` redeems for the account, relay or not: the join is
+      // how it gets one, and the session moves onto that relay once it is in.
+      const deps = {
+        join: (namespaceId: string, invitation: Parameters<typeof joinAsAccount>[2]) =>
+          joinAsAccount(delegated, namespaceId, invitation, { cloudBaseUrl, onJoined: connectWithAccount }),
+      };
+      if (delegated.relayUrl === null) return createAccountAdmin({ session: delegated, read: null, app }, deps);
       if (!mero) return null;
-      return createAccountAdmin({ session: delegated, read: (mero as unknown as { admin: AdminApiClient }).admin, app });
+      return createAccountAdmin(
+        { session: delegated, read: (mero as unknown as { admin: AdminApiClient }).admin, app },
+        deps,
+      );
     }
     const nodeAdmin = (mero as { admin?: AdminApiClient } | null)?.admin;
     return nodeAdmin ? createNodeAdmin({ admin: nodeAdmin, app }) : null;
-  }, [mero, delegated, packageName, packageVersion, registryUrl]);
+  }, [mero, delegated, packageName, packageVersion, registryUrl, cloudBaseUrl, connectWithAccount]);
 
   const contextValue = useMemo<MeroContextValue>(
     () => ({
