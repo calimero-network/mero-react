@@ -15,7 +15,7 @@ import {
   type GovernanceMemberRole, type SignedGroupOpenInvitation,
 } from '@calimero-network/mero-js';
 import type { DelegatedSession } from './session';
-import { governGroup, governRoot, rememberGroupNamespace } from './govern';
+import { governGroup, governRoot, namespaceOfGroup, rememberGroupNamespace } from './govern';
 import { createDelegatedContext, foundDelegatedNamespace, latestPublishedVersion } from './create-context';
 
 export class NotForAccountError extends Error {
@@ -89,8 +89,8 @@ export function createAccountAdmin(
   deps: AccountAdminDeps = {},
 ): AdminApiClient {
   const { session: s, read, app } = input;
-  const group = deps.govern?.group ?? governGroup;
-  const root = deps.govern?.root ?? governRoot;
+  const governGroupOp = deps.govern?.group ?? governGroup;
+  const governRootOp = deps.govern?.root ?? governRoot;
   const createContext = deps.createContext ?? createDelegatedContext;
   const found = deps.found ?? foundDelegatedNamespace;
   const latestVersion = deps.latestVersion ?? latestPublishedVersion;
@@ -108,6 +108,23 @@ export function createAccountAdmin(
   const relay = (): AdminApiClient => {
     if (read === null) throw new NoRelayError('this call');
     return read;
+  };
+
+  // A group or root op is posted to the group's namespace. A subgroup this
+  // account neither created nor joined (an open channel someone else made) is
+  // one the relay can name: ask it once, as `createContext` does, and remember.
+  async function knowNamespaceOf(groupId: string): Promise<void> {
+    if (namespaceOfGroup(s, groupId)) return;
+    const info = await relay().getGroupInfo(groupId);
+    rememberGroupNamespace(s.account, groupId, (info as { namespaceId?: string }).namespaceId ?? groupId);
+  }
+  const group: typeof governGroup = async (session, groupId, op) => {
+    await knowNamespaceOf(groupId);
+    return governGroupOp(session, groupId, op);
+  };
+  const root: typeof governRoot = async (session, groupId, op) => {
+    await knowNamespaceOf(groupId);
+    return governRootOp(session, groupId, op);
   };
 
   async function isMemberOfContextGroup(contextId: string, knownGroupId?: string): Promise<boolean> {
