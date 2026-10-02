@@ -52,7 +52,7 @@ export function AccountSignInPanel({
         fontSize: '0.8125rem',
         margin: 0,
         opacity: 0.8,
-        wordBreak: 'break-all' as const,
+        overflowWrap: 'anywhere' as const,
       },
       note: {
         color: error,
