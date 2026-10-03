@@ -20,6 +20,7 @@ import type { AdminApiClient, AuthCallbackResult, MeroClient, TokenStore } from 
 import { createNodeAdmin } from '../admin/node-admin';
 import { createAccountAdmin } from '../delegated/account-admin';
 import { joinAsAccount } from '../delegated/join-as-account';
+import { foundDelegatedNamespace } from '../delegated/create-context';
 import { resolveTrustedNodeUrl } from '../auth/node-trust';
 import { resolveTokenAdoption } from '../auth/token-adoption';
 import {
@@ -672,6 +673,9 @@ export function MeroProvider({
       const deps = {
         join: (namespaceId: string, invitation: Parameters<typeof joinAsAccount>[2]) =>
           joinAsAccount(delegated, namespaceId, invitation, { cloudBaseUrl, onJoined: connectWithAccount }),
+        // Founding enables HA on the same cloud the joins resolve relays from.
+        found: (session: Parameters<typeof foundDelegatedNamespace>[0], req: Parameters<typeof foundDelegatedNamespace>[1]) =>
+          foundDelegatedNamespace(session, req, { cloudBaseUrl }),
       };
       if (delegated.relayUrl === null) return createAccountAdmin({ session: delegated, read: null, app }, deps);
       if (!mero) return null;

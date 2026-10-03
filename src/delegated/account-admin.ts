@@ -182,12 +182,14 @@ export function createAccountAdmin(
     async createNamespace(req: { applicationId: string; name?: string }) {
       if (!app.packageName) throw new NotForAccountError('createNamespace without a packageName');
       const version = app.packageVersion ?? (await latestVersion(app.registryUrl ?? 'https://apps.calimero.network', app.packageName));
-      const { namespaceId } = await found(s, {
+      const { namespaceId, haEnabled, haError } = await found(s, {
         defaultCapabilities: 231,
         application: { applicationId: req.applicationId, package: app.packageName, version },
       });
       if (req.name) await group(s, namespaceId, groupMetadataSetOp({ name: req.name }));
-      return { namespaceId };
+      // A node's result is `{ namespaceId }`; HA's outcome rides along as extra
+      // fields, so code typed against the node call is unaffected.
+      return { namespaceId, haEnabled, ...(haError !== undefined ? { haError } : {}) };
     },
     async createGroupInNamespace(namespaceId: string, req: { groupName?: string; visibility?: 'open' | 'restricted' } = {}) {
       const { op } = await subgroupCreation({ parentId: namespaceId, restricted: req.visibility !== 'open', admin: s.account });

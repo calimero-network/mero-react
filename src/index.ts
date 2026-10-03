@@ -58,7 +58,8 @@ export type {
   BootstrapFromInvitationInput,
 } from './delegated/bootstrap-from-invitation';
 export { useDelegatedBootstrap } from './delegated/useDelegatedBootstrap';
-export { createDelegatedContext } from './delegated/create-context';
+export { createDelegatedContext, HA_ACCOUNT_NOT_LINKED_MESSAGE } from './delegated/create-context';
+export type { FoundedDelegatedNamespace } from './delegated/create-context';
 export { createAccountAdmin, NoRelayError, NotForAccountError } from './delegated/account-admin';
 export { createNodeAdmin } from './admin/node-admin';
 export type { AccountAdminDeps } from './delegated/account-admin';

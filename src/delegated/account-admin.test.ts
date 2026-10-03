@@ -31,7 +31,11 @@ function rig() {
     join,
     govern,
     createContext: vi.fn(async () => ({ contextId: CTX })),
-    found: vi.fn(async () => ({ namespaceId: NS, teeEnabled: true })),
+    found: vi.fn(async (): Promise<{ namespaceId: string; teeEnabled: boolean; haEnabled: boolean; haError?: string }> => ({
+      namespaceId: NS,
+      teeEnabled: true,
+      haEnabled: true,
+    })),
     latestVersion: vi.fn(async () => '1.2.3'),
     signInvitation: vi.fn(async () => ({ invitation: { group_id: NS }, inviter_signature: 'sig' })),
   };
@@ -168,6 +172,17 @@ describe('createAccountAdmin', () => {
     const { admin, deps } = rig();
     await expect(admin.createNamespace({ applicationId: 'ap'.repeat(32), name: 'Team' })).resolves.toMatchObject({ namespaceId: NS });
     expect(deps.found).toHaveBeenCalledWith(S, expect.objectContaining({ application: { applicationId: 'ap'.repeat(32), package: 'com.calimero.chat', version: '1.2.3' } }));
+  });
+
+  it("carries founding's HA outcome as extra fields on createNamespace's result", async () => {
+    const { admin, deps } = rig();
+    await expect(admin.createNamespace({ applicationId: 'ap'.repeat(32) })).resolves.toEqual({ namespaceId: NS, haEnabled: true });
+    deps.found.mockResolvedValueOnce({ namespaceId: NS, teeEnabled: true, haEnabled: false, haError: 'link it' });
+    await expect(admin.createNamespace({ applicationId: 'ap'.repeat(32), name: 'Team' })).resolves.toEqual({
+      namespaceId: NS,
+      haEnabled: false,
+      haError: 'link it',
+    });
   });
 
   it("signs an invitation itself, defaulting the admitters to the group's members", async () => {

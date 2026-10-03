@@ -11,6 +11,8 @@
  * MANAGE_MEMBERS…), never the relay's; the relay only needs standing to act.
  */
 import {
+  AccountNotLinkedError,
+  CloudClient,
   memberAddedOp,
   RelayClient,
   subgroupCreation,
@@ -158,8 +160,12 @@ export async function foundDelegatedNamespace(
     /** The application the namespace runs; without one no context can be created in it. */
     readonly application?: { applicationId: string; package: string; version: string };
   } = {},
-  deps: { fetch?: typeof fetch } = {},
-): Promise<{ namespaceId: string; teeEnabled: boolean }> {
+  deps: {
+    fetch?: typeof fetch;
+    /** The cloud to enable HA on; mero-js's default when unset. */
+    cloudBaseUrl?: string;
+  } = {},
+): Promise<FoundedDelegatedNamespace> {
   const relays = knownRelays(s).map((u) => u.replace(/\/+$/, ''));
   const relay = relays[0];
   if (!relay) throw new Error('no relay is known for this account, so there is nowhere to found a namespace');
@@ -197,7 +203,53 @@ export async function foundDelegatedNamespace(
       `founded ${founded.namespaceId} but could not give it its application: ${founded.applicationError ?? 'unknown reason'}`,
     );
   }
-  return { namespaceId: founded.namespaceId, teeEnabled: founded.teeEnabled };
+  const ha = await enableHaBestEffort(s, founded.namespaceId, founded.salt, deps);
+  return { namespaceId: founded.namespaceId, teeEnabled: founded.teeEnabled, ...ha };
+}
+
+/** What {@link foundDelegatedNamespace} returns. */
+export interface FoundedDelegatedNamespace {
+  namespaceId: string;
+  teeEnabled: boolean;
+  /** Whether the cloud agreed to host the namespace (HA) right after founding. */
+  haEnabled: boolean;
+  /** Why `haEnabled` is `false`, in words a person can act on. */
+  haError?: string;
+}
+
+/** What an app can tell a person whose account the cloud cannot place. */
+export const HA_ACCOUNT_NOT_LINKED_MESSAGE =
+  'link this account to your cloud user in the wallet so invitees can find this namespace';
+
+/**
+ * Ask the cloud to host a namespace this account just founded, with no cloud
+ * session: the account proves it is the founder (its id and the salt reproduce
+ * the namespace id) and the cloud bills the user it is linked to.
+ *
+ * Best-effort: the namespace exists whatever the cloud answers, so a refusal is
+ * reported, never thrown. Without HA nothing in the cloud knows the namespace,
+ * so an invitee cannot find its relay; hence the not-linked case gets a
+ * sentence that says what to do.
+ */
+async function enableHaBestEffort(
+  s: DelegatedSession,
+  namespaceId: string,
+  salt: string,
+  deps: { fetch?: typeof fetch; cloudBaseUrl?: string },
+): Promise<{ haEnabled: boolean; haError?: string }> {
+  try {
+    await new CloudClient({ cloudBaseUrl: deps.cloudBaseUrl, fetch: deps.fetch }).enableHaAsAccount({
+      namespaceId,
+      salt,
+      accountId: s.account,
+      credential: s.credential,
+      deviceSecret: s.deviceSecret,
+    });
+    return { haEnabled: true };
+  } catch (e) {
+    if (e instanceof AccountNotLinkedError) return { haEnabled: false, haError: HA_ACCOUNT_NOT_LINKED_MESSAGE };
+    return { haEnabled: false, haError: e instanceof Error ? e.message : String(e) };
+  }
 }
 
 /**
