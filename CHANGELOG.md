@@ -1,3 +1,9 @@
+## [9.7.0](https://github.com/calimero-network/mero-react/compare/mero-react-v9.6.4...mero-react-v9.7.0) (2026-10-03)
+
+### Features
+
+* **account:** found a namespace with the relay's executor account the app knows, without joining one first ([#86](https://github.com/calimero-network/mero-react/issues/86)) ([a555bfc](https://github.com/calimero-network/mero-react/commit/a555bfcb3b47958bddd9db291adea311bd705194))
+
 ## [9.6.4](https://github.com/calimero-network/mero-react/compare/mero-react-v9.6.3...mero-react-v9.6.4) (2026-10-02)
 
 ### Bug Fixes
