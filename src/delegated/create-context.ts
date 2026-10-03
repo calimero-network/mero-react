@@ -203,7 +203,16 @@ export async function foundDelegatedNamespace(
       `founded ${founded.namespaceId} but could not give it its application: ${founded.applicationError ?? 'unknown reason'}`,
     );
   }
-  const ha = await enableHaBestEffort(s, founded.namespaceId, founded.salt, deps);
+  // HA's fleet node is admitted by the founding relay, which can vouch for it
+  // only once it attested itself as the namespace's first TEE (that also sets
+  // the admission policy). Without that no fleet node is ever admitted, and the
+  // request would hold the account's one pending slot in the cloud for good.
+  const ha = founded.teeEnabled
+    ? await enableHaBestEffort(s, founded.namespaceId, founded.salt, relay, deps)
+    : {
+        haEnabled: false,
+        haError: `the relay did not attest the founding, so no fleet node could be admitted for HA${founded.teeError ? `: ${founded.teeError}` : ''}`,
+      };
   return { namespaceId: founded.namespaceId, teeEnabled: founded.teeEnabled, ...ha };
 }
 
@@ -235,6 +244,7 @@ async function enableHaBestEffort(
   s: DelegatedSession,
   namespaceId: string,
   salt: string,
+  relayUrl: string,
   deps: { fetch?: typeof fetch; cloudBaseUrl?: string },
 ): Promise<{ haEnabled: boolean; haError?: string }> {
   try {
@@ -244,6 +254,9 @@ async function enableHaBestEffort(
       accountId: s.account,
       credential: s.credential,
       deviceSecret: s.deviceSecret,
+      // The relay that founded it: the cloud hands it to the fleet node as its
+      // admitter, so the node does not have to find it by discovery.
+      relayUrl,
     });
     return { haEnabled: true };
   } catch (e) {

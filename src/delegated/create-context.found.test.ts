@@ -72,7 +72,21 @@ describe('foundDelegatedNamespace', () => {
         accountId: ACCOUNT,
         credential: 'cc',
         deviceSecret: '11'.repeat(32),
+        relayUrl: RELAY,
       });
+    });
+
+    // The relay is the fleet node's only admitter: founding attests it as the
+    // namespace's first TEE and sets the admission policy. When that did not
+    // happen, no fleet node can ever be admitted, and asking for HA would only
+    // hold the account's one pending slot forever.
+    it('is not asked for when the relay did not attest the founding', async () => {
+      found.mockResolvedValue({ namespaceId: 'ab'.repeat(32), salt: SALT, teeEnabled: false, teeError: 'no quote' });
+      const out = await foundDelegatedNamespace(session({ executorAccount: EXECUTOR }));
+      expect(enableHa).not.toHaveBeenCalled();
+      expect(out).toMatchObject({ namespaceId: 'ab'.repeat(32), teeEnabled: false, haEnabled: false });
+      expect(out.haError).toMatch(/did not attest/);
+      expect(out.haError).toMatch(/no quote/);
     });
 
     it("posts to the provider's cloud, anonymously", async () => {
