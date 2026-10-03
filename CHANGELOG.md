@@ -1,3 +1,9 @@
+## [9.8.0](https://github.com/calimero-network/mero-react/compare/mero-react-v9.7.1...mero-react-v9.8.0) (2026-10-03)
+
+### Features
+
+* **delegated:** enable HA best-effort after an account founds a namespace ([#88](https://github.com/calimero-network/mero-react/issues/88)) ([0b82b1d](https://github.com/calimero-network/mero-react/commit/0b82b1d626ac4cd2b2abd0f0862c524494ef2951))
+
 ## [9.7.1](https://github.com/calimero-network/mero-react/compare/mero-react-v9.7.0...mero-react-v9.7.1) (2026-10-03)
 
 ### Bug Fixes
