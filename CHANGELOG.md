@@ -1,3 +1,9 @@
+## [9.8.1](https://github.com/calimero-network/mero-react/compare/mero-react-v9.8.0...mero-react-v9.8.1) (2026-10-03)
+
+### Bug Fixes
+
+* **delegated:** say what each refused enable-HA means instead of the HTTP status ([#89](https://github.com/calimero-network/mero-react/issues/89)) ([56d74bb](https://github.com/calimero-network/mero-react/commit/56d74bb73eccab634464424a53c9dde491cd5cbc))
+
 ## [9.8.0](https://github.com/calimero-network/mero-react/compare/mero-react-v9.7.1...mero-react-v9.8.0) (2026-10-03)
 
 ### Features
