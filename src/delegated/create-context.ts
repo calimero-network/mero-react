@@ -147,8 +147,9 @@ export async function createDelegatedPrivateContext(
  * through the same relay straight away.
  *
  * The relay's executor account cannot be asked about a namespace that does
- * not exist yet, so it is learned from one the account already has on that
- * relay. A brand-new account, in nothing yet, is told to join one first.
+ * not exist yet, so it is the session's `executorAccount` when the app named
+ * one, else learned from a namespace the account already has on that relay. A
+ * brand-new account with neither is told how to get one.
  */
 export async function foundDelegatedNamespace(
   s: DelegatedSession,
@@ -165,10 +166,16 @@ export async function foundDelegatedNamespace(
   const known = Object.entries(readRelayMap(s.account).namespaces).find(
     ([, url]) => url.replace(/\/+$/, '') === relay,
   )?.[0];
-  if (!known) {
-    throw new Error("join a namespace on this relay first: its executor account is learned from one you are in");
+  // The session's relay may come with its account (the cloud names it), which
+  // is all founding needs; otherwise it is learned from a namespace on it.
+  const named = s.executorAccount && s.relayUrl && s.relayUrl.replace(/\/+$/, '') === relay ? s.executorAccount : null;
+  if (!named && !known) {
+    throw new Error(
+      "the executor account of this relay is not known: join a namespace on it first, or connect with the relay's executor account (the cloud shows it beside the relay)",
+    );
   }
-  const { executorAccount } = await client(s, relay, governanceNonce(relay, known), deps.fetch).describeGovernance(known);
+  const executorAccount =
+    named ?? (await client(s, relay, governanceNonce(relay, known!), deps.fetch).describeGovernance(known!)).executorAccount;
   // The founding warrant and, with a default mask, a second one are both spent
   // in the NEW namespace's window, which is empty: any rising pair will do.
   let next = BigInt(Date.now());
