@@ -1,7 +1,16 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { AccountNotLinkedError, CloudClient, HTTPError, RelayClient } from '@calimero-network/mero-js';
-import { foundDelegatedNamespace, HA_ACCOUNT_NOT_LINKED_MESSAGE } from './create-context';
+import {
+  AccountLinkedToSeveralUsersError,
+  AccountNotLinkedError,
+  CloudClient,
+  HaRequestPendingError,
+  HTTPError,
+  RelayClient,
+  RelayNotDialableError,
+  UnknownRelayError,
+} from '@calimero-network/mero-js';
+import { foundDelegatedNamespace, HA_ACCOUNT_NOT_LINKED_MESSAGE, HA_REFUSAL_MESSAGES } from './create-context';
 import { rememberRelay } from './session';
 
 const ACCOUNT = 'aa'.repeat(32);
@@ -127,6 +136,31 @@ describe('foundDelegatedNamespace', () => {
       expect(out.haEnabled).toBe(false);
       expect(out.haError).toBe(HA_ACCOUNT_NOT_LINKED_MESSAGE);
       expect(out.haError).toBe('link this account to your cloud user in the wallet so invitees can find this namespace');
+    });
+
+    // Each refusal the cloud names gets a sentence saying what to do, never a
+    // bare "HTTP 409".
+    it.each([
+      [HaRequestPendingError, 409, 'ha_request_pending'],
+      [AccountLinkedToSeveralUsersError, 409, 'account_linked_to_several_users'],
+      [UnknownRelayError, 422, 'unknown_relay'],
+      [RelayNotDialableError, 422, 'relay_not_dialable'],
+    ] as const)('names the %s refusal in words', async (Typed, status, code) => {
+      enableHa.mockRejectedValue(new Typed(code, status, 'x', 'https://cloud', new Headers(), JSON.stringify({ detail: { error: code } })));
+      const out = await foundDelegatedNamespace(session({ executorAccount: EXECUTOR }));
+      expect(out.haEnabled).toBe(false);
+      expect(out.haError).toBe(HA_REFUSAL_MESSAGES[code]);
+      expect(out.haError).not.toMatch(/HTTP \d{3}/);
+    });
+
+    it('says which namespace is pending when the cloud names it', async () => {
+      const blocking = 'ef'.repeat(32);
+      enableHa.mockRejectedValue(
+        new HaRequestPendingError('ha_request_pending', 409, 'Conflict', 'https://cloud', new Headers(),
+          JSON.stringify({ detail: { error: 'ha_request_pending', namespace_id: blocking } })),
+      );
+      const out = await foundDelegatedNamespace(session({ executorAccount: EXECUTOR }));
+      expect(out.haError).toContain(blocking);
     });
 
     it('reports a non-Error rejection and a plain HTTPError without throwing', async () => {

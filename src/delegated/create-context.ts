@@ -11,6 +11,7 @@
  * MANAGE_MEMBERS…), never the relay's; the relay only needs standing to act.
  */
 import {
+  AccountHaRefusedError,
   AccountNotLinkedError,
   CloudClient,
   memberAddedOp,
@@ -231,6 +232,31 @@ export const HA_ACCOUNT_NOT_LINKED_MESSAGE =
   'link this account to your cloud user in the wallet so invitees can find this namespace';
 
 /**
+ * What to tell a person for each refusal the cloud names, keyed by its code.
+ * Every one leaves the namespace founded; only hosting was refused.
+ */
+export const HA_REFUSAL_MESSAGES: Record<string, string> = {
+  account_not_linked: HA_ACCOUNT_NOT_LINKED_MESSAGE,
+  account_linked_to_several_users:
+    'this account is linked to more than one cloud user, so the cloud cannot tell whose plan hosts the namespace: unlink it from all but one in the wallet',
+  ha_request_pending:
+    "another namespace of this account is still waiting to be hosted; the cloud hosts one new namespace at a time without a cloud sign-in. Sign in to the cloud and turn off hosting for the waiting namespace, or wait until it is hosted",
+  unknown_relay: 'the cloud does not run the relay this namespace was founded on, so it cannot host it',
+  relay_not_dialable: 'the relay this namespace was founded on has not reported its address to the cloud yet; try enabling hosting again shortly',
+};
+
+/** The namespace the cloud says is blocking, when it names one. */
+function blockingNamespace(e: AccountHaRefusedError): string | null {
+  try {
+    const body = JSON.parse(e.bodyText ?? '') as { namespace_id?: unknown; detail?: { namespace_id?: unknown } };
+    const id = body?.detail?.namespace_id ?? body?.namespace_id;
+    return typeof id === 'string' && /^[0-9a-f]{64}$/i.test(id) ? id.toLowerCase() : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Ask the cloud to host a namespace this account just founded, with no cloud
  * session: the account proves it is the founder (its id and the salt reproduce
  * the namespace id) and the cloud bills the user it is linked to.
@@ -261,6 +287,11 @@ async function enableHaBestEffort(
     return { haEnabled: true };
   } catch (e) {
     if (e instanceof AccountNotLinkedError) return { haEnabled: false, haError: HA_ACCOUNT_NOT_LINKED_MESSAGE };
+    if (e instanceof AccountHaRefusedError && HA_REFUSAL_MESSAGES[e.code]) {
+      const blocking = e.code === 'ha_request_pending' ? blockingNamespace(e) : null;
+      const message = HA_REFUSAL_MESSAGES[e.code];
+      return { haEnabled: false, haError: blocking ? `${message} (waiting: ${blocking})` : message };
+    }
     return { haEnabled: false, haError: e instanceof Error ? e.message : String(e) };
   }
 }
