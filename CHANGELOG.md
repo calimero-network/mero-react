@@ -1,3 +1,9 @@
+## [9.7.1](https://github.com/calimero-network/mero-react/compare/mero-react-v9.7.0...mero-react-v9.7.1) (2026-10-03)
+
+### Bug Fixes
+
+* **account:** read dcap-qvl's verify through a CommonJS default export, so a hosted relay's key is learned and admin reads carry a session ([#87](https://github.com/calimero-network/mero-react/issues/87)) ([4fb7dbc](https://github.com/calimero-network/mero-react/commit/4fb7dbcc566d0949d1a01ccf49e0915b343de22e))
+
 ## [9.7.0](https://github.com/calimero-network/mero-react/compare/mero-react-v9.6.4...mero-react-v9.7.0) (2026-10-03)
 
 ### Features
