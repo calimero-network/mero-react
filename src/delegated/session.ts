@@ -319,6 +319,26 @@ const MIN_RELAY_RELEASE = '2.3.99';
 let loadedDcap: Promise<DcapVerify> | undefined;
 
 /**
+ * `verify` out of a dynamically imported `@phala/dcap-qvl`, whatever shape the
+ * bundler gave the module.
+ *
+ * The package is CommonJS (`module.exports = { verify, … }`). Node and Rollup
+ * expose its keys as named exports; a browser pre-bundle — Vite's dev optimizer
+ * among them — hands back a namespace whose only export is `default`. Reading
+ * only the named export there yields `undefined`, the quote check throws, no
+ * relay key is learned, and every admin read on a hosted relay goes out with no
+ * credential.
+ */
+function dcapVerifyFrom(mod: unknown): DcapVerify {
+  const ns = mod as { verify?: unknown; default?: { verify?: unknown } };
+  const verify = typeof ns.verify === 'function' ? ns.verify : ns.default?.verify;
+  if (typeof verify !== 'function') {
+    throw new TypeError('@phala/dcap-qvl loaded without a verify function');
+  }
+  return verify as DcapVerify;
+}
+
+/**
  * A verifier for a hosted relay's quote: the signed mero-tee release it says it
  * runs (fetched from the public mirror, trusted only for its signature), Intel's
  * chain, and all five registers of that release's image.
@@ -330,7 +350,7 @@ let loadedDcap: Promise<DcapVerify> | undefined;
 function relayQuoteVerifier(relayUrl: string): VerifyTransportQuote {
   const verify: VerifyTransportQuote = async (attestation) => {
     loadedDcap ??= import('@phala/dcap-qvl').then(
-      ({ verify: dcapVerify }) => dcapVerify as DcapVerify,
+      (mod) => dcapVerifyFrom(mod),
       (error: unknown) => {
         loadedDcap = undefined;
         throw error;
