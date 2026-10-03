@@ -16,10 +16,12 @@ import {
   HTTPError,
 } from '@calimero-network/mero-js';
 import { AppMode } from '../types';
+import { CloudClient } from '@calimero-network/mero-js';
 import type { AdminApiClient, AuthCallbackResult, MeroClient, TokenStore } from '@calimero-network/mero-js';
 import { createNodeAdmin } from '../admin/node-admin';
 import { createAccountAdmin } from '../delegated/account-admin';
 import { joinAsAccount } from '../delegated/join-as-account';
+import { foundDelegatedNamespace } from '../delegated/create-context';
 import { resolveTrustedNodeUrl } from '../auth/node-trust';
 import { resolveTokenAdoption } from '../auth/token-adoption';
 import {
@@ -672,6 +674,15 @@ export function MeroProvider({
       const deps = {
         join: (namespaceId: string, invitation: Parameters<typeof joinAsAccount>[2]) =>
           joinAsAccount(delegated, namespaceId, invitation, { cloudBaseUrl, onJoined: connectWithAccount }),
+        // Founding enables HA on the same cloud the joins resolve relays from.
+        found: (session: Parameters<typeof foundDelegatedNamespace>[0], req: Parameters<typeof foundDelegatedNamespace>[1]) =>
+          foundDelegatedNamespace(session, req, { cloudBaseUrl }),
+        // Invitations are checked against the routing their claimants will use.
+        routing: (namespaceId: string) =>
+          new CloudClient({
+            cloudBaseUrl,
+            routingCredential: { credential: delegated.credential, deviceSecret: delegated.deviceSecret },
+          }).getNamespaceRouting(namespaceId),
       };
       if (delegated.relayUrl === null) return createAccountAdmin({ session: delegated, read: null, app }, deps);
       if (!mero) return null;

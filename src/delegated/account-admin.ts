@@ -36,6 +36,31 @@ export class NoRelayError extends Error {
   }
 }
 
+/**
+ * Why an account's invitation was not minted: nobody its claimant could reach
+ * would admit them. A claimant with no node finds its admitter through the
+ * cloud's routing, intersected with the invitation's signed admitters, so an
+ * invitation the cloud routes to none of them can only fail in their hands.
+ *
+ * - `not-hosted` — the cloud serves the namespace on no node: HA was never
+ *   enabled for it (not linked in the wallet, quota, or founding not attested).
+ * - `no-named-node` — the cloud's nodes are not among the admitters this
+ *   invitation would name.
+ */
+export class InvitationNotClaimableError extends Error {
+  constructor(
+    readonly namespaceId: string,
+    readonly reason: 'not-hosted' | 'no-named-node',
+  ) {
+    super(
+      reason === 'not-hosted'
+        ? `nobody could claim an invitation to ${namespaceId} yet: the namespace is not hosted in the cloud, so an invitee with no node has no relay to be admitted through. Link this account to your cloud user in the wallet and enable HA for the namespace, then invite.`
+        : `nobody could claim an invitation to ${namespaceId}: the cloud routes to none of the relays or admins it would name as admitters`,
+    );
+    this.name = 'InvitationNotClaimableError';
+  }
+}
+
 /** What an account with no relay answers: it is a member of nothing. */
 const EMPTY_READS: Partial<Record<keyof AdminApiClient, () => Promise<unknown>>> = {
   listNamespaces: async () => [],
@@ -56,6 +81,13 @@ export interface AccountAdminDeps {
    * refused by name. Rejects with the refusal's reason and HTTP `status`.
    */
   join?: (namespaceId: string, invitation: SignedGroupOpenInvitation) => Promise<{ namespaceId: string }>;
+  /**
+   * The cloud's routing for a namespace (`CloudClient.getNamespaceRouting`):
+   * the nodes a node-less invitee can be admitted through. Given, an
+   * invitation is minted only if one of them is an admitter it names; a lookup
+   * that fails does not block minting. The provider supplies it.
+   */
+  routing?: (namespaceId: string) => Promise<{ nodes: ReadonlyArray<{ account: string | null }> }>;
 }
 
 /**
@@ -118,6 +150,7 @@ export function createAccountAdmin(
   const latestVersion = deps.latestVersion ?? latestPublishedVersion;
   const signInvitation = deps.signInvitation ?? signGroupInvitation;
   const join = deps.join;
+  const routing = deps.routing;
 
   // Reachable with or without a relay: the join is how an account gets one.
   async function joinNamespace(namespaceId: string, req: { invitation: SignedGroupOpenInvitation }) {
@@ -182,12 +215,14 @@ export function createAccountAdmin(
     async createNamespace(req: { applicationId: string; name?: string }) {
       if (!app.packageName) throw new NotForAccountError('createNamespace without a packageName');
       const version = app.packageVersion ?? (await latestVersion(app.registryUrl ?? 'https://apps.calimero.network', app.packageName));
-      const { namespaceId } = await found(s, {
+      const { namespaceId, haEnabled, haError } = await found(s, {
         defaultCapabilities: 231,
         application: { applicationId: req.applicationId, package: app.packageName, version },
       });
       if (req.name) await group(s, namespaceId, groupMetadataSetOp({ name: req.name }));
-      return { namespaceId };
+      // A node's result is `{ namespaceId }`; HA's outcome rides along as extra
+      // fields, so code typed against the node call is unaffected.
+      return { namespaceId, haEnabled, ...(haError !== undefined ? { haError } : {}) };
     },
     async createGroupInNamespace(namespaceId: string, req: { groupName?: string; visibility?: 'open' | 'restricted' } = {}) {
       const { op } = await subgroupCreation({ parentId: namespaceId, restricted: req.visibility !== 'open', admin: s.account });
@@ -262,6 +297,27 @@ export function createAccountAdmin(
       const relays = members
         .filter((m) => m.role === 'RelayTee')
         .map((m) => m.identity.toLowerCase());
+      if (routing) {
+        // Who the claimant's client will look for: the admitters this
+        // invitation names (the relays, else signGroupInvitation's admins).
+        const named = new Set(
+          relays.length > 0
+            ? relays
+            : members.filter((m) => m.role === 'Admin').map((m) => m.identity.toLowerCase()),
+        );
+        let nodes: ReadonlyArray<{ account: string | null }> | null = null;
+        try {
+          nodes = (await routing(namespaceId)).nodes;
+        } catch {
+          // Nothing learned: the claimant's own lookup will say what is wrong.
+        }
+        if (nodes !== null) {
+          if (nodes.length === 0) throw new InvitationNotClaimableError(namespaceId, 'not-hosted');
+          if (!nodes.some((n) => n.account !== null && named.has(n.account.toLowerCase()))) {
+            throw new InvitationNotClaimableError(namespaceId, 'no-named-node');
+          }
+        }
+      }
       const invitation = await signInvitation({
         groupId: namespaceId,
         inviterAccount: s.account,

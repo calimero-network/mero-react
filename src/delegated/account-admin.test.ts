@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { contextDetachedOp, memberJoinedOpenOp, memberRoleSetOp } from '@calimero-network/mero-js';
-import { createAccountAdmin, NoRelayError, NotForAccountError } from './account-admin';
+import { createAccountAdmin, InvitationNotClaimableError, NoRelayError, NotForAccountError } from './account-admin';
 import { namespaceOfGroup } from './govern';
 
 const S = { account: 'aa'.repeat(32), credential: 'cc', deviceSecret: '11'.repeat(32), relayUrl: 'http://relay' };
@@ -11,7 +11,7 @@ const DIRECT_MEMBER_REFUSAL = Object.assign(
 );
 const NS = '01'.repeat(32), SUB = '02'.repeat(32), CTX = '03'.repeat(32), ME = S.account, BOB = 'bb'.repeat(32);
 
-function rig() {
+function rig(extra: Record<string, unknown> = {}) {
   const govern = {
     group: vi.fn(async (_s, groupId: string) => ({ groupId })),
     root: vi.fn(async (_s, _groupId: string) => ({ groupId: SUB })),
@@ -31,9 +31,14 @@ function rig() {
     join,
     govern,
     createContext: vi.fn(async () => ({ contextId: CTX })),
-    found: vi.fn(async () => ({ namespaceId: NS, teeEnabled: true })),
+    found: vi.fn(async (): Promise<{ namespaceId: string; teeEnabled: boolean; haEnabled: boolean; haError?: string }> => ({
+      namespaceId: NS,
+      teeEnabled: true,
+      haEnabled: true,
+    })),
     latestVersion: vi.fn(async () => '1.2.3'),
     signInvitation: vi.fn(async () => ({ invitation: { group_id: NS }, inviter_signature: 'sig' })),
+    ...extra,
   };
   const admin = createAccountAdmin(
     { session: S, read: read as never, app: { packageName: 'com.calimero.chat', registryUrl: 'https://reg' } },
@@ -170,6 +175,17 @@ describe('createAccountAdmin', () => {
     expect(deps.found).toHaveBeenCalledWith(S, expect.objectContaining({ application: { applicationId: 'ap'.repeat(32), package: 'com.calimero.chat', version: '1.2.3' } }));
   });
 
+  it("carries founding's HA outcome as extra fields on createNamespace's result", async () => {
+    const { admin, deps } = rig();
+    await expect(admin.createNamespace({ applicationId: 'ap'.repeat(32) })).resolves.toEqual({ namespaceId: NS, haEnabled: true });
+    deps.found.mockResolvedValueOnce({ namespaceId: NS, teeEnabled: true, haEnabled: false, haError: 'link it' });
+    await expect(admin.createNamespace({ applicationId: 'ap'.repeat(32), name: 'Team' })).resolves.toEqual({
+      namespaceId: NS,
+      haEnabled: false,
+      haError: 'link it',
+    });
+  });
+
   it("signs an invitation itself, defaulting the admitters to the group's members", async () => {
     const { admin, deps, read } = rig();
     const out = await admin.createNamespaceInvitation(NS);
@@ -198,6 +214,69 @@ describe('createAccountAdmin', () => {
     await admin.createNamespaceInvitation(NS);
     const call = (deps.signInvitation.mock.calls[0] as unknown as [{ admitters?: string[] }])[0];
     expect(call.admitters ?? []).toEqual([]);
+  });
+
+  // An invitation is only worth handing out if its claimant can reach a node
+  // it names. A node-less joiner reaches nodes through the cloud's routing, so
+  // the account checks that routing BEFORE minting, with the same intersection
+  // the claimant's client will make.
+  describe('refusing an invitation nobody could claim', () => {
+    const RELAY = 'ee'.repeat(32);
+    const withRelay = (read: { listGroupMembers: { mockResolvedValueOnce: (v: never) => unknown } }) =>
+      read.listGroupMembers.mockResolvedValueOnce({
+        members: [
+          { identity: ME, role: 'Admin' },
+          { identity: RELAY, role: 'RelayTee' },
+        ],
+      } as never);
+
+    it('mints when the cloud routes to a node the invitation names', async () => {
+      const routing = vi.fn(async () => ({ nodes: [{ account: RELAY.toUpperCase() }] }));
+      const { admin, deps, read } = rig({ routing });
+      withRelay(read);
+      await expect(admin.createNamespaceInvitation(NS)).resolves.toMatchObject({ invitation: { inviter_signature: 'sig' } });
+      expect(routing).toHaveBeenCalledWith(NS);
+      expect(deps.signInvitation).toHaveBeenCalled();
+    });
+
+    it('refuses, without signing, when the cloud hosts the namespace on no node', async () => {
+      const routing = vi.fn(async () => ({ nodes: [] }));
+      const { admin, deps, read } = rig({ routing });
+      withRelay(read);
+      const err = await admin.createNamespaceInvitation(NS).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(InvitationNotClaimableError);
+      expect((err as InvitationNotClaimableError).reason).toBe('not-hosted');
+      expect((err as Error).message).toMatch(/not hosted/);
+      expect(deps.signInvitation).not.toHaveBeenCalled();
+    });
+
+    it('refuses when the cloud routes only to nodes the invitation would not name', async () => {
+      const routing = vi.fn(async () => ({ nodes: [{ account: BOB }, { account: null }] }));
+      const { admin, deps, read } = rig({ routing });
+      withRelay(read);
+      const err = await admin.createNamespaceInvitation(NS).catch((e: unknown) => e);
+      expect((err as InvitationNotClaimableError).reason).toBe('no-named-node');
+      expect(deps.signInvitation).not.toHaveBeenCalled();
+    });
+
+    it("checks the admins when the namespace has no relay (signGroupInvitation's default)", async () => {
+      const routing = vi.fn(async () => ({ nodes: [{ account: ME }] }));
+      const { admin, deps } = rig({ routing });
+      await admin.createNamespaceInvitation(NS);
+      expect(deps.signInvitation).toHaveBeenCalled();
+    });
+
+    // A failed lookup says nothing about the namespace: minting is not refused
+    // over a network blip, the claimant's own lookup will report it.
+    it('still mints when the routing lookup itself fails', async () => {
+      const routing = vi.fn(async () => {
+        throw new Error('offline');
+      });
+      const { admin, deps, read } = rig({ routing });
+      withRelay(read);
+      await admin.createNamespaceInvitation(NS);
+      expect(deps.signInvitation).toHaveBeenCalled();
+    });
   });
 
   it('a node-only write is refused by name, never sent to a node route', async () => {

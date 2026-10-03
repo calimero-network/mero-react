@@ -1466,7 +1466,7 @@ export function useNamespacesForApplication(applicationId?: string | null) {
 const DEFAULT_REGISTRY_URL = 'https://apps.calimero.network';
 
 export function useCreateNamespace() {
-  const { mero, isDelegated, app } = useMero();
+  const { mero, isDelegated, app, cloudBaseUrl } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const createNamespace = useCallback(
@@ -1487,16 +1487,20 @@ export function useCreateNamespace() {
             throw new Error('this app names no registry package, so a founded namespace could not be given its application');
           }
           const version = app.packageVersion ?? (await latestPublishedVersion(app.registryUrl ?? DEFAULT_REGISTRY_URL, pkg));
-          return foundDelegatedNamespace(session, {
-            defaultCapabilities: 231,
-            application: { applicationId: request.applicationId, package: pkg, version },
-          });
+          return foundDelegatedNamespace(
+            session,
+            {
+              defaultCapabilities: 231,
+              application: { applicationId: request.applicationId, package: pkg, version },
+            },
+            { cloudBaseUrl },
+          );
         });
       }
       if (!mero) return null;
       return run(() => mero.admin.createNamespace(request));
     },
-    [mero, run, isDelegated, app],
+    [mero, run, isDelegated, app, cloudBaseUrl],
   );
 
   return { createNamespace, loading, error };
