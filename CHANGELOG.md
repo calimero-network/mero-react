@@ -1,3 +1,9 @@
+## [9.9.0](https://github.com/calimero-network/mero-react/compare/mero-react-v9.8.1...mero-react-v9.9.0) (2026-10-04)
+
+### Features
+
+* **delegated:** enrol onto the relay the cloud assigns, with its executor account ([#90](https://github.com/calimero-network/mero-react/issues/90)) ([d9541e9](https://github.com/calimero-network/mero-react/commit/d9541e99ddbfb3efa9a1595d48bcd02ac61504ea))
+
 ## [9.8.1](https://github.com/calimero-network/mero-react/compare/mero-react-v9.8.0...mero-react-v9.8.1) (2026-10-03)
 
 ### Bug Fixes
