@@ -1,3 +1,9 @@
+## [9.9.1](https://github.com/calimero-network/mero-react/compare/mero-react-v9.9.0...mero-react-v9.9.1) (2026-10-04)
+
+### Bug Fixes
+
+* **delegated:** wait out a relay key that could not be fetched instead of staying unsigned ([#91](https://github.com/calimero-network/mero-react/issues/91)) ([b94afab](https://github.com/calimero-network/mero-react/commit/b94afabfeff6bb5c79e203553c33c4ec2639fd94))
+
 ## [9.9.0](https://github.com/calimero-network/mero-react/compare/mero-react-v9.8.1...mero-react-v9.9.0) (2026-10-04)
 
 ### Features
