@@ -1,6 +1,6 @@
 import type { SignedGroupOpenInvitation } from '@calimero-network/mero-js';
 import { bootstrapFromInvitation } from './bootstrap-from-invitation';
-import { rememberRelay, type DelegatedSession } from './session';
+import { carryExecutorAccount, rememberRelay, type DelegatedSession } from './session';
 
 /**
  * Redeem an invitation for an account, the way `useDelegatedBootstrap` does:
@@ -39,6 +39,6 @@ export async function joinAsAccount(
     });
   }
   if (outcome.session.relayUrl) rememberRelay(session.account, outcome.session.relayUrl, { namespaceId });
-  opts.onJoined(outcome.session);
+  opts.onJoined(carryExecutorAccount(session, outcome.session));
   return { namespaceId };
 }

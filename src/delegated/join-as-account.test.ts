@@ -48,4 +48,27 @@ describe('joinAsAccount', () => {
     });
     expect(onJoined).not.toHaveBeenCalled();
   });
+
+  it("keeps the session's executor when the join lands on the same relay", async () => {
+    const EXECUTOR = '6a'.repeat(32);
+    const before = { ...S, relayUrl: 'https://relay.example', executorAccount: EXECUTOR };
+    const joined = { ...S, relayUrl: 'https://relay.example/' };
+    const bootstrap = vi.fn(async () => ({ ok: true as const, session: joined }));
+    const onJoined = vi.fn();
+
+    await joinAsAccount(before, NS, INVITATION, { onJoined, bootstrap: bootstrap as never });
+
+    expect(onJoined).toHaveBeenCalledWith({ ...joined, executorAccount: EXECUTOR });
+  });
+
+  it('drops the executor when the join moves the session to another relay', async () => {
+    const before = { ...S, relayUrl: 'https://relay.example', executorAccount: '6a'.repeat(32) };
+    const joined = { ...S, relayUrl: 'https://other.example' };
+    const bootstrap = vi.fn(async () => ({ ok: true as const, session: joined }));
+    const onJoined = vi.fn();
+
+    await joinAsAccount(before, NS, INVITATION, { onJoined, bootstrap: bootstrap as never });
+
+    expect(onJoined).toHaveBeenCalledWith(joined);
+  });
 });

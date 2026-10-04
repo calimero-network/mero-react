@@ -556,6 +556,23 @@ export function relayForContext(account: string, contextId: string): string | nu
   return readRelayMap(account).contexts[contextId] ?? null;
 }
 
+/**
+ * A session moving to `next`, keeping the relay's executor account the previous
+ * one knew when both are the same relay.
+ *
+ * A join hands back a session built from the admitting node alone, which has no
+ * executor on it. When that node is the relay the account was already on — the
+ * one the cloud assigned it, say — dropping the executor would cost nothing
+ * today (the joined namespace can answer for it) but leaves the session knowing
+ * less than it did. On a different relay the old executor is the wrong account,
+ * so it is left behind.
+ */
+export function carryExecutorAccount(prev: DelegatedSession | null, next: DelegatedSession): DelegatedSession {
+  if (next.executorAccount || !prev?.executorAccount || !prev.relayUrl || !next.relayUrl) return next;
+  if (relayOrigin(prev.relayUrl) !== relayOrigin(next.relayUrl)) return next;
+  return { ...next, executorAccount: prev.executorAccount };
+}
+
 /** Every relay this account is known to use: the session's, and each in the map. */
 export function knownRelays(s: DelegatedSession): string[] {
   const map = readRelayMap(s.account);
