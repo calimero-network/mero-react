@@ -20,6 +20,7 @@ import {
   type BootstrapResult,
 } from './bootstrap-from-invitation';
 import {
+  carryExecutorAccount,
   readDelegatedCredential,
   readDelegatedSession,
   rememberRelay,
@@ -140,7 +141,7 @@ export function useDelegatedBootstrap(
               contextId: input.contextId,
             });
           }
-          connectWithAccount(outcome.session);
+          connectWithAccount(carryExecutorAccount(readDelegatedSession(), outcome.session));
         }
         return outcome;
       } finally {

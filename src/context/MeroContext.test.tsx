@@ -45,7 +45,7 @@ import {
   HTTPError,
 } from '@calimero-network/mero-js';
 import type { TokenStore } from '@calimero-network/mero-js';
-import { saveDelegatedSession } from '../delegated/session';
+import { readDelegatedSession, saveDelegatedSession } from '../delegated/session';
 
 const meroMock = vi.mocked(MeroJs);
 const mockParseAuthCallback = vi.mocked(parseAuthCallback);
@@ -843,4 +843,30 @@ describe('MeroProvider — admin and can, per session', () => {
     await expect(seen!.admin!.listNamespaces()).resolves.toEqual([]);
     await expect(seen!.admin!.getNodeIdentity()).resolves.toMatchObject({ accountId: account });
   });
+
+  it("connecting an account keeps the relay's executor on the session, through a reload", async () => {
+    sessionStorage.clear();
+    const account = 'aa'.repeat(32);
+    const executorAccount = '6a'.repeat(32);
+    render(
+      <MeroProvider mode={AppMode.MultiContext} packageName="com.calimero.chat">
+        <Capture />
+      </MeroProvider>,
+    );
+    await settled();
+
+    act(() => {
+      seen!.connectWithAccount({
+        account,
+        credential: 'cc',
+        deviceSecret: '11'.repeat(32),
+        relayUrl: 'https://relay.example.com',
+        executorAccount,
+      });
+    });
+    await waitFor(() => expect(seen?.isDelegated).toBe(true));
+
+    expect(readDelegatedSession()).toMatchObject({ relayUrl: 'https://relay.example.com', executorAccount });
+  });
 });
+

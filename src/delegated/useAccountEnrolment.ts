@@ -47,6 +47,26 @@ const hex = (b: ArrayBuffer | Uint8Array): string =>
   [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, '0')).join('');
 
 /**
+ * The relay's own account, as the cloud names it beside the relay — the
+ * executor a founding warrant must name.
+ *
+ * It is what lets a brand-new account found a namespace on the relay the cloud
+ * just assigned it, with nothing typed in: a namespace that does not exist yet
+ * cannot be asked who its relay is, and the account is a member of nothing that
+ * could tell it. A server that does not name one (older ones omit the field)
+ * leaves it `null`, and founding falls back to learning it from a namespace the
+ * account is already in, as before.
+ *
+ * Read defensively, so this builds against a mero-js whose `CloudAccountRelay`
+ * does not declare the field yet; mero-js already drops anything that is not
+ * 64 lowercase hex, and this re-checks it rather than trusting the type.
+ */
+function executorOf(relay: CloudAccountRelay): string | null {
+  const value = (relay as { executorAccount?: unknown }).executorAccount;
+  return typeof value === 'string' && /^[0-9a-f]{64}$/.test(value) ? value : null;
+}
+
+/**
  * Which of the account's relays to talk to, and what to say about it.
  *
  * Four outcomes, and the connection is made in ALL of them — what differs is
@@ -73,19 +93,26 @@ const hex = (b: ArrayBuffer | Uint8Array): string =>
  * Nothing is faked to achieve it. The session carries `relayUrl: null`, so no
  * client is built, `mero` stays `null`, and a write is told the relay is
  * missing rather than being sent to a guess.
+ *
+ * A current cloud assigns a relay to an account that has none on this very
+ * read, so "no rows at all" is now mostly an older server's answer. The chosen
+ * relay's `executorAccount` comes back with it, so the session can found a
+ * namespace there straight away.
  */
 function chooseRelay(relays: readonly CloudAccountRelay[]): {
   relayUrl: string | null;
+  executorAccount: string | null;
   note: string | null;
 } {
   const reachable = relays.filter(
     (r): r is CloudAccountRelay & { relayUrl: string } => typeof r.relayUrl === 'string' && r.relayUrl.length > 0,
   );
   const fresh = reachable.find((r) => r.fresh);
-  if (fresh) return { relayUrl: fresh.relayUrl, note: null };
+  if (fresh) return { relayUrl: fresh.relayUrl, executorAccount: executorOf(fresh), note: null };
   if (reachable.length > 0) {
     return {
       relayUrl: reachable[0].relayUrl,
+      executorAccount: executorOf(reachable[0]),
       note:
         'Connected through a relay whose last heartbeat has lapsed — it may not answer. It was ' +
         'the only one with an address.',
@@ -94,6 +121,7 @@ function chooseRelay(relays: readonly CloudAccountRelay[]): {
   if (relays.length > 0) {
     return {
       relayUrl: null,
+      executorAccount: null,
       note:
         `Signed in. Your account has ${relays.length} relay${relays.length === 1 ? '' : 's'} ` +
         'assigned, but the cloud knows no address for any of them yet, so there is nowhere to ' +
@@ -102,6 +130,7 @@ function chooseRelay(relays: readonly CloudAccountRelay[]): {
   }
   return {
     relayUrl: null,
+    executorAccount: null,
     note:
       'Signed in, with nowhere to write yet: a new account is a member of nothing, so no node ' +
       'serves it. Redeeming an invitation admits this account to a namespace and gives it a ' +
@@ -366,11 +395,16 @@ export function useAccountEnrolment({
         // consumed, so abandoning here would strand a credential that cannot be
         // read again. The context outlives this component, so installing the
         // connection after a StrictMode teardown is correct.
+        // The relay's executor rides along when the cloud named one, so a
+        // brand-new account can found a namespace on it with no join first.
+        // Left off entirely otherwise, so an older server's session is the
+        // same record it always was.
         connectWithAccount({
           relayUrl: chosen.relayUrl,
           account: enrolled.account,
           credential: enrolled.credential,
           deviceSecret: keys.signSk,
+          ...(chosen.executorAccount ? { executorAccount: chosen.executorAccount } : {}),
         });
       } catch (e) {
         if (!cancelled) setNote(e instanceof Error ? e.message : String(e));

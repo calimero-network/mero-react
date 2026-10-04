@@ -3,20 +3,24 @@ import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 
-const { readEnrolmentCallback, completeDeviceEnrolment, getAccountRelays } = vi.hoisted(() => ({
+const { readEnrolmentCallback, completeDeviceEnrolment, getAccountRelays, enableHaAsAccount } = vi.hoisted(() => ({
   readEnrolmentCallback: vi.fn(),
   completeDeviceEnrolment: vi.fn(),
   getAccountRelays: vi.fn(),
+  enableHaAsAccount: vi.fn(),
 }));
 vi.mock('@calimero-network/mero-js', async (orig) => ({
   ...(await orig<typeof import('@calimero-network/mero-js')>()),
   readEnrolmentCallback,
   completeDeviceEnrolment,
-  CloudClient: vi.fn(() => ({ getAccountRelays })),
+  CloudClient: vi.fn(() => ({ getAccountRelays, enableHaAsAccount })),
 }));
 
+import { RelayClient } from '@calimero-network/mero-js';
 import { MeroContext } from '../context';
 import { useAccountEnrolment } from './useAccountEnrolment';
+import { foundDelegatedNamespace } from './create-context';
+import { readDelegatedSession, saveDelegatedSession, type DelegatedSession } from './session';
 
 const connectWithAccount = vi.fn();
 function wrapper({ children }: { children: React.ReactNode }) {
@@ -32,6 +36,7 @@ beforeEach(() => {
   readEnrolmentCallback.mockReset();
   completeDeviceEnrolment.mockReset();
   getAccountRelays.mockReset();
+  enableHaAsAccount.mockReset();
   connectWithAccount.mockReset();
 });
 afterEach(() => vi.clearAllMocks());
@@ -153,5 +158,92 @@ describe('useAccountEnrolment', () => {
     } finally {
       generateKey.mockRestore();
     }
+  });
+
+  describe('a relay the cloud assigned', () => {
+    const ACCOUNT = 'ee'.repeat(32);
+    const EXECUTOR = '6a'.repeat(32);
+    const RELAY = 'https://relay.example';
+
+    /** Enrol with `rows` as the cloud's relay answer; resolve with the session connected. */
+    async function enrol(rows: unknown[]): Promise<DelegatedSession> {
+      localStorage.setItem('calimero.device', JSON.stringify(KEYS));
+      sessionStorage.setItem('calimero.enrol.state', 's');
+      readEnrolmentCallback.mockReturnValue({ state: 's' });
+      completeDeviceEnrolment.mockResolvedValue({ account: ACCOUNT, credential: 'cred' });
+      getAccountRelays.mockResolvedValue(rows);
+      renderHook(() => useAccountEnrolment(), { wrapper });
+      await waitFor(() => expect(connectWithAccount).toHaveBeenCalledTimes(1));
+      return connectWithAccount.mock.calls[0][0] as DelegatedSession;
+    }
+
+    it("connects on it with the relay's executor account", async () => {
+      const session = await enrol([
+        { peerId: 'p', relayUrl: RELAY, fresh: true, executorAccount: EXECUTOR, assigned: true },
+      ]);
+      expect(session).toEqual({
+        relayUrl: RELAY,
+        executorAccount: EXECUTOR,
+        account: ACCOUNT,
+        credential: 'cred',
+        deviceSecret: KEYS.signSk,
+      });
+    });
+
+    it('keeps the executor of a relay whose heartbeat lapsed, when it is the only one', async () => {
+      const session = await enrol([
+        { peerId: 'p', relayUrl: RELAY, fresh: false, executorAccount: EXECUTOR, assigned: true },
+      ]);
+      expect(session).toMatchObject({ relayUrl: RELAY, executorAccount: EXECUTOR });
+    });
+
+    it('takes the executor of the relay it chose, not of another row', async () => {
+      const session = await enrol([
+        { peerId: 'a', relayUrl: 'https://stale.example', fresh: false, executorAccount: 'ab'.repeat(32), assigned: false },
+        { peerId: 'b', relayUrl: RELAY, fresh: true, executorAccount: EXECUTOR, assigned: false },
+      ]);
+      expect(session).toMatchObject({ relayUrl: RELAY, executorAccount: EXECUTOR });
+    });
+
+    it('founds a namespace on it straight away, with no namespace joined first', async () => {
+      const founded = vi
+        .spyOn(RelayClient.prototype, 'foundNamespace')
+        .mockResolvedValue({ namespaceId: 'ab'.repeat(32), salt: 'cd'.repeat(32), teeEnabled: true } as never);
+      const describeGovernance = vi.spyOn(RelayClient.prototype, 'describeGovernance');
+      enableHaAsAccount.mockResolvedValue({ status: 'enabled' });
+      try {
+        const session = await enrol([
+          { peerId: 'p', relayUrl: RELAY, fresh: true, executorAccount: EXECUTOR, assigned: true },
+        ]);
+        // Through storage, as `connectWithAccount` persists it and a reload restores it.
+        saveDelegatedSession(session);
+        const restored = readDelegatedSession()!;
+        expect(restored.executorAccount).toBe(EXECUTOR);
+        // Nothing joined: the account's relay map is empty.
+        expect(localStorage.getItem(`calimero.delegated.relays.${ACCOUNT}`)).toBeNull();
+
+        await expect(foundDelegatedNamespace(restored)).resolves.toMatchObject({
+          namespaceId: 'ab'.repeat(32),
+          haEnabled: true,
+        });
+        expect(founded).toHaveBeenCalledWith(expect.objectContaining({ executorAccount: EXECUTOR }));
+        expect(describeGovernance).not.toHaveBeenCalled();
+      } finally {
+        founded.mockRestore();
+        describeGovernance.mockRestore();
+      }
+    });
+
+    // An older server names no executor: the session is the record it always
+    // was, and founding still asks for a namespace on the relay first.
+    it.each([
+      ['omits the field', {}],
+      ['sends null', { executorAccount: null }],
+      ['sends something that is not an account', { executorAccount: 'NOT-HEX' }],
+    ])('an old-server row that %s connects as before', async (_label, extra) => {
+      const session = await enrol([{ peerId: 'p', relayUrl: RELAY, fresh: true, ...extra }]);
+      expect(session).toEqual({ relayUrl: RELAY, account: ACCOUNT, credential: 'cred', deviceSecret: KEYS.signSk });
+      await expect(foundDelegatedNamespace(session)).rejects.toThrow(/executor account/);
+    });
   });
 });
