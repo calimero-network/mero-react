@@ -339,27 +339,89 @@ function dcapVerifyFrom(mod: unknown): DcapVerify {
 }
 
 /**
+ * Thrown by every step of learning a relay's key that only moves bytes: reading
+ * the release the relay names, fetching that release, loading the quote
+ * library, reaching the relay for its quote. Such a step failing says nothing
+ * about the relay's image, so the attempt is worth making again.
+ *
+ * Anything else thrown while learning the key is the verification itself
+ * saying no, and that is final.
+ */
+class RelayKeyTransportError extends Error {
+  constructor(readonly step: string, readonly cause: unknown) {
+    super(`${step}: ${cause instanceof Error ? cause.message : String(cause)}`);
+    this.name = 'RelayKeyTransportError';
+  }
+}
+
+/** `step` run so that whatever it throws is a transport failure. */
+async function transport<T>(step: string, run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (e) {
+    throw e instanceof RelayKeyTransportError ? e : new RelayKeyTransportError(step, e);
+  }
+}
+
+/**
+ * `fetch` for the relay's own endpoints, failing as transport on no answer or
+ * a non-2xx one. The response is still handed back on a non-2xx status — the
+ * caller's own reading of it stays what it was — but the attempt is marked, so
+ * whatever the caller then throws about it is read as transport too.
+ */
+function relayFetch(marked: { failure: unknown }): typeof fetch {
+  return async (input, init) => {
+    let response: Response;
+    try {
+      response = await globalThis.fetch(input, init);
+    } catch (e) {
+      marked.failure = e;
+      throw new RelayKeyTransportError(`reaching ${String(input)}`, e);
+    }
+    if (!response.ok) marked.failure ??= new Error(`${String(input)} answered HTTP ${response.status}`);
+    return response;
+  };
+}
+
+/**
  * A verifier for a hosted relay's quote: the signed mero-tee release it says it
  * runs (fetched from the public mirror, trusted only for its signature), Intel's
  * chain, and all five registers of that release's image.
+ *
+ * The cloud's mirror is the only source a browser can read. The same two files
+ * are assets of the mero-tee GitHub release, but GitHub serves release assets
+ * from `release-assets.githubusercontent.com` with no CORS header (and
+ * `github.com/.../releases/download` redirects there with none either), so a
+ * page cannot read them. A mirror that does not answer is therefore waited out
+ * by the caller ({@link learnRelayNodeKey}) rather than routed around.
  *
  * `@phala/dcap-qvl` is loaded on the first quote it checks: it is most of the
  * weight, and an app that never meets a real relay never needs it. A failed
  * download is forgotten, so the next attempt tries again.
  */
-function relayQuoteVerifier(relayUrl: string): VerifyTransportQuote {
+function relayQuoteVerifier(relayUrl: string, fetchRelay: typeof fetch): VerifyTransportQuote {
   const verify: VerifyTransportQuote = async (attestation) => {
-    loadedDcap ??= import('@phala/dcap-qvl').then(
-      (mod) => dcapVerifyFrom(mod),
-      (error: unknown) => {
-        loadedDcap = undefined;
-        throw error;
-      },
-    );
+    const dcapVerify = await transport('loading the quote verifier', () => {
+      loadedDcap ??= import('@phala/dcap-qvl').then(
+        (mod) => dcapVerifyFrom(mod),
+        (error: unknown) => {
+          loadedDcap = undefined;
+          throw error;
+        },
+      );
+      return loadedDcap;
+    });
     return createSignedReleaseVerifier({
-      dcapVerify: await loadedDcap,
-      release: async () =>
-        fetchNodeRelease(cloudNodeReleaseUrl(DEFAULT_RELEASE_MIRROR, await fetchNodeReleaseVersion(relayUrl))),
+      dcapVerify,
+      // Fetched only. Its signature, its version and the quote's registers are
+      // all checked by the verifier after this returns, and none of that is a
+      // transport question.
+      release: () =>
+        transport('fetching the release the relay runs', async () =>
+          fetchNodeRelease(
+            cloudNodeReleaseUrl(DEFAULT_RELEASE_MIRROR, await fetchNodeReleaseVersion(relayUrl, { fetch: fetchRelay })),
+          ),
+        ),
       profile: TRUSTED_RELAY_PROFILE,
       minReleaseVersion: MIN_RELAY_RELEASE,
     })(attestation);
@@ -367,9 +429,26 @@ function relayQuoteVerifier(relayUrl: string): VerifyTransportQuote {
   return Object.assign(verify, { includeCollateral: true as const });
 }
 
-export async function resolveRelayNodeKey(relayUrl: string): Promise<string | null> {
+/**
+ * One attempt at a relay's node key, and what became of it:
+ *
+ * - `learned`: verified (or already pinned), and pinned now;
+ * - `unavailable`: something on the way did not answer — the relay, the release
+ *   mirror, the quote library's download. Nothing was decided; try again.
+ * - `refused`: the relay answered and its proof did not hold — a quote that is
+ *   not of a trusted image, not bound to this request, a mock from a hosted
+ *   relay. Trying again cannot change that answer into a yes, and must not.
+ */
+export type RelayNodeKeyAttempt =
+  | { kind: 'learned'; nodeKey: string }
+  | { kind: 'unavailable'; error: unknown }
+  | { kind: 'refused'; error: unknown };
+
+export async function attemptRelayNodeKey(relayUrl: string): Promise<RelayNodeKeyAttempt> {
   const pinned = readPinnedRelayNodeKey(relayUrl);
-  if (pinned) return pinned;
+  if (pinned) return { kind: 'learned', nodeKey: pinned };
+  const marked: { failure: unknown } = { failure: null };
+  const fetchRelay = relayFetch(marked);
   try {
     // A loopback relay is a dev rig answering with mock quotes; anything else
     // must prove its image.
@@ -377,14 +456,80 @@ export async function resolveRelayNodeKey(relayUrl: string): Promise<string | nu
     const { nodeKey } = await attestRelayNodeKey({
       relayUrl,
       allowMock: local,
-      ...(local ? {} : { verify: relayQuoteVerifier(relayUrl) }),
+      fetch: fetchRelay,
+      ...(local ? {} : { verify: relayQuoteVerifier(relayUrl, fetchRelay) }),
     });
     pinRelayNodeKey(relayUrl, nodeKey);
-    return nodeKey;
+    return { kind: 'learned', nodeKey };
   } catch (e) {
-    console.warn('[mero-react] could not learn the relay node key from its attestation', e);
-    return null;
+    if (e instanceof RelayKeyTransportError || marked.failure) return { kind: 'unavailable', error: e };
+    return { kind: 'refused', error: e };
   }
+}
+
+/**
+ * The relay's node key: the pinned one, or else learned from the relay's TEE
+ * attestation in one attempt; `null` when that attempt did not learn it, for
+ * whatever reason. Callers that must end up with the key use
+ * {@link learnRelayNodeKey}.
+ */
+export async function resolveRelayNodeKey(relayUrl: string): Promise<string | null> {
+  const attempt = await attemptRelayNodeKey(relayUrl);
+  if (attempt.kind === 'learned') return attempt.nodeKey;
+  console.warn('[mero-react] could not learn the relay node key from its attestation', attempt.error);
+  return null;
+}
+
+/**
+ * How long to wait before each retry of an unavailable relay key: quickly at
+ * first, for a blip or a cold cache, then every 30 s for as long as it takes.
+ */
+export const RELAY_NODE_KEY_RETRY_MS: readonly number[] = [1_000, 2_000, 5_000, 10_000, 30_000];
+
+function pause(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal?.aborted) return resolve();
+    const timer = setTimeout(done, ms);
+    function done() {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', done);
+      resolve();
+    }
+    signal?.addEventListener('abort', done);
+  });
+}
+
+/**
+ * The relay's node key, however long the way to it is down.
+ *
+ * One failed fetch of the release used to cost the whole session: no key, so no
+ * relay session, so every admin read and every event stream unauthenticated
+ * until a reload. A transport failure here is now waited out with backoff
+ * ({@link RELAY_NODE_KEY_RETRY_MS}) until the key is learned or `signal` aborts.
+ *
+ * A refusal ends it at once with `null`. A quote that did not verify is an
+ * answer, and asking again is not how it becomes a different one.
+ */
+export async function learnRelayNodeKey(
+  relayUrl: string,
+  options: { signal?: AbortSignal } = {},
+): Promise<string | null> {
+  const { signal } = options;
+  for (let failures = 0; !signal?.aborted; failures += 1) {
+    const attempt = await attemptRelayNodeKey(relayUrl);
+    if (attempt.kind === 'learned') return attempt.nodeKey;
+    if (attempt.kind === 'refused') {
+      console.warn("[mero-react] refusing the relay's attestation; its node key stays unknown", attempt.error);
+      return null;
+    }
+    const wait = RELAY_NODE_KEY_RETRY_MS[Math.min(failures, RELAY_NODE_KEY_RETRY_MS.length - 1)]!;
+    console.warn(
+      `[mero-react] could not reach what proves the relay's node key; retrying in ${wait / 1000} s`,
+      attempt.error,
+    );
+    await pause(wait, signal);
+  }
+  return null;
 }
 
 /** Milliseconds-since-epoch a JWT expires at, or `null` if unreadable. */

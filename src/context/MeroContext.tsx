@@ -46,8 +46,8 @@ import {
   readDelegatedSession,
   listDelegatedContexts,
   readPinnedRelayNodeKey,
+  learnRelayNodeKey,
   relayForContext,
-  resolveRelayNodeKey,
   saveDelegatedCredential,
   saveDelegatedSession,
   type DelegatedSession,
@@ -355,6 +355,7 @@ export function MeroProvider({
      * when the account's contexts change.
      */
     let active = true;
+    const stop = new AbortController();
     (async () => {
       // No relay, so no client and nothing to ask. A brand-new account is a
       // member of nothing — there are no contexts to derive an application from,
@@ -364,11 +365,20 @@ export function MeroProvider({
       // its node key. Pinned, or learned from the relay's attestation; learned
       // now, the client is rebuilt so its session and events use it too. With
       // neither, a hosted relay answers the proof-only path with 401: do not ask.
+      //
+      // Learning it can fail on the way — the release mirror timing out, the
+      // relay not answering — and one such failure used to leave the whole
+      // session unsigned: every read a 401 until a reload. So it is waited out,
+      // with backoff, and the client stays unpublished (and the session
+      // loading) meanwhile: handing the app a client now would only send its
+      // reads unsigned, to be refused as if the account had no access.
       if (awaitingKey) {
-        const nodeKey = await resolveRelayNodeKey(relayUrl);
+        const nodeKey = await learnRelayNodeKey(relayUrl, { signal: stop.signal });
         if (!active) return;
-        // Without a key the client still writes (intents carry their own
-        // warrant); only admin reads and events need the session it enables.
+        // `null` here is a refusal: the relay's quote did not verify, and asking
+        // again would get the same answer. The client still writes (intents
+        // carry their own warrant); only admin reads and events need the
+        // session a verified key enables, and those stay off.
         setMero(nodeKey ? (buildDelegatedClient(routed, contextId) ?? client) : client);
         setIsLoading(false);
         if (!nodeKey) return;
@@ -400,6 +410,7 @@ export function MeroProvider({
 
     return () => {
       active = false;
+      stop.abort();
       // `close` is a node-client concern; a relay client has nothing to tear
       // down, so do not reach for it.
     };

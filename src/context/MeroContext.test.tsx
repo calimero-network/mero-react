@@ -45,7 +45,7 @@ import {
   HTTPError,
 } from '@calimero-network/mero-js';
 import type { TokenStore } from '@calimero-network/mero-js';
-import { readDelegatedSession, saveDelegatedSession } from '../delegated/session';
+import { pinRelayNodeKey, readDelegatedSession, saveDelegatedSession } from '../delegated/session';
 
 const meroMock = vi.mocked(MeroJs);
 const mockParseAuthCallback = vi.mocked(parseAuthCallback);
@@ -811,14 +811,19 @@ describe('MeroProvider — admin and can, per session', () => {
   it('an account session gets the account admin, may invite and may not upgrade', async () => {
     const account = 'aa'.repeat(32);
     saveDelegatedSession({ account, credential: 'cc', deviceSecret: '11'.repeat(32), relayUrl: 'https://relay.example.com' });
+    // A relay whose node key is already known. One that is not is awaited until
+    // its key is learned (MeroContext.relay-key.test.tsx), and jsdom cannot
+    // reach this one to learn it.
+    pinRelayNodeKey('https://relay.example.com', 'cd'.repeat(32));
 
     render(
       <MeroProvider mode={AppMode.MultiContext} packageName="com.calimero.chat">
         <Capture />
       </MeroProvider>,
     );
-    // Not `settled()`: a delegated session's loading waits on the relay, which
-    // jsdom cannot reach. The admin exists as soon as the session is restored.
+    // Not `settled()`: the session's loading also waits on listing its contexts
+    // from the relay, which jsdom cannot reach. The admin exists as soon as the
+    // session is restored.
     await waitFor(() => expect(seen?.admin).toBeTruthy());
 
     expect(seen!.isDelegated).toBe(true);
