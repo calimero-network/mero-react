@@ -42,8 +42,10 @@ export class NoRelayError extends Error {
  * cloud's routing, intersected with the invitation's signed admitters, so an
  * invitation the cloud routes to none of them can only fail in their hands.
  *
- * - `not-hosted` — the cloud serves the namespace on no node: HA was never
- *   enabled for it (not linked in the wallet, quota, or founding not attested).
+ * - `not-hosted` — the cloud serves the namespace on no node AND no relay is a
+ *   member of it, so nothing admits a node-less claimant. A namespace with a
+ *   relay in it is minted for even when the cloud routes it nowhere: the relay
+ *   admits through its own `/admit`, and the invitation carries its address.
  * - `no-named-node` — the cloud's nodes are not among the admitters this
  *   invitation would name.
  */
@@ -54,7 +56,7 @@ export class InvitationNotClaimableError extends Error {
   ) {
     super(
       reason === 'not-hosted'
-        ? `nobody could claim an invitation to ${namespaceId} yet: the namespace is not hosted in the cloud, so an invitee with no node has no relay to be admitted through. Link this account to your cloud user in the wallet and enable HA for the namespace, then invite.`
+        ? `nobody could claim an invitation to ${namespaceId} yet: the namespace is not hosted in the cloud and has no relay in it, so an invitee with no node has no relay to be admitted through. Link this account to your cloud user in the wallet and enable HA for the namespace, then invite.`
         : `nobody could claim an invitation to ${namespaceId}: the cloud routes to none of the relays or admins it would name as admitters`,
     );
     this.name = 'InvitationNotClaimableError';
@@ -290,7 +292,10 @@ export function createAccountAdmin(
         serviceName: req.serviceName, contextSeed: req.contextSeed,
         name: req.name, initializationParams: req.initializationParams,
       });
-      return { contextId, memberPublicKey: '', groupId: req.groupId };
+      // The relay executes as the account, so the account is its member key
+      // here as it is in `joinContext` and `getContextIdentitiesOwned`. Apps
+      // record this key as the context's owner; an empty one was being stored.
+      return { contextId, memberPublicKey: s.account, groupId: req.groupId };
     },
     async createNamespaceInvitation(namespaceId: string) {
       const [{ members }, info] = await Promise.all([relay().listGroupMembers(namespaceId), relay().getGroupInfo(namespaceId)]);
@@ -300,6 +305,9 @@ export function createAccountAdmin(
       const relays = members
         .filter((m) => m.role === 'RelayTee')
         .map((m) => m.identity.toLowerCase());
+      // Where the claimant reaches an admitter when the cloud routes them to
+      // none: set only then, so a routed namespace stays the cloud's to route.
+      let admitterAddrs: string[] | undefined;
       if (routing) {
         // Who the claimant's client will look for: the admitters this
         // invitation names (the relays, else signGroupInvitation's admins).
@@ -315,8 +323,17 @@ export function createAccountAdmin(
           // Nothing learned: the claimant's own lookup will say what is wrong.
         }
         if (nodes !== null) {
-          if (nodes.length === 0) throw new InvitationNotClaimableError(namespaceId, 'not-hosted');
-          if (!nodes.some((n) => n.account !== null && named.has(n.account.toLowerCase()))) {
+          if (nodes.length === 0) {
+            // The cloud routes a namespace only once its founder has linked
+            // the account (HA). Unlinked, the namespace is still served by the
+            // relay that founded it and serves this session, a RelayTee
+            // member; its own `/admit` takes the join (measured on prod: 200,
+            // where the cloud's lookup answered no nodes). The claimant's
+            // client cannot find that relay through the cloud, so the
+            // invitation says where it is.
+            if (relays.length === 0 || !s.relayUrl) throw new InvitationNotClaimableError(namespaceId, 'not-hosted');
+            admitterAddrs = [s.relayUrl];
+          } else if (!nodes.some((n) => n.account !== null && named.has(n.account.toLowerCase()))) {
             throw new InvitationNotClaimableError(namespaceId, 'no-named-node');
           }
         }
@@ -326,6 +343,7 @@ export function createAccountAdmin(
         inviterAccount: s.account,
         deviceSecret: s.deviceSecret,
         ...(relays.length > 0 ? { admitters: relays } : {}),
+        ...(admitterAddrs ? { admitterAddrs } : {}),
         members: members as never,
         applicationId: (info as { targetApplicationId?: string }).targetApplicationId,
         appKey: (info as { appKey?: string }).appKey,

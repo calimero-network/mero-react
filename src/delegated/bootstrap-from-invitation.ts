@@ -26,7 +26,10 @@
  *    nothing to read off the invitation yet and this is the seam for when there
  *    is;
  * 2. the cloud's `/api/cloud/namespaces/{ns}/admitters`, intersected with the
- *    invitation's signed `admitters` — see `resolveRelayFromInvitation`.
+ *    invitation's signed `admitters` — see `resolveRelayFromInvitation`;
+ * 3. an http(s) origin in the invitation's `admitter_addrs`, when the cloud
+ *    routes the namespace to no node: the relay of a founder who never linked
+ *    the account writes its own origin there when it mints.
  *
  * # Nothing here is minted, weakened or worked around
  *
@@ -139,6 +142,7 @@ export async function bootstrapFromInvitation(
       // separately: two sources for one fact is how an intersection ends up
       // being performed against the wrong list.
       admitters: input.invitation.invitation.admitters,
+      admitterAddrs: input.invitation.admitter_addrs,
       credential: input.credential.credential,
       deviceSecret: input.credential.deviceSecret,
       cloudBaseUrl: input.cloudBaseUrl,

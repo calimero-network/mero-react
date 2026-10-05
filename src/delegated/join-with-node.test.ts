@@ -144,6 +144,7 @@ const RESOLVED: ResolveRelayResult = {
   peerId: 'peer-1',
   writable: true,
   stale: false,
+  via: 'cloud',
 };
 
 describe('bootstrapFromInvitation', () => {

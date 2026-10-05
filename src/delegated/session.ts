@@ -23,7 +23,11 @@ import {
   fetchNodeRelease,
   fetchNodeReleaseVersion,
   login,
+  SseClient,
   type DcapVerify,
+  type ExecuteParams,
+  type ExecuteResult,
+  type ExecuteTransport,
   type MeroClient,
   type VerifyTransportQuote,
 } from '@calimero-network/mero-js';
@@ -583,6 +587,132 @@ function relaySession(s: DelegatedSession & { relayUrl: string }, nodeKey: strin
   };
 }
 
+// ------------------------------------------------------------- reads by query
+//
+// mero-js's relay transport sends every `execute` as an `/intents` warrant: a
+// nonce spent, a signature, and the relay running the method as a write even
+// when it only reads. An account session may not use `/jsonrpc` on a relay
+// (403, measured on prod), but it may `POST /admin-api/contexts/{ctx}/query`
+// (`context:query`; 200 on every app in the prod journeys), which runs a method
+// the app's ABI declares read-only and refuses any other with a 409.
+//
+// A call carries no marker of which it is — generated ABI clients call
+// `execute({ contextId, method, argsJson })` for both — so the node's own
+// answer is what tells them apart: a method is tried as a query first, and a
+// 409 says it is a write, remembered per relay, context and method so the
+// probe is paid once. Any other failure of the query is not an answer about
+// the method, so the call falls back to the warrant, which reads too.
+
+type MethodKind = 'read' | 'write';
+/** What the node said each `relay|context|method` is; survives client rebuilds. */
+const methodKinds = new Map<string, MethodKind>();
+
+/** Forget what was learned about which methods read. For tests. */
+export function forgetMethodKinds(): void {
+  methodKinds.clear();
+}
+
+/** Core's refusal of a query for a method the ABI does not declare read-only. */
+function isNotAView(e: unknown): boolean {
+  return typeof e === 'object' && e !== null && (e as { status?: unknown }).status === 409;
+}
+
+/**
+ * `client.rpc` with reads routed through `client.admin.queryContext`: the
+ * session-authenticated query for a method the node knows as a view, the
+ * warrant for everything else. Only for a client with a session, since the
+ * query route wants one.
+ */
+function readsThroughQuery(client: MeroClient, relayUrl: string): ExecuteTransport {
+  const inner = client.rpc;
+  const origin = relayOrigin(relayUrl);
+  const run = async <T,>(params: ExecuteParams): Promise<ExecuteResult<T>> => {
+    const key = `${origin}|${params.contextId}|${params.method}`;
+    if (methodKinds.get(key) !== 'write') {
+      try {
+        const { returns } = await client.admin.queryContext(params.contextId, {
+          method: params.method,
+          // The node defaults a warrant's missing `argsJson` to `{}`; the same here.
+          argsJson: params.argsJson ?? {},
+        });
+        methodKinds.set(key, 'read');
+        // No root hash: a read changes nothing, and `undefined` is "unknown
+        // here", never "nothing changed" (see mero-js `ExecuteResult`).
+        return { returns: returns as T, transport: 'relay' };
+      } catch (e) {
+        if (isNotAView(e)) methodKinds.set(key, 'write');
+      }
+    }
+    return inner.executeWithMetadata<T>(params);
+  };
+  return {
+    get kind() {
+      return inner.kind;
+    },
+    get canSubscribe() {
+      return inner.canSubscribe;
+    },
+    execute: async <T,>(params: ExecuteParams): Promise<T> => (await run<T>(params)).returns,
+    executeWithMetadata: run,
+    migrateMyEntries: (contextId) => inner.migrateMyEntries(contextId),
+    countMyPending: (contextId) => inner.countMyPending(contextId),
+  };
+}
+
+/**
+ * An event stream that opens nothing: for a hosted relay whose node key is not
+ * attested yet.
+ *
+ * A hosted relay's `/sse` sits behind forward-auth that knows a Bearer token
+ * and nothing else, so the proof-authenticated stream mero-js builds without a
+ * node key is answered 401 `missing_token` — not one of the terminal auth
+ * errors, so `SseClient` reconnected on a timer for as long as the key stayed
+ * unknown. The hooks take `client.events` and connect without asking, so the
+ * stream handed out meanwhile is a real `SseClient` whose connect waits for a
+ * close instead of fetching: it holds its subscriptions, emits no error, and
+ * reaches the network never. The client built once the key is learned brings
+ * the session-backed stream, and the hooks' effects move onto it.
+ */
+function dormantEvents(relayUrl: string): SseClient {
+  return new SseClient({
+    baseUrl: relayUrl,
+    authorize: async () => ({}),
+    fetch: (_url, init) =>
+      new Promise<Response>((_, reject) => {
+        const abort = () => reject(Object.assign(new Error('the stream was closed before the relay was attested'), { name: 'AbortError' }));
+        if (init?.signal?.aborted) return abort();
+        init?.signal?.addEventListener('abort', abort, { once: true });
+      }),
+  });
+}
+
+/**
+ * The relay client as a delegated session uses it: `rpc` reading by query when
+ * the client has a session, and no events until the relay is attested.
+ * Everything else is the client's own, `this` kept.
+ */
+function delegatedClient(client: MeroClient, opts: { relayUrl: string; session: boolean; attested: boolean }): MeroClient {
+  const rpc = opts.session ? readsThroughQuery(client, opts.relayUrl) : null;
+  let dormant: SseClient | null = null;
+  return new Proxy(client, {
+    get(target, prop) {
+      if (prop === 'rpc' && rpc) return rpc;
+      if (!opts.attested) {
+        if (prop === 'canSubscribe') return false;
+        if (prop === 'events') return (dormant ??= dormantEvents(opts.relayUrl));
+        if (prop === 'close') {
+          return () => {
+            dormant?.close();
+            target.close();
+          };
+        }
+      }
+      const value = Reflect.get(target, prop, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+}
+
 /**
  * Build the client a delegated session talks through.
  *
@@ -608,7 +738,7 @@ export function buildDelegatedClient(
   // refused warrant against a node that was never chosen.
   if (!s.relayUrl) return null;
   const nodeKey = readPinnedRelayNodeKey(s.relayUrl);
-  return createMeroClient({
+  const client = createMeroClient({
     transport: 'relay',
     relay: {
       relayUrl: s.relayUrl,
@@ -641,6 +771,14 @@ export function buildDelegatedClient(
     // proof above gets a 401 there; with the node key the client observes
     // through its own device-certificate login instead.
     observe: nodeKey ? { nodeKey } : undefined,
+  });
+  // Events wait for the relay's node key on a hosted relay, whose forward-auth
+  // answers the proof-only stream 401 and would have it reconnect forever. A
+  // loopback relay is a dev rig that takes the proof as a node does.
+  return delegatedClient(client, {
+    relayUrl: s.relayUrl,
+    session: nodeKey !== null,
+    attested: nodeKey !== null || isLoopback(s.relayUrl),
   });
 }
 
