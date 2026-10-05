@@ -4,8 +4,12 @@ import { LoginModal } from './LoginModal';
 import type { MeroTheme } from '../theme';
 
 interface FlatArgs {
-  /** Story-only: show the Cloud tab (passes `cloud` to the modal). */
-  withCloud?: boolean;
+  /**
+   * Story-only: which `cloud` prop the modal gets. `default` passes none (the
+   * modal sources its own Cloud tab), `off` passes `false` (node dialog only),
+   * `custom` passes an object built from `note` / `walletUrl` below.
+   */
+  cloud?: 'default' | 'off' | 'custom';
   /** Story-only: the tab the modal opens on. */
   initialTab?: 'node' | 'cloud';
   /** Story-only: a note from the last enrolment, shown on the Cloud tab. */
@@ -107,14 +111,16 @@ const meta: Meta<FlatArgs> = {
           onClose={() => setOpen(false)}
           theme={buildTheme(args)}
           cloud={
-            args.withCloud
-              ? {
-                  onEnrol: () => console.info('[LoginModal] cloud.onEnrol'),
-                  note: args.note ?? null,
-                  walletUrl: args.walletUrl,
-                  customWallet: Boolean(args.walletUrl),
-                }
-              : undefined
+            args.cloud === 'off'
+              ? false
+              : args.cloud === 'custom'
+                ? {
+                    onEnrol: () => console.info('[LoginModal] cloud.onEnrol'),
+                    note: args.note ?? null,
+                    walletUrl: args.walletUrl,
+                    customWallet: Boolean(args.walletUrl),
+                  }
+                : undefined
           }
           initialTab={args.initialTab}
         />
@@ -131,7 +137,19 @@ export const Default: Story = {
     docs: {
       description: {
         story:
-          'The modal probes the well-known local ports (2428, 2429, 2528, 2529) at `/admin-api/health` as soon as it opens: with one or more nodes up, each is offered as a radio choice alongside an always-present "enter URL manually" option; with nothing running it shows "No local node found" and falls through to the URL field. Use the toolbar "Rescan" link after starting a node.',
+          'Two tabs by default: **Node** (selected) and **Cloud**, the latter sourced by the modal itself from `useAccountEnrolment`, so an app that mounts `LoginModal` gets account sign-in with nothing wired. The Node tab probes the well-known local ports (2428, 2429, 2528, 2529) at `/admin-api/health` as soon as it opens: with one or more nodes up, each is offered as a radio choice alongside an always-present "enter URL manually" option; with nothing running it shows "No local node found" and falls through to the URL field. Use the toolbar "Rescan" link after starting a node.',
+      },
+    },
+  },
+};
+
+export const NodeOnly: Story = {
+  args: { cloud: 'off' },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          '`cloud={false}`: no tabs, the node dialog exactly as it was before there was a Cloud tab. For an app that has its own account path, or none.',
       },
     },
   },
@@ -179,12 +197,12 @@ export const FullCustom: Story = {
 };
 
 export const WithCloudTab: Story = {
-  args: { withCloud: true },
+  args: { cloud: 'custom' },
   parameters: {
     docs: {
       description: {
         story:
-          'With the `cloud` prop the modal has two tabs: **Node** (the dialog above, unchanged, selected by default) and **Cloud** (sign in with a Calimero account by enrolling at the wallet). This is what `ConnectButton` renders by default.',
+          'A `cloud` object supplied by the caller: the same two tabs, with the Cloud tab rendering the caller\'s enrolment verbatim instead of the modal\'s own. This is what `ConnectButton` passes, from its own `useAccountEnrolment()`.',
       },
     },
   },
@@ -192,7 +210,7 @@ export const WithCloudTab: Story = {
 
 export const CloudTab: Story = {
   args: {
-    withCloud: true,
+    cloud: 'custom',
     initialTab: 'cloud',
     walletUrl: 'http://localhost:8090/account-enroll',
     note:

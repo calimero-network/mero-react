@@ -335,7 +335,30 @@ Helpers: `defaultMeroTheme` (the full default palette), `resolveMeroTheme(partia
 | `cloud` | `boolean` | `true` | The modal has two tabs: **Node** (discovery + URL, default) and **Cloud** (sign in with a Calimero account by enrolling at the wallet). `false` removes the Cloud tab. A page coming back from the wallet opens the modal on Cloud automatically. |
 | `accountDefaults` | `{ walletUrl?: string }` | — | Local development only: enrol at a wallet other than the hosted one. |
 
-The account flow without the button is `useAccountEnrolment()` (returns `goToWallet`, `note`, `returning`, `walletUrl`, `customWallet`); its UI is `<AccountSignInPanel>`, and `<LoginModal cloud={...} initialTab="cloud">` renders both tabs.
+### `<LoginModal>` and the Cloud tab
+
+An app that mounts the modal itself gets the same two tabs with nothing wired: by default `LoginModal` sources its Cloud tab from `useAccountEnrolment()` internally, so "Enrol with your account" works and a page coming back from the wallet is completed (and lands on the Cloud tab) whether or not the modal is open. It must sit inside `MeroProvider`.
+
+```tsx
+// Node + Cloud tabs, account sign-in included (default)
+<LoginModal isOpen={open} onConnect={connectToNode} onClose={() => setOpen(false)} />
+
+// Node dialog only, no tabs — the pre-Cloud behaviour
+<LoginModal cloud={false} isOpen={open} onConnect={connectToNode} onClose={() => setOpen(false)} />
+
+// Your own enrolment (what ConnectButton does): the object is used verbatim
+<LoginModal cloud={{ onEnrol, note, walletUrl, customWallet }} initialTab="cloud" ... />
+```
+
+| `cloud` | Cloud tab | Enrolment callback read by |
+|---------|-----------|----------------------------|
+| omitted | shown, sourced by the modal | the modal |
+| `false` | none (no tabs) | nobody here |
+| object | shown, the caller's values | the caller |
+
+`initialTab` defaults to `'node'`; with `cloud` omitted it defaults to `'cloud'` on the load coming back from the wallet. An explicit `initialTab` wins.
+
+The caller owns `isOpen`. To have the modal open by itself on the way back from the wallet (as `ConnectButton` does), seed its open state with `isReturningFromWallet()`, which peeks at the fragment without consuming it: `const [open, setOpen] = useState(isReturningFromWallet);`. The account flow without any of these is `useAccountEnrolment()` (returns `goToWallet`, `note`, `returning`, `walletUrl`, `customWallet`); its UI is `<AccountSignInPanel>`.
 
 ## Enums
 

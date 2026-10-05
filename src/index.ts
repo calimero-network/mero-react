@@ -79,7 +79,7 @@ export { LoginModal } from './components';
 export type { LoginModalProps, LoginModalTab } from './components';
 export { AccountSignInPanel } from './components';
 export type { AccountSignInPanelProps } from './components';
-export { useAccountEnrolment } from './delegated/useAccountEnrolment';
+export { useAccountEnrolment, isReturningFromWallet } from './delegated/useAccountEnrolment';
 export type { UseAccountEnrolmentOptions, AccountEnrolment } from './delegated/useAccountEnrolment';
 export { CalimeroLogo } from './components';
 export type { CalimeroLogoProps } from './components';
