@@ -60,7 +60,7 @@ import {
 } from './index';
 import { HTTPError, RelayClient, type SignedGroupOpenInvitation } from '@calimero-network/mero-js';
 import { useMero } from '../context';
-import { clearDelegatedSession, saveDelegatedSession } from '../delegated/session';
+import { clearDelegatedSession, saveDelegatedSession } from '@calimero-network/mero-js';
 
 vi.mock('../context', () => ({
   useMero: vi.fn(),

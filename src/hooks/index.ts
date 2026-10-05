@@ -2,9 +2,9 @@ import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { classifyError, compareSemver, memberJoinedOpenOp, signerFromSecret } from '@calimero-network/mero-js';
 import { useMero } from '../context';
 import { base58ToHex } from '../utils/base58';
-import { listDelegatedContexts, listDelegatedNamespaces, readDelegatedSession } from '../delegated/session';
-import { governRoot } from '../delegated/govern';
-import { createDelegatedContext, createDelegatedPrivateContext } from '../delegated/create-context';
+import { listDelegatedContexts, listDelegatedNamespaces, readDelegatedSession } from '@calimero-network/mero-js';
+import { governRoot } from '@calimero-network/mero-js';
+import { createDelegatedContext, createDelegatedPrivateContext } from '@calimero-network/mero-js';
 import type {
   Codec,
   EphemeralClient,
@@ -1125,7 +1125,7 @@ export function useCreateContext() {
     async (request: CreateContextRequest) => {
       if (isDelegated) {
         // An account creates a context through the relay serving the namespace,
-        // under a creation warrant (delegated/create-context.ts).
+        // under a creation warrant (mero-js createDelegatedContext).
         const session = readDelegatedSession();
         if (!session || !request.groupId) return null;
         return run(() =>
@@ -1164,7 +1164,7 @@ export interface CreatePrivateContextRequest {
  *  - a node login makes the group, adds the members and creates the context
  *    with its own admin calls (as mero-chat's DMs do);
  *  - an account has the relay serving the namespace do the same three steps,
- *    each under its own warrant (delegated/create-context.ts).
+ *    each under its own warrant (mero-js createDelegatedContext).
  */
 export function useCreatePrivateContext() {
   const { admin, isDelegated } = useMero();

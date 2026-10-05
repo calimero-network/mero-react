@@ -15,8 +15,8 @@ import { useCallback, useState } from 'react';
 import type { InviteRedeemer, SignedGroupOpenInvitation } from '@calimero-network/mero-js';
 import { useMero } from '../context';
 import { useDelegatedBootstrap } from '../delegated/useDelegatedBootstrap';
-import type { BootstrapFailure } from '../delegated/bootstrap-from-invitation';
-import { listDelegatedNamespaces, readDelegatedSession } from '../delegated/session';
+import type { BootstrapFailure } from '@calimero-network/mero-js';
+import { listDelegatedNamespaces, readDelegatedSession } from '@calimero-network/mero-js';
 
 /** The HTTP status an error carries, read the way mero-js's classifier reads it. */
 function statusOf(err: unknown): number | undefined {

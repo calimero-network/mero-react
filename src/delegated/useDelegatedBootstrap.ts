@@ -18,14 +18,14 @@ import { useMero } from '../context';
 import {
   bootstrapFromInvitation,
   type BootstrapResult,
-} from './bootstrap-from-invitation';
+} from '@calimero-network/mero-js';
 import {
   carryExecutorAccount,
   readDelegatedCredential,
   readDelegatedSession,
   rememberRelay,
   type DelegatedCredential,
-} from './session';
+} from '@calimero-network/mero-js';
 
 export interface UseDelegatedBootstrapOptions {
   /** Point at a cloud other than the hosted manager. For local rigs. */

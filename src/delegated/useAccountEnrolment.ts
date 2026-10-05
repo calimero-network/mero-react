@@ -26,7 +26,7 @@ import {
   type DeviceEnrolmentCallback,
 } from '@calimero-network/mero-js';
 import { useMero } from '../context';
-import { saveDelegatedCredential } from './session';
+import { saveDelegatedCredential } from '@calimero-network/mero-js';
 
 /** Where this tab's device keypair lives. */
 const DEVICE_KEY = 'calimero.device';

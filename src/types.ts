@@ -3,7 +3,7 @@
  */
 
 import type { MeroClient, MeroJs, TokenStore } from '@calimero-network/mero-js';
-import type { DelegatedSession } from './delegated/session';
+import type { DelegatedAccountSession as DelegatedSession } from '@calimero-network/mero-js';
 
 /**
  * Application mode determines the permission scope

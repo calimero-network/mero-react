@@ -11,7 +11,7 @@ import { renderHook, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import * as mero from '@calimero-network/mero-js';
 import { MeroProvider, AppMode, useJoinInvitation } from '../../src';
-import { saveDelegatedCredential } from '../../src/delegated/session';
+import { saveDelegatedCredential } from '@calimero-network/mero-js';
 
 const RIG = process.env.RIG_DIR;
 const run = RIG ? describe : describe.skip;

@@ -6,34 +6,47 @@ import { render, act, cleanup } from '@testing-library/react';
 const NODE_KEY = 'cd'.repeat(32);
 const RELAY = 'https://relay.example.com';
 
-/** What the relay's attest endpoint does on each request; the last one repeats. */
+/** What learning the relay's key does on each attempt; the last one repeats. */
 let attest: Array<'down' | 'up'> = ['up'];
 let attestHits = 0;
 /** Whether the relay's quote is of a trusted image. */
 let quoteVerifies = true;
 
-// The relay key is learned through the real session code; only the two calls
-// that leave the page are stood in for. The attestation goes out through the
-// `fetch` it is handed, as mero-js's does, so a relay that cannot be reached
-// fails exactly where a real one would.
+// The provider awaits mero-js's `learnRelayNodeKey`, which waits out a relay it
+// cannot reach and refuses a quote that does not verify — that retry and that
+// refusal are mero-js's tests. It is stood in for here, attempt by attempt, so
+// these tests are about what the provider does while the key is on its way,
+// once it has arrived, and when it will never come. Everything else — the
+// relay login, the admin reads — is the real code over a stubbed network.
 vi.mock('@calimero-network/mero-js', async (importActual) => {
   const actual = await importActual<typeof import('@calimero-network/mero-js')>();
+  const sleep = (ms: number, signal?: AbortSignal) =>
+    new Promise<void>((resolve) => {
+      const timer = setTimeout(resolve, ms);
+      signal?.addEventListener('abort', () => { clearTimeout(timer); resolve(); }, { once: true });
+    });
   return {
     ...actual,
-    attestRelayNodeKey: vi.fn(async ({ relayUrl, fetch: givenFetch }: { relayUrl: string; fetch: typeof fetch }) => {
-      const response = await givenFetch(`${relayUrl}/admin-api/tee/attest`, { method: 'POST' });
-      if (!response.ok) throw new Error(`the relay would not attest (HTTP ${response.status})`);
-      if (!quoteVerifies) throw new Error("the relay's quote did not verify: not a trusted image");
-      return { nodeKey: NODE_KEY, mock: false };
+    learnRelayNodeKey: vi.fn(async (relayUrl: string, { signal }: { signal?: AbortSignal } = {}) => {
+      while (!signal?.aborted) {
+        const step = attest[Math.min(attestHits++, attest.length - 1)];
+        if (step === 'down') {
+          await sleep(1_000, signal);
+          continue;
+        }
+        if (!quoteVerifies) return null;
+        actual.pinRelayNodeKey(relayUrl, NODE_KEY);
+        return NODE_KEY;
+      }
+      return null;
     }),
-    login: vi.fn(async () => ({ accessToken: 'relay-session', refreshToken: 'r' })),
   };
 });
 
 import { MeroProvider, useMero } from './MeroContext';
 import { AppMode } from '../types';
 import type { MeroContextValue } from '../types';
-import { saveDelegatedSession, readPinnedRelayNodeKey } from '../delegated/session';
+import { saveDelegatedSession, readPinnedRelayNodeKey } from '@calimero-network/mero-js';
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -48,11 +61,9 @@ function stubNetwork() {
       const url = String(input instanceof Request ? input.url : input);
       const headers = new Headers(input instanceof Request ? input.headers : init?.headers);
       requests.push({ url, authorization: headers.get('authorization') });
-      if (url === `${RELAY}/admin-api/tee/attest`) {
-        const step = attest[Math.min(attestHits++, attest.length - 1)];
-        if (step === 'down') throw new TypeError('Failed to fetch');
-        return json({ data: {} });
-      }
+      // The relay login, as the real `login()` performs it: a challenge, then a token.
+      if (url === `${RELAY}/auth/challenge`) return json({ data: { challenge: 'c'.repeat(64) } });
+      if (url === `${RELAY}/auth/token`) return json({ data: { access_token: 'relay-session', refresh_token: 'r' } });
       if (url.startsWith(`${RELAY}/admin-api/contexts`)) return json({ data: { contexts: [] } });
       if (url.startsWith(`${RELAY}/admin-api/namespaces`)) return json({ data: [] });
       return json({ data: {} });

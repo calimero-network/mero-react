@@ -18,10 +18,10 @@ import {
 import { AppMode } from '../types';
 import { CloudClient } from '@calimero-network/mero-js';
 import type { AdminApiClient, AuthCallbackResult, MeroClient, TokenStore } from '@calimero-network/mero-js';
-import { createNodeAdmin } from '../admin/node-admin';
-import { createAccountAdmin } from '../delegated/account-admin';
-import { joinAsAccount } from '../delegated/join-as-account';
-import { foundDelegatedNamespace } from '../delegated/create-context';
+import { createNodeAdmin } from '@calimero-network/mero-js';
+import { createAccountAdmin } from '@calimero-network/mero-js';
+import { joinAsAccount } from '@calimero-network/mero-js';
+import { foundDelegatedNamespace } from '@calimero-network/mero-js';
 import { resolveTrustedNodeUrl } from '../auth/node-trust';
 import { resolveTokenAdoption } from '../auth/token-adoption';
 import {
@@ -50,9 +50,9 @@ import {
   relayForContext,
   saveDelegatedCredential,
   saveDelegatedSession,
-  type DelegatedSession,
-} from '../delegated/session';
-import { resolveApplicationIdFromRegistry } from '../delegated/application-id';
+  type DelegatedAccountSession as DelegatedSession,
+} from '@calimero-network/mero-js';
+import { resolveApplicationIdFromRegistry } from '@calimero-network/mero-js';
 
 const MeroContext = createContext<MeroContextValue | null>(null);
 
