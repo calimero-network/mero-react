@@ -7,7 +7,7 @@
  * account form (upgrades, installs) is refused by name.
  */
 import {
-  type AdminApiClient,
+  type AdminApiClient, type CreateContextRequest,
   groupDeletedOp, groupMetadataSetOp, groupReparentedOp, memberAddedOp, memberCapabilitySetOp,
   memberJoinedOpenOp, memberLeftOp, memberMetadataSetOp, memberRemovedOp, contextMetadataSetOp,
   defaultCapabilitiesSetOp, signGroupInvitation, subgroupCreation, subgroupVisibilitySetOp,
@@ -280,11 +280,14 @@ export function createAccountAdmin(
       await joinOpen(String(await relay().getContextGroup(contextId)));
       return { contextId, memberPublicKey: s.account };
     },
-    async createContext(req: { applicationId: string; groupId: string; name?: string; initializationParams?: number[] }) {
+    async createContext(req: CreateContextRequest) {
       const info = await relay().getGroupInfo(req.groupId);
       const namespaceId = (info as { namespaceId?: string }).namespaceId ?? req.groupId;
+      // Every field with a place in the creation warrant; `identitySecret` has
+      // none for an account (see CreateDelegatedContextRequest).
       const { contextId } = await createContext(s, {
         namespaceId, groupId: req.groupId, applicationId: req.applicationId,
+        serviceName: req.serviceName, contextSeed: req.contextSeed,
         name: req.name, initializationParams: req.initializationParams,
       });
       return { contextId, memberPublicKey: '', groupId: req.groupId };

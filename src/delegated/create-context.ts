@@ -63,11 +63,30 @@ function initArgsOf(params: number[] | undefined): unknown {
   return JSON.parse(new TextDecoder().decode(Uint8Array.from(params)));
 }
 
+/**
+ * What an account asks for when it creates a context: the fields of a node's
+ * `CreateContextRequest` that have a place in the creation warrant
+ * (mero-js `CreationWarrantInput`), plus which namespace to find the relay by.
+ *
+ * Intentionally NOT here, because the warrant has no field for it:
+ * `identitySecret` — a node's key for its new member identity; the account IS
+ * the member identity here (`init` runs as the author's account), so there is
+ * nothing to derive one from.
+ */
 export interface CreateDelegatedContextRequest {
   readonly namespaceId: string;
   /** The group to create it in; the namespace itself when omitted. */
   readonly groupId?: string;
   readonly applicationId: string;
+  /**
+   * Which service of a multi-service bundle the context is for; absent for
+   * the bundle's default service. Signed into the warrant: the relay runs THAT
+   * service's `init`, so a bundle like mero-docs (`registry`, `docs`) creates
+   * the right contract.
+   */
+  readonly serviceName?: string;
+  /** The seed the context id is derived from, hex (32 bytes); random when absent. */
+  readonly contextSeed?: string;
   readonly initializationParams?: number[];
   readonly name?: string;
 }
@@ -97,6 +116,8 @@ export async function createDelegatedContext(
   const created = await client(s, relay, { next: async () => creationNonce }, deps.fetch).createContext({
     groupId: req.groupId ?? req.namespaceId,
     applicationId: req.applicationId,
+    serviceName: req.serviceName,
+    seed: req.contextSeed,
     initArgs: initArgsOf(req.initializationParams),
     name: req.name,
   });

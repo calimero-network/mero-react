@@ -130,6 +130,8 @@ Every hook in this package goes through that `admin`, never the raw `mero.admin`
 
 How an account (delegated session) learns its `applicationId`: `packageName` decides. When the app passes one, the id is derived from the registry: `sha256(borsh((package, signerId)))` of the newest non-yanked bundle, exactly as merod computes it at install, so a brand-new account can found its first namespace (`admin.createNamespace({ applicationId })`) and an account already used in other apps is never handed one of THEIR ids. The account's own contexts on the relay are consulted only when the app passes no `packageName` (or the registry did not answer, after one `console.warn`): one distinct application across them is the answer; several leaves it `null` on purpose (nothing says which the tab is for). When the registry lists the package under more than one publisher, it stays `null`. `applicationIdForBundle` and `resolveApplicationIdFromRegistry` are exported for apps that need the same derivation.
 
+On an account, `admin.createContext(request)` (and `useCreateContext`) signs a creation warrant the relay acts on: `applicationId`, `groupId`, `serviceName` (which service of a multi-service bundle, e.g. mero-docs' `registry`), `name`, `contextSeed` and `initializationParams` are all carried into it; `identitySecret` is not, since the account itself is the new context's member identity.
+
 Through `mero` you access the full MeroJs API:
 
 ```tsx

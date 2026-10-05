@@ -1132,6 +1132,9 @@ export function useCreateContext() {
           createDelegatedContext(session, {
             namespaceId: request.groupId!,
             applicationId: request.applicationId,
+            serviceName: request.serviceName,
+            contextSeed: request.contextSeed,
+            name: request.name,
             initializationParams: request.initializationParams as number[] | undefined,
           }),
         );
