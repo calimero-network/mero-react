@@ -1,3 +1,9 @@
+## [9.11.0](https://github.com/calimero-network/mero-react/compare/mero-react-v9.10.0...mero-react-v9.11.0) (2026-10-05)
+
+### Features
+
+* **account:** learn the application id from the registry when the account has no contexts yet ([#93](https://github.com/calimero-network/mero-react/issues/93)) ([beb2dce](https://github.com/calimero-network/mero-react/commit/beb2dce0219d1df66de6fa6e71fd67dea0a098b4))
+
 ## [9.10.0](https://github.com/calimero-network/mero-react/compare/mero-react-v9.9.1...mero-react-v9.10.0) (2026-10-05)
 
 ### Features
