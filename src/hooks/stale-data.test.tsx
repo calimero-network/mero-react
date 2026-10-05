@@ -28,7 +28,7 @@ describe('read-hook staleness guard', () => {
           resolvers[groupId] = resolve;
         }),
     );
-    mockUseMero.mockReturnValue({ mero: { admin: { getGroupInfo } } } as never);
+    mockUseMero.mockReturnValue({ mero: { admin: { getGroupInfo } }, admin: { getGroupInfo } } as never);
 
     const { result, rerender } = renderHook(({ groupId }) => useGroupInfo(groupId), {
       initialProps: { groupId: 'A' },
@@ -54,7 +54,7 @@ describe('read-hook staleness guard', () => {
           resolvers[appId] = resolve;
         }),
     );
-    mockUseMero.mockReturnValue({ mero: { admin: { getContextsForApplication } } } as never);
+    mockUseMero.mockReturnValue({ mero: { admin: { getContextsForApplication } }, admin: { getContextsForApplication } } as never);
 
     const { result, rerender } = renderHook(({ appId }) => useContexts(appId), {
       initialProps: { appId: 'A' },

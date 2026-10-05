@@ -223,7 +223,7 @@ describe('group and context hooks', () => {
         contexts: [{ id: 'ctx-1', applicationId: 'app-1' }],
       }),
     });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useContexts('app-1'));
 
@@ -241,7 +241,7 @@ describe('group and context hooks', () => {
         contexts: [{ id: 'ctx-2', applicationId: 'app-2' }],
       }),
     });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useApplicationContexts('app-2'));
 
@@ -256,7 +256,7 @@ describe('group and context hooks', () => {
         members: [{ identity: 'member-1', role: 'Admin' }],
       }),
     });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useGroupMembers('group-1'));
 
@@ -268,7 +268,7 @@ describe('group and context hooks', () => {
   it('useGroupMembers clears stale errors when the group selection is removed', async () => {
     const listGroupMembers = vi.fn().mockRejectedValue(new Error('boom'));
     const mero = createMero({ listGroupMembers });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result, rerender } = renderHook(
       ({ groupId }) => useGroupMembers(groupId),
@@ -291,7 +291,7 @@ describe('group and context hooks', () => {
     const mero = createMero({
       listGroupContexts: vi.fn().mockResolvedValue([{ contextId: 'ctx-1' }]),
     });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useGroupContexts('group-1'));
 
@@ -303,7 +303,7 @@ describe('group and context hooks', () => {
   it('useGroupContexts clears stale errors when the group selection is removed', async () => {
     const listGroupContexts = vi.fn().mockRejectedValue(new Error('boom'));
     const mero = createMero({ listGroupContexts });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result, rerender } = renderHook(
       ({ groupId }) => useGroupContexts(groupId),
@@ -335,7 +335,7 @@ describe('group and context hooks', () => {
       },
     });
     const mero = createMero({ createGroupInvitation });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useGroupInvitations());
 
@@ -359,7 +359,7 @@ describe('group and context hooks', () => {
   it('useJoinGroup submits a group invitation', async () => {
     const joinGroup = vi.fn().mockResolvedValue({ groupId: 'group-1', memberIdentity: 'member-2' });
     const mero = createMero({ joinGroup });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useJoinGroup());
 
@@ -390,7 +390,7 @@ describe('group and context hooks', () => {
     const getMemberCapabilities = vi.fn().mockResolvedValue({ capabilities: 7 });
     const setMemberCapabilities = vi.fn().mockResolvedValue(undefined);
     const mero = createMero({ getMemberCapabilities, setMemberCapabilities });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useGroupCapabilities('group-1', 'member-1'));
 
@@ -408,7 +408,7 @@ describe('group and context hooks', () => {
   it('useGroupCapabilities clears stale errors when the member selection is removed', async () => {
     const getMemberCapabilities = vi.fn().mockRejectedValue(new Error('boom'));
     const mero = createMero({ getMemberCapabilities });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result, rerender } = renderHook(
       ({ groupId, memberId }) => useGroupCapabilities(groupId, memberId),
@@ -437,7 +437,7 @@ describe('group and context hooks', () => {
   it('useCreateContext creates a context and returns the result', async () => {
     const createContext = vi.fn().mockResolvedValue({ contextId: 'ctx-9', memberPublicKey: 'pk-9' });
     const mero = createMero({ createContext });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useCreateContext());
 
@@ -452,7 +452,7 @@ describe('group and context hooks', () => {
   it('useDeleteContext deletes a context and returns the result', async () => {
     const deleteContext = vi.fn().mockResolvedValue({ isDeleted: true });
     const mero = createMero({ deleteContext });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useDeleteContext());
 
@@ -467,7 +467,7 @@ describe('group and context hooks', () => {
   it('useJoinContext joins a context and returns join data', async () => {
     const joinContext = vi.fn().mockResolvedValue({ contextId: 'ctx-1', memberPublicKey: 'pk-2' });
     const mero = createMero({ joinContext });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useJoinContext());
 
@@ -484,7 +484,7 @@ describe('group and context hooks', () => {
       .fn()
       .mockResolvedValue({ groupId: 'g-1', memberPublicKey: 'pk-1', wasInherited: true });
     const mero = createMero({ joinSubgroupInheritance });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useJoinSubgroupInheritance());
 
@@ -501,7 +501,7 @@ describe('group and context hooks', () => {
       .fn()
       .mockResolvedValue({ groupId: 'g-2', memberPublicKey: 'pk-2', wasInherited: false });
     const mero = createMero({ joinSubgroupInheritance });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useJoinSubgroupInheritance());
 
@@ -516,7 +516,7 @@ describe('group and context hooks', () => {
   it('useContextGroup fetches the group id for a context', async () => {
     const getContextGroup = vi.fn().mockResolvedValue('group-abc');
     const mero = createMero({ getContextGroup });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useContextGroup('ctx-1'));
 
@@ -530,7 +530,7 @@ describe('group and context hooks', () => {
   it('useContextGroup clears stale errors when contextId becomes null', async () => {
     const getContextGroup = vi.fn().mockRejectedValue(new Error('boom'));
     const mero = createMero({ getContextGroup });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result, rerender } = renderHook(
       ({ contextId }) => useContextGroup(contextId),
@@ -561,7 +561,7 @@ describe('group and context hooks', () => {
         subgroupVisibility: 'open',
       }),
     });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useGroupInfo('group-1'));
 
@@ -573,7 +573,7 @@ describe('group and context hooks', () => {
   it('useGroupInfo clears stale errors when groupId becomes null', async () => {
     const getGroupInfo = vi.fn().mockRejectedValue(new Error('boom'));
     const mero = createMero({ getGroupInfo });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result, rerender } = renderHook(
       ({ groupId }) => useGroupInfo(groupId),
@@ -595,7 +595,7 @@ describe('group and context hooks', () => {
   it('useDeleteGroup deletes a group', async () => {
     const deleteGroup = vi.fn().mockResolvedValue({ isDeleted: true });
     const mero = createMero({ deleteGroup });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useDeleteGroup());
 
@@ -616,7 +616,7 @@ describe('group and context hooks', () => {
       contextCount: 1,
     });
     const mero = createMero({ syncGroup });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useSyncGroup());
 
@@ -631,7 +631,7 @@ describe('group and context hooks', () => {
   it('useAddGroupMembers adds members to a group', async () => {
     const addGroupMembers = vi.fn().mockResolvedValue(null);
     const mero = createMero({ addGroupMembers });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useAddGroupMembers());
 
@@ -646,7 +646,7 @@ describe('group and context hooks', () => {
   it('useRemoveGroupMembers removes members from a group', async () => {
     const removeGroupMembers = vi.fn().mockResolvedValue(null);
     const mero = createMero({ removeGroupMembers });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useRemoveGroupMembers());
 
@@ -669,7 +669,7 @@ describe('group and context hooks', () => {
         ],
       });
     const mero = createMero({ getContextsForApplication });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() =>
       useContextDiscovery({
@@ -692,7 +692,7 @@ describe('group and context hooks', () => {
         contexts: [{ id: 'ctx-known', applicationId: 'app-1' }],
       }),
     });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() =>
       useContextDiscovery({
@@ -719,7 +719,7 @@ describe('group and context hooks', () => {
       .mockResolvedValueOnce([{ namespaceId: 'ns-1', appKey: 'k1', targetApplicationId: 'app-1', upgradePolicy: 'manual', createdAt: 1, memberCount: 1, contextCount: 0, subgroupCount: 0 }])
       .mockResolvedValueOnce([{ namespaceId: 'ns-2', appKey: 'k2', targetApplicationId: 'app-1', upgradePolicy: 'manual', createdAt: 2, memberCount: 1, contextCount: 0, subgroupCount: 0 }]);
     const mero = createMero({ listNamespaces });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useNamespaces());
 
@@ -746,7 +746,7 @@ describe('group and context hooks', () => {
       subgroupCount: 1,
     });
     const mero = createMero({ getNamespace });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useNamespace('ns-1'));
 
@@ -761,7 +761,7 @@ describe('group and context hooks', () => {
   it('useNamespace clears when namespaceId becomes null', async () => {
     const getNamespace = vi.fn().mockRejectedValue(new Error('boom'));
     const mero = createMero({ getNamespace });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result, rerender } = renderHook(
       ({ nsId }) => useNamespace(nsId),
@@ -783,7 +783,7 @@ describe('group and context hooks', () => {
   it('useNamespaceIdentity loads namespace identity', async () => {
     const getNamespaceIdentity = vi.fn().mockResolvedValue({ namespaceId: 'ns-1', publicKey: 'pk-abc' });
     const mero = createMero({ getNamespaceIdentity });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useNamespaceIdentity('ns-1'));
 
@@ -799,7 +799,7 @@ describe('group and context hooks', () => {
       { namespaceId: 'ns-1', appKey: 'k1', targetApplicationId: 'app-1', upgradePolicy: 'manual', createdAt: 1, memberCount: 1, contextCount: 0, subgroupCount: 0 },
     ]);
     const mero = createMero({ listNamespacesForApplication });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useNamespacesForApplication('app-1'));
 
@@ -815,7 +815,7 @@ describe('group and context hooks', () => {
     const mero = createMero({
       listNamespacesForApplication: vi.fn().mockResolvedValue([{ namespaceId: 'ns-1' }]),
     });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result, rerender } = renderHook(
       ({ appId }) => useNamespacesForApplication(appId),
@@ -836,7 +836,7 @@ describe('group and context hooks', () => {
   it('useCreateNamespace creates a namespace', async () => {
     const createNamespace = vi.fn().mockResolvedValue({ namespaceId: 'ns-9' });
     const mero = createMero({ createNamespace });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useCreateNamespace());
 
@@ -857,7 +857,7 @@ describe('group and context hooks', () => {
   it('useDeleteNamespace deletes a namespace', async () => {
     const deleteNamespace = vi.fn().mockResolvedValue({ isDeleted: true });
     const mero = createMero({ deleteNamespace });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useDeleteNamespace());
 
@@ -876,7 +876,7 @@ describe('group and context hooks', () => {
     };
     const createNamespaceInvitation = vi.fn().mockResolvedValue(invitation);
     const mero = createMero({ createNamespaceInvitation });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useCreateNamespaceInvitation());
 
@@ -891,7 +891,7 @@ describe('group and context hooks', () => {
   it('useJoinNamespace joins a namespace', async () => {
     const joinNamespace = vi.fn().mockResolvedValue({ groupId: 'ns-1', memberIdentity: 'member-2', memberAccount: 'acct-2' });
     const mero = createMero({ joinNamespace });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useJoinNamespace());
 
@@ -927,7 +927,7 @@ describe('group and context hooks', () => {
 
     it('useJoinNamespace records what kind of refusal a failed join was', async () => {
       const mero = createMero({ joinNamespace: vi.fn().mockRejectedValue(refused()) });
-      mockUseMero.mockReturnValue({ mero } as never);
+      mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
       const { result } = renderHook(() => useJoinNamespace());
 
       await act(async () => {
@@ -944,7 +944,7 @@ describe('group and context hooks', () => {
     it('useJoinNamespace rethrows the original error with throwOnError', async () => {
       const err = refused();
       const mero = createMero({ joinNamespace: vi.fn().mockRejectedValue(err) });
-      mockUseMero.mockReturnValue({ mero } as never);
+      mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
       const { result } = renderHook(() => useJoinNamespace({ throwOnError: true }));
 
       await act(async () => {
@@ -958,7 +958,7 @@ describe('group and context hooks', () => {
         .mockRejectedValueOnce(new HTTPError(503, 'Service Unavailable', 'u', new Headers(), '{"error":"no peer"}'))
         .mockResolvedValueOnce({ contextId: 'ctx-1', memberPublicKey: 'pk' });
       const mero = createMero({ joinContext });
-      mockUseMero.mockReturnValue({ mero } as never);
+      mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
       const { result } = renderHook(() => useJoinContext({ throwOnError: true }));
 
       await act(async () => {
@@ -979,7 +979,7 @@ describe('group and context hooks', () => {
       const outcome = { status: 'already-member', namespaceId: 'ns-1', teamName: 'Design' };
       const redeemInvitation = vi.fn().mockResolvedValue(outcome);
       const mero = createMero({ redeemInvitation });
-      mockUseMero.mockReturnValue({ mero } as never);
+      mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
       const { result } = renderHook(() => useRedeemInvitation());
 
       await act(async () => {
@@ -1004,7 +1004,7 @@ describe('group and context hooks', () => {
   it('useCreateGroupInNamespace creates a group in a namespace', async () => {
     const createGroupInNamespace = vi.fn().mockResolvedValue({ groupId: 'group-9' });
     const mero = createMero({ createGroupInNamespace });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useCreateGroupInNamespace());
 
@@ -1022,7 +1022,7 @@ describe('group and context hooks', () => {
       { groupId: 'group-2' },
     ]);
     const mero = createMero({ listNamespaceGroups });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useNamespaceGroups('ns-1'));
 
@@ -1037,7 +1037,7 @@ describe('group and context hooks', () => {
   it('useNamespaceGroups clears when namespaceId becomes null', async () => {
     const listNamespaceGroups = vi.fn().mockRejectedValue(new Error('boom'));
     const mero = createMero({ listNamespaceGroups });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result, rerender } = renderHook(
       ({ nsId }) => useNamespaceGroups(nsId),
@@ -1061,7 +1061,7 @@ describe('group and context hooks', () => {
   it('useUpdateMemberRole updates a member role', async () => {
     const updateMemberRole = vi.fn().mockResolvedValue(undefined);
     const mero = createMero({ updateMemberRole });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useUpdateMemberRole());
 
@@ -1075,7 +1075,7 @@ describe('group and context hooks', () => {
   it('useSetDefaultCapabilities sets default capabilities for a group', async () => {
     const setDefaultCapabilities = vi.fn().mockResolvedValue(undefined);
     const mero = createMero({ setDefaultCapabilities });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useSetDefaultCapabilities());
 
@@ -1089,7 +1089,7 @@ describe('group and context hooks', () => {
   it('useSetSubgroupVisibility sets subgroup visibility for a group', async () => {
     const setSubgroupVisibility = vi.fn().mockResolvedValue(undefined);
     const mero = createMero({ setSubgroupVisibility });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useSetSubgroupVisibility());
 
@@ -1103,7 +1103,7 @@ describe('group and context hooks', () => {
   it('useSetTeeAdmissionPolicy sets TEE policy for a group', async () => {
     const setTeeAdmissionPolicy = vi.fn().mockResolvedValue(undefined);
     const mero = createMero({ setTeeAdmissionPolicy });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useSetTeeAdmissionPolicy());
 
@@ -1129,7 +1129,7 @@ describe('group and context hooks', () => {
   it('useSetGroupMetadata sets group metadata', async () => {
     const setGroupMetadata = vi.fn().mockResolvedValue(undefined);
     const mero = createMero({ setGroupMetadata });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useSetGroupMetadata());
 
@@ -1143,7 +1143,7 @@ describe('group and context hooks', () => {
   it('useSetGroupMetadata surfaces errors', async () => {
     const setGroupMetadata = vi.fn().mockRejectedValue(new Error('nope'));
     const mero = createMero({ setGroupMetadata });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useSetGroupMetadata());
 
@@ -1157,7 +1157,7 @@ describe('group and context hooks', () => {
   it('useSetMemberMetadata sets member metadata', async () => {
     const setMemberMetadata = vi.fn().mockResolvedValue(undefined);
     const mero = createMero({ setMemberMetadata });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useSetMemberMetadata());
 
@@ -1171,7 +1171,7 @@ describe('group and context hooks', () => {
   it('useSetContextMetadata sets context metadata', async () => {
     const setContextMetadata = vi.fn().mockResolvedValue(undefined);
     const mero = createMero({ setContextMetadata });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useSetContextMetadata());
 
@@ -1186,7 +1186,7 @@ describe('group and context hooks', () => {
     const record = { name: 'Lobby', data: { color: 'blue' }, updatedAt: 1, updatedBy: 'member-1' };
     const getGroupMetadata = vi.fn().mockResolvedValue(record);
     const mero = createMero({ getGroupMetadata });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useGroupMetadata('group-1'));
 
@@ -1200,7 +1200,7 @@ describe('group and context hooks', () => {
   it('useGroupMetadata clears when groupId becomes null', async () => {
     const getGroupMetadata = vi.fn().mockRejectedValue(new Error('boom'));
     const mero = createMero({ getGroupMetadata });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result, rerender } = renderHook(
       ({ groupId }) => useGroupMetadata(groupId),
@@ -1223,7 +1223,7 @@ describe('group and context hooks', () => {
     const record = { name: 'Alice', data: {}, updatedAt: 2, updatedBy: 'member-1' };
     const getMemberMetadata = vi.fn().mockResolvedValue(record);
     const mero = createMero({ getMemberMetadata });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useMemberMetadata('group-1', 'member-1'));
 
@@ -1237,7 +1237,7 @@ describe('group and context hooks', () => {
   it('useMemberMetadata clears when identity becomes null', async () => {
     const getMemberMetadata = vi.fn().mockRejectedValue(new Error('boom'));
     const mero = createMero({ getMemberMetadata });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result, rerender } = renderHook(
       ({ groupId, identity }) => useMemberMetadata(groupId, identity),
@@ -1276,7 +1276,7 @@ describe('group and context hooks', () => {
           }),
       );
     const mero = createMero({ getMemberMetadata });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useMemberMetadata('group-1', 'member-1'));
     await waitFor(() => {
@@ -1307,7 +1307,7 @@ describe('group and context hooks', () => {
     const record = { name: 'Alice', data: {}, updatedAt: 2, updatedBy: 'member-1' };
     const getMemberMetadata = vi.fn().mockResolvedValue(record);
     const mero = createMero({ getMemberMetadata });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const first = renderHook(() => useMemberMetadata('group-1', 'member-1'));
     await waitFor(() => {
@@ -1330,7 +1330,7 @@ describe('group and context hooks', () => {
   it('useDefaultCapabilities loads default capabilities for a group', async () => {
     const getDefaultCapabilities = vi.fn().mockResolvedValue(15);
     const mero = createMero({ getDefaultCapabilities });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useDefaultCapabilities('group-1'));
 
@@ -1344,7 +1344,7 @@ describe('group and context hooks', () => {
   it('useDefaultCapabilities clears when groupId becomes null', async () => {
     const getDefaultCapabilities = vi.fn().mockRejectedValue(new Error('boom'));
     const mero = createMero({ getDefaultCapabilities });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result, rerender } = renderHook(
       ({ groupId }) => useDefaultCapabilities(groupId),
@@ -1366,7 +1366,7 @@ describe('group and context hooks', () => {
   it('useSubgroupVisibility loads subgroup visibility for a group', async () => {
     const getSubgroupVisibility = vi.fn().mockResolvedValue('Restricted');
     const mero = createMero({ getSubgroupVisibility });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useSubgroupVisibility('group-1'));
 
@@ -1380,7 +1380,7 @@ describe('group and context hooks', () => {
   it('useSubgroupVisibility clears when groupId becomes null', async () => {
     const getSubgroupVisibility = vi.fn().mockRejectedValue(new Error('boom'));
     const mero = createMero({ getSubgroupVisibility });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result, rerender } = renderHook(
       ({ groupId }) => useSubgroupVisibility(groupId),
@@ -1404,7 +1404,7 @@ describe('group and context hooks', () => {
   it('useUpgradeGroup initiates a group upgrade', async () => {
     const upgradeGroup = vi.fn().mockResolvedValue({ groupId: 'group-1', status: 'in_progress', total: 3 });
     const mero = createMero({ upgradeGroup });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useUpgradeGroup());
 
@@ -1425,7 +1425,7 @@ describe('group and context hooks', () => {
       .fn()
       .mockReturnValue(new Promise<{ applicationId: string }>((r) => { resolveInstall = r; }));
     const mero = createMero({ installApplication });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useInstallFromRegistry());
     expect(result.current.loading).toBe(false);
@@ -1454,7 +1454,7 @@ describe('group and context hooks', () => {
   it('useResyncContext kicks off a context re-pull', async () => {
     const resyncContext = vi.fn().mockResolvedValue({ contextId: 'ctx-1', resyncStarted: true });
     const mero = createMero({ resyncContext });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useResyncContext());
 
@@ -1469,7 +1469,7 @@ describe('group and context hooks', () => {
   it('useResyncContext defaults to an empty request', async () => {
     const resyncContext = vi.fn().mockResolvedValue({ contextId: 'ctx-1', resyncStarted: false });
     const mero = createMero({ resyncContext });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useResyncContext());
 
@@ -1491,7 +1491,7 @@ describe('group and context hooks', () => {
       localContextsSwapped: 1,
     });
     const mero = createMero({ getGroupUpgradeStatus });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useGroupUpgradeStatus('group-1'));
 
@@ -1506,7 +1506,7 @@ describe('group and context hooks', () => {
   it('useGroupUpgradeStatus clears when groupId becomes null', async () => {
     const getGroupUpgradeStatus = vi.fn().mockRejectedValue(new Error('boom'));
     const mero = createMero({ getGroupUpgradeStatus });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result, rerender } = renderHook(
       ({ groupId }) => useGroupUpgradeStatus(groupId),
@@ -1528,7 +1528,7 @@ describe('group and context hooks', () => {
   it('useRetryGroupUpgrade retries a group upgrade', async () => {
     const retryGroupUpgrade = vi.fn().mockResolvedValue({ groupId: 'group-1', status: 'in_progress' });
     const mero = createMero({ retryGroupUpgrade });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useRetryGroupUpgrade());
 
@@ -1543,7 +1543,7 @@ describe('group and context hooks', () => {
   it('useReparentGroup moves a child group under a new parent', async () => {
     const reparentGroup = vi.fn().mockResolvedValue({ reparented: true });
     const mero = createMero({ reparentGroup });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useReparentGroup());
 
@@ -1562,7 +1562,7 @@ describe('group and context hooks', () => {
       { groupId: 'child-2' },
     ]);
     const mero = createMero({ listSubgroups });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useSubgroups('group-1'));
 
@@ -1577,7 +1577,7 @@ describe('group and context hooks', () => {
   it('useSubgroups clears when groupId becomes null', async () => {
     const listSubgroups = vi.fn().mockRejectedValue(new Error('boom'));
     const mero = createMero({ listSubgroups });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result, rerender } = renderHook(
       ({ groupId }) => useSubgroups(groupId),
@@ -1601,7 +1601,7 @@ describe('group and context hooks', () => {
   it('useDetachContextFromGroup detaches a context', async () => {
     const detachContextFromGroup = vi.fn().mockResolvedValue(undefined);
     const mero = createMero({ detachContextFromGroup });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useDetachContextFromGroup());
 
@@ -1641,7 +1641,7 @@ describe('useMigrationStatus', () => {
         },
       },
     );
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useMigrationStatus('ns-1'));
     await waitFor(() => expect(result.current.rollup).not.toBeNull());
@@ -1671,7 +1671,7 @@ describe('useMigrationStatus', () => {
   it('does not fall back to polling while the migration stream is live', async () => {
     const getMigrationStatus = vi.fn().mockResolvedValue(migrationStatusPayload);
     const mero = createMero({ getMigrationStatus });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     vi.useFakeTimers();
     try {
@@ -1708,7 +1708,7 @@ describe('useMigrationStatus', () => {
         },
       },
     );
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     vi.useFakeTimers();
     try {
@@ -1726,7 +1726,7 @@ describe('useMigrationStatus', () => {
   it('keeps an explicitly requested poll interval even while the stream is live', async () => {
     const getMigrationStatus = vi.fn().mockResolvedValue(migrationStatusPayload);
     const mero = createMero({ getMigrationStatus });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     vi.useFakeTimers();
     try {
@@ -1754,7 +1754,7 @@ describe('useMigrationStatus', () => {
       ],
     });
     const mero = createMero({ getMigrationStatus });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useMigrationStatus('ns1'));
 
@@ -1768,7 +1768,7 @@ describe('useMigrationStatus', () => {
   it('does not fetch when namespaceId is null', async () => {
     const getMigrationStatus = vi.fn();
     const mero = createMero({ getMigrationStatus });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useMigrationStatus(null));
     await waitFor(() => expect(result.current.loading).toBe(false));
@@ -1783,7 +1783,7 @@ describe('useAppVersion', () => {
       { getContext: vi.fn().mockResolvedValue({ id: 'ctx1', applicationId: 'a', rootHash: 'r', dagHeads: [], applicationVersion: '1.0.0' }) },
       { events: { onAppVersionChanged: vi.fn(() => () => {}), onMigrationEvent: vi.fn(() => () => {}), connect: vi.fn().mockResolvedValue(undefined), subscribe: vi.fn().mockResolvedValue(undefined) } },
     );
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useAppVersion('ctx1', '2.0.0'));
     await waitFor(() => expect(result.current.appVersion).toBe('1.0.0'));
@@ -1795,7 +1795,7 @@ describe('useAppVersion', () => {
       { getContext: vi.fn().mockResolvedValue({ id: 'ctx1', applicationId: 'a', rootHash: 'r', dagHeads: [], applicationVersion: '2.0.0' }) },
       { events: { onAppVersionChanged: vi.fn(() => () => {}), onMigrationEvent: vi.fn(() => () => {}), connect: vi.fn().mockResolvedValue(undefined), subscribe: vi.fn().mockResolvedValue(undefined) } },
     );
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useAppVersion('ctx1', '2.0.0'));
     await waitFor(() => expect(result.current.appVersion).toBe('2.0.0'));
@@ -1808,7 +1808,7 @@ describe('useAppVersion', () => {
       { getContext: vi.fn().mockResolvedValue({ id: 'ctx1', applicationId: 'a', rootHash: 'r', dagHeads: [], applicationVersion: '1.0.0' }) },
       { events: { onAppVersionChanged: vi.fn((cb: (e: { contextId: string; toVersion?: string }) => void) => { captured = cb; return () => {}; }), onMigrationEvent: vi.fn(() => () => {}), connect: vi.fn().mockResolvedValue(undefined), subscribe: vi.fn().mockResolvedValue(undefined) } },
     );
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useAppVersion('ctx1', '2.0.0'));
     await waitFor(() => expect(result.current.appVersion).toBe('1.0.0'));
@@ -1823,7 +1823,7 @@ describe('useLatestVersion', () => {
   it('flags an available update when the registry is ahead of the running version', async () => {
     const getRegistryVersions = vi.fn().mockResolvedValue(['2.0.0', '1.0.0']);
     const mero = createMero({ getRegistryVersions });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() =>
       useLatestVersion('https://registry.example.com', 'com.acme.app', '1.0.0'),
@@ -1836,7 +1836,7 @@ describe('useLatestVersion', () => {
   it('reports no update when the running version is already the latest', async () => {
     const getRegistryVersions = vi.fn().mockResolvedValue(['2.0.0', '1.0.0']);
     const mero = createMero({ getRegistryVersions });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() =>
       useLatestVersion('https://registry.example.com', 'com.acme.app', '2.0.0'),
@@ -1848,7 +1848,7 @@ describe('useLatestVersion', () => {
   it('does not fetch until registry and package are provided', async () => {
     const getRegistryVersions = vi.fn().mockResolvedValue(['2.0.0']);
     const mero = createMero({ getRegistryVersions });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useLatestVersion(null, null, '1.0.0'));
     await waitFor(() => expect(result.current.loading).toBe(false));
@@ -1863,7 +1863,7 @@ describe('useLatestVersion', () => {
       .fn()
       .mockReturnValue(new Promise<string[]>((r) => { resolveFetch = r; }));
     const mero = createMero({ getRegistryVersions });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result, rerender } = renderHook(
       ({ pkg }: { pkg: string | null }) =>
@@ -1927,7 +1927,7 @@ describe('useGroupAppVersion', () => {
       },
       { events: { onAppVersionChanged: vi.fn(() => () => {}), onMigrationEvent: vi.fn(() => () => {}), connect: vi.fn().mockResolvedValue(undefined), subscribe: vi.fn().mockResolvedValue(undefined) } },
     );
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useGroupAppVersion('group-1'));
 
@@ -1946,7 +1946,7 @@ describe('useGroupAppVersion', () => {
       },
       { events: { onAppVersionChanged: vi.fn(() => () => {}), onMigrationEvent: vi.fn(() => () => {}), connect: vi.fn().mockResolvedValue(undefined), subscribe: vi.fn().mockResolvedValue(undefined) } },
     );
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useGroupAppVersion('group-1'));
 
@@ -1962,7 +1962,7 @@ describe('useGroupAppVersion', () => {
       },
       { events: { onAppVersionChanged: vi.fn(() => () => {}), onMigrationEvent: vi.fn(() => () => {}), connect: vi.fn().mockResolvedValue(undefined), subscribe: vi.fn().mockResolvedValue(undefined) } },
     );
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useGroupAppVersion('group-1'));
 
@@ -1997,7 +1997,7 @@ describe('useGroupAppVersion', () => {
       },
       { events: { onAppVersionChanged: vi.fn(() => () => {}), onMigrationEvent: vi.fn(() => () => {}), connect: vi.fn().mockResolvedValue(undefined), subscribe: vi.fn().mockResolvedValue(undefined) } },
     );
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useGroupAppVersion('sub-1'));
 
@@ -2013,7 +2013,7 @@ describe('useGroupAppVersion', () => {
       { listNamespaces },
       { events: { onAppVersionChanged: vi.fn(() => () => {}), onMigrationEvent: vi.fn(() => () => {}), connect: vi.fn().mockResolvedValue(undefined), subscribe: vi.fn().mockResolvedValue(undefined) } },
     );
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useGroupAppVersion(undefined));
     await waitFor(() => expect(result.current.loading).toBe(false));
@@ -2028,7 +2028,7 @@ describe('useGroupAppVersion', () => {
       { listNamespaces, getApplication: vi.fn().mockResolvedValue(application(BLOB_AA)) },
       { events: { onAppVersionChanged: vi.fn((cb: () => void) => { captured = cb; return () => {}; }) } },
     );
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useGroupAppVersion('group-1'));
     await waitFor(() => expect(result.current.version).toBe('1.0.0'));
@@ -2047,7 +2047,7 @@ describe('useMyAuthoredMigration', () => {
     const countMyPending = vi.fn().mockResolvedValue(2);
     const migrateMyEntries = vi.fn().mockResolvedValue({ converted: 2, remaining: 0 });
     const mero = createMero({}, { rpc: { countMyPending, migrateMyEntries } });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useMyAuthoredMigration('ctx1'));
     await waitFor(() => expect(result.current.pending).toBe(true));
@@ -2061,5 +2061,106 @@ describe('useMyAuthoredMigration', () => {
     expect(result.current.summary).toEqual({ converted: 2, remaining: 0 });
     expect(result.current.pending).toBe(false);
     expect(result.current.pendingCount).toBe(0);
+  });
+});
+
+// Every hook goes through the session's `admin` (the node admin on a node, the
+// account admin on an account), never the raw client's: on an account the raw
+// `mero.admin` is the relay's admin-api, which refuses an account token the
+// writes a node owner may make (403 on POST /namespaces/:id/invite), while the
+// account admin signs invitations itself, joins through the admit route, and
+// governs groups under warrants.
+describe('hooks under an account session write through the context admin', () => {
+  beforeEach(() => {
+    mockUseMero.mockReset();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  function delegated() {
+    const mero = createMero();
+    const admin = createMero().admin;
+    mockUseMero.mockReturnValue({ mero, admin, isDelegated: true } as never);
+    return { mero, admin };
+  }
+
+  it('useCreateNamespaceInvitation mints through admin, not the raw client', async () => {
+    const { mero, admin } = delegated();
+    const { result } = renderHook(() => useCreateNamespaceInvitation());
+
+    let response: unknown;
+    await act(async () => {
+      response = await result.current.createNamespaceInvitation('ns-1', { groupName: 'g' } as never);
+    });
+
+    expect(admin.createNamespaceInvitation).toHaveBeenCalledWith('ns-1', { groupName: 'g' });
+    expect(mero.admin.createNamespaceInvitation).not.toHaveBeenCalled();
+    expect(response).toEqual(await (admin.createNamespaceInvitation as ReturnType<typeof vi.fn>).mock.results[0].value);
+    expect(result.current.error).toBeNull();
+  });
+
+  it('useGroupInvitations creates through admin, not the raw client', async () => {
+    const { mero, admin } = delegated();
+    const { result } = renderHook(() => useGroupInvitations());
+
+    await act(async () => {
+      await result.current.createInvitation('group-1');
+    });
+
+    expect(admin.createGroupInvitation).toHaveBeenCalledWith('group-1', undefined);
+    expect(mero.admin.createGroupInvitation).not.toHaveBeenCalled();
+  });
+
+  it('useJoinGroup joins through admin, not the raw client', async () => {
+    const { mero, admin } = delegated();
+    const { result } = renderHook(() => useJoinGroup());
+    const request = { invitation: { inviter_identity: [], group_id: [], expiration_timestamp: 0 }, inviter_signature: 'sig-1' } as never;
+
+    await act(async () => {
+      await result.current.joinGroup(request);
+    });
+
+    expect(admin.joinGroup).toHaveBeenCalledWith(request);
+    expect(mero.admin.joinGroup).not.toHaveBeenCalled();
+  });
+
+  it('useAddGroupMembers adds through admin, not the raw client', async () => {
+    const { mero, admin } = delegated();
+    const { result } = renderHook(() => useAddGroupMembers());
+    const request = { members: [{ identity: 'member-2', role: 'Member' as const }] };
+
+    await act(async () => {
+      await result.current.addGroupMembers('group-1', request);
+    });
+
+    expect(admin.addGroupMembers).toHaveBeenCalledWith('group-1', request);
+    expect(mero.admin.addGroupMembers).not.toHaveBeenCalled();
+  });
+
+  it('useNamespaces reads through admin, not the raw client', async () => {
+    const { mero, admin } = delegated();
+    (admin.listNamespaces as ReturnType<typeof vi.fn>).mockResolvedValue([{ namespaceId: 'ns-1' }]);
+
+    const { result } = renderHook(() => useNamespaces());
+
+    await waitFor(() => expect(result.current.namespaces).toEqual([{ namespaceId: 'ns-1' }]));
+    expect(admin.listNamespaces).toHaveBeenCalled();
+    expect(mero.admin.listNamespaces).not.toHaveBeenCalled();
+  });
+
+  it('a hook with no admin yet resolves null without touching the raw client', async () => {
+    const mero = createMero();
+    mockUseMero.mockReturnValue({ mero, admin: null, isDelegated: true } as never);
+    const { result } = renderHook(() => useCreateNamespaceInvitation());
+
+    let response: unknown = 'unset';
+    await act(async () => {
+      response = await result.current.createNamespaceInvitation('ns-1');
+    });
+
+    expect(response).toBeNull();
+    expect(mero.admin.createNamespaceInvitation).not.toHaveBeenCalled();
   });
 });

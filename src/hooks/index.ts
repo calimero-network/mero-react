@@ -1,32 +1,10 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { classifyError, compareSemver } from '@calimero-network/mero-js';
+import { classifyError, compareSemver, memberJoinedOpenOp, signerFromSecret } from '@calimero-network/mero-js';
 import { useMero } from '../context';
 import { base58ToHex } from '../utils/base58';
 import { listDelegatedContexts, listDelegatedNamespaces, readDelegatedSession } from '../delegated/session';
-import {
-  contextDetachedOp,
-  contextMetadataSetOp,
-  defaultCapabilitiesSetOp,
-  subgroupCreation,
-  groupDeletedOp,
-  groupMetadataSetOp,
-  groupReparentedOp,
-  memberAddedOp,
-  memberJoinedOpenOp,
-  memberMetadataSetOp,
-  memberRemovedOp,
-  memberRoleSetOp,
-  signerFromSecret,
-  subgroupVisibilitySetOp,
-  type GovernanceMemberRole,
-} from '@calimero-network/mero-js';
-import { governGroup, governRoot, rememberGroupNamespace } from '../delegated/govern';
-import {
-  createDelegatedContext,
-  createDelegatedPrivateContext,
-  foundDelegatedNamespace,
-  latestPublishedVersion,
-} from '../delegated/create-context';
+import { governRoot } from '../delegated/govern';
+import { createDelegatedContext, createDelegatedPrivateContext } from '../delegated/create-context';
 import type {
   Codec,
   EphemeralClient,
@@ -329,6 +307,12 @@ export function useEphemeral<T>(
     // context we switched to.
     const key = contextId;
     let cancelled = false;
+    // The RAW client's lookup, on purpose, unlike every other hook: "self" here
+    // must be exactly the key the client behind `mero.ephemeral` stamps as
+    // `author` on this node's entries, and that is what its own admin API
+    // answers. The session `admin` answers for the session instead (an account
+    // admin returns the account id), which names a different key and would
+    // leave own echoes unfiltered.
     mero.admin
       .getContextIdentitiesOwned(contextId)
       .then(res => {
@@ -830,9 +814,9 @@ export function useSubscription(
  * Fetch contexts for the current node, optionally filtered by application ID.
  */
 export function useContexts(applicationId?: string | null) {
-  const { mero, isDelegated } = useMero();
+  const { admin, isDelegated } = useMero();
   const { data, loading, error, refetch } = useAsyncResource<ApplicationContextRecord[]>(
-    mero
+    admin
       ? async () => {
           // A delegated session may list only its own contexts: the
           // per-application listing is node-wide, so a relay refuses it (403).
@@ -849,13 +833,13 @@ export function useContexts(applicationId?: string | null) {
             return mapApplicationContexts(own);
           }
           const response = applicationId
-            ? await mero.admin.getContextsForApplication(applicationId)
-            : await mero.admin.getContexts();
+            ? await admin.getContextsForApplication(applicationId)
+            : await admin.getContexts();
           return mapApplicationContexts(response.contexts ?? []);
         }
       : null,
     [],
-    [mero, applicationId, isDelegated],
+    [admin, applicationId, isDelegated],
   );
   return { contexts: data, loading, error, refetch };
 }
@@ -865,11 +849,11 @@ export function useApplicationContexts(applicationId?: string | null) {
 }
 
 export function useGroupMembers(groupId?: string | null) {
-  const { mero } = useMero();
+  const { admin } = useMero();
   const { data, loading, error, refetch } = useAsyncResource<ListGroupMembersResponseData | null>(
-    mero && groupId ? () => mero.admin.listGroupMembers(groupId) : null,
+    admin && groupId ? () => admin.listGroupMembers(groupId) : null,
     null,
-    [mero, groupId],
+    [admin, groupId],
   );
   // `members` is a guaranteed array on the wire; `?? []` guards mocks / drift.
   return {
@@ -881,44 +865,44 @@ export function useGroupMembers(groupId?: string | null) {
 }
 
 export function useGroupContexts(groupId?: string | null) {
-  const { mero } = useMero();
+  const { admin } = useMero();
   const { data, loading, error, refetch } = useAsyncResource<GroupContextEntry[]>(
-    mero && groupId ? () => mero.admin.listGroupContexts(groupId) : null,
+    admin && groupId ? () => admin.listGroupContexts(groupId) : null,
     [],
-    [mero, groupId],
+    [admin, groupId],
   );
   return { contexts: data, loading, error, refetch };
 }
 
 export function useGroupInvitations() {
-  const { mero } = useMero();
+  const { admin } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const createInvitation = useCallback(
     async (groupId: string, request?: CreateGroupInvitationRequest) => {
-      if (!mero) {
+      if (!admin) {
         return null;
       }
-      return run(() => mero.admin.createGroupInvitation(groupId, request));
+      return run(() => admin.createGroupInvitation(groupId, request));
     },
-    [mero, run],
+    [admin, run],
   );
 
   return { createInvitation, loading, error };
 }
 
 export function useJoinGroup() {
-  const { mero } = useMero();
+  const { admin } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const joinGroup = useCallback(
     async (request: JoinGroupRequest) => {
-      if (!mero) {
+      if (!admin) {
         return null;
       }
-      return run(() => mero.admin.joinGroup(request));
+      return run(() => admin.joinGroup(request));
     },
-    [mero, run],
+    [admin, run],
   );
 
   return { joinGroup, loading, error };
@@ -930,7 +914,7 @@ export function useJoinGroup() {
  * Both are 32-byte strings, so passing a key names nobody and raises nothing.
  */
 export function useGroupCapabilities(groupId?: string | null, memberId?: string | null) {
-  const { mero } = useMero();
+  const { admin } = useMero();
   const [capabilities, setCapabilitiesState] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
@@ -941,7 +925,7 @@ export function useGroupCapabilities(groupId?: string | null, memberId?: string 
 
   const refetch = useCallback(async () => {
     const seq = ++reqRef.current;
-    if (!mero || !groupId || !memberId) {
+    if (!admin || !groupId || !memberId) {
       if (mountedRef.current && seq === reqRef.current) {
         setCapabilitiesState(null);
         setError(null);
@@ -956,7 +940,7 @@ export function useGroupCapabilities(groupId?: string | null, memberId?: string 
     }
 
     try {
-      const response = await mero.admin.getMemberCapabilities(groupId, memberId);
+      const response = await admin.getMemberCapabilities(groupId, memberId);
       if (mountedRef.current && seq === reqRef.current) {
         setCapabilitiesState(response.capabilities);
       }
@@ -972,7 +956,7 @@ export function useGroupCapabilities(groupId?: string | null, memberId?: string 
         setLoading(false);
       }
     }
-  }, [groupId, memberId, mero, mountedRef]);
+  }, [groupId, memberId, admin, mountedRef]);
 
   useEffect(() => {
     reqRef.current += 1;
@@ -986,7 +970,7 @@ export function useGroupCapabilities(groupId?: string | null, memberId?: string 
 
   const setCapabilities = useCallback(
     async (nextCapabilities: number) => {
-      if (!mero || !groupId || !memberId) {
+      if (!admin || !groupId || !memberId) {
         return null;
       }
 
@@ -996,7 +980,7 @@ export function useGroupCapabilities(groupId?: string | null, memberId?: string 
       }
 
       try {
-        await mero.admin.setMemberCapabilities(groupId, memberId, { capabilities: nextCapabilities });
+        await admin.setMemberCapabilities(groupId, memberId, { capabilities: nextCapabilities });
         if (mountedRef.current) {
           setCapabilitiesState(nextCapabilities);
         }
@@ -1013,14 +997,14 @@ export function useGroupCapabilities(groupId?: string | null, memberId?: string 
         }
       }
     },
-    [groupId, memberId, mero, mountedRef],
+    [groupId, memberId, admin, mountedRef],
   );
 
   return { capabilities, loading, error, refetch, setCapabilities };
 }
 
 export function useContextDiscovery(options: ContextDiscoveryOptions): ContextDiscoveryState {
-  const { mero } = useMero();
+  const { admin } = useMero();
   const [context, setContext] = useState<ApplicationContextRecord | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
@@ -1029,7 +1013,7 @@ export function useContextDiscovery(options: ContextDiscoveryOptions): ContextDi
   const knownContextIdsKey = JSON.stringify(options.knownContextIds ?? []);
 
   const discover = useCallback(async () => {
-    if (!mero) {
+    if (!admin) {
       const notConnectedError = new Error('Not connected');
       if (mountedRef.current) {
         setError(notConnectedError);
@@ -1050,7 +1034,7 @@ export function useContextDiscovery(options: ContextDiscoveryOptions): ContextDi
       while (Date.now() <= deadline) {
         if (options.targetAlias) {
           const aliasMatch = extractAliasContextId(
-            await mero.admin.lookupContextAlias(options.targetAlias),
+            await admin.lookupContextAlias(options.targetAlias),
           );
 
           if (aliasMatch && !knownContextIds.has(aliasMatch)) {
@@ -1067,7 +1051,7 @@ export function useContextDiscovery(options: ContextDiscoveryOptions): ContextDi
           }
         }
 
-        const response = await mero.admin.getContextsForApplication(options.applicationId);
+        const response = await admin.getContextsForApplication(options.applicationId);
         const contexts = mapApplicationContexts(response.contexts ?? []);
         const discovered = contexts.find(
           (applicationContext) => !knownContextIds.has(applicationContext.contextId),
@@ -1111,7 +1095,7 @@ export function useContextDiscovery(options: ContextDiscoveryOptions): ContextDi
     }
   }, [
     knownContextIdsKey,
-    mero,
+    admin,
     mountedRef,
     options.applicationId,
     options.knownContextIds,
@@ -1134,7 +1118,7 @@ export function useContextDiscovery(options: ContextDiscoveryOptions): ContextDi
 // ---- Context CRUD Hooks ----
 
 export function useCreateContext() {
-  const { mero, isDelegated } = useMero();
+  const { admin, isDelegated } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const createContext = useCallback(
@@ -1152,10 +1136,10 @@ export function useCreateContext() {
           }),
         );
       }
-      if (!mero) return null;
-      return run(() => mero.admin.createContext(request));
+      if (!admin) return null;
+      return run(() => admin.createContext(request));
     },
-    [mero, run, isDelegated],
+    [admin, run, isDelegated],
   );
 
   return { createContext, loading, error };
@@ -1180,7 +1164,7 @@ export interface CreatePrivateContextRequest {
  *    each under its own warrant (delegated/create-context.ts).
  */
 export function useCreatePrivateContext() {
-  const { mero, isDelegated } = useMero();
+  const { admin, isDelegated } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const createPrivateContext = useCallback(
@@ -1190,16 +1174,16 @@ export function useCreatePrivateContext() {
         if (!session) return null;
         return run(() => createDelegatedPrivateContext(session, request));
       }
-      if (!mero) return null;
+      if (!admin) return null;
       return run(async () => {
-        const { groupId } = await mero.admin.createGroupInNamespace(request.namespaceId, {
+        const { groupId } = await admin.createGroupInNamespace(request.namespaceId, {
           visibility: 'restricted',
         });
         // The creator is the new group's admin already; the others join it here.
-        await mero.admin.addGroupMembers(groupId, {
+        await admin.addGroupMembers(groupId, {
           members: request.members.map((identity) => ({ identity, role: 'Member' })),
         });
-        const { contextId } = await mero.admin.createContext({
+        const { contextId } = await admin.createContext({
           applicationId: request.applicationId,
           groupId,
           initializationParams: request.initializationParams,
@@ -1207,22 +1191,22 @@ export function useCreatePrivateContext() {
         return { contextId };
       });
     },
-    [mero, run, isDelegated],
+    [admin, run, isDelegated],
   );
 
   return { createPrivateContext, loading, error };
 }
 
 export function useDeleteContext() {
-  const { mero } = useMero();
+  const { admin } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const deleteContext = useCallback(
     async (contextId: string) => {
-      if (!mero) return null;
-      return run(() => mero.admin.deleteContext(contextId));
+      if (!admin) return null;
+      return run(() => admin.deleteContext(contextId));
     },
-    [mero, run],
+    [admin, run],
   );
 
   return { deleteContext, loading, error };
@@ -1234,22 +1218,22 @@ export function useDeleteContext() {
  * `joinContext` reject instead of resolving `null`.
  */
 export function useJoinContext(options: MutationOptions = {}) {
-  const { mero } = useMero();
+  const { admin } = useMero();
   const { loading, error, failure, run } = useAsyncMutation(options);
 
   const joinContext = useCallback(
     async (contextId: string) => {
-      if (!mero) return null;
-      return run(() => mero.admin.joinContext(contextId));
+      if (!admin) return null;
+      return run(() => admin.joinContext(contextId));
     },
-    [mero, run],
+    [admin, run],
   );
 
   return { joinContext, loading, error, failure };
 }
 
 export function useJoinSubgroupInheritance() {
-  const { mero, isDelegated } = useMero();
+  const { admin, isDelegated } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const joinSubgroupInheritance = useCallback(
@@ -1265,21 +1249,21 @@ export function useJoinSubgroupInheritance() {
           return { groupId, memberPublicKey: publicKey, wasInherited: false };
         });
       }
-      if (!mero) return null;
-      return run(() => mero.admin.joinSubgroupInheritance(groupId));
+      if (!admin) return null;
+      return run(() => admin.joinSubgroupInheritance(groupId));
     },
-    [mero, run, isDelegated],
+    [admin, run, isDelegated],
   );
 
   return { joinSubgroupInheritance, loading, error };
 }
 
 export function useContextGroup(contextId?: string | null) {
-  const { mero } = useMero();
+  const { admin } = useMero();
   const { data, loading, error, refetch } = useAsyncResource<string | null>(
-    mero && contextId ? () => mero.admin.getContextGroup(contextId) : null,
+    admin && contextId ? () => admin.getContextGroup(contextId) : null,
     null,
-    [mero, contextId],
+    [admin, contextId],
   );
   return { groupId: data, loading, error, refetch };
 }
@@ -1287,45 +1271,40 @@ export function useContextGroup(contextId?: string | null) {
 // ---- Group Info / Management Hooks ----
 
 export function useGroupInfo(groupId?: string | null) {
-  const { mero } = useMero();
+  const { admin } = useMero();
   const { data, loading, error, refetch } = useAsyncResource<GroupInfo | null>(
-    mero && groupId ? () => mero.admin.getGroupInfo(groupId) : null,
+    admin && groupId ? () => admin.getGroupInfo(groupId) : null,
     null,
-    [mero, groupId],
+    [admin, groupId],
   );
   return { groupInfo: data, loading, error, refetch };
 }
 
 export function useDeleteGroup() {
-  const { mero, isDelegated } = useMero();
+  const { admin } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const deleteGroup = useCallback(
     async (groupId: string) => {
-      if (isDelegated) {
-        const session = readDelegatedSession();
-        if (!session) return null;
-        return run(() => governRoot(session, groupId, groupDeletedOp(groupId)));
-      }
-      if (!mero) return null;
-      return run(() => mero.admin.deleteGroup(groupId));
+      if (!admin) return null;
+      return run(() => admin.deleteGroup(groupId));
     },
-    [mero, run, isDelegated],
+    [admin, run],
   );
 
   return { deleteGroup, loading, error };
 }
 
 export function useSyncGroup() {
-  const { mero } = useMero();
+  const { admin } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const syncGroup = useCallback(
     async (groupId: string) => {
-      if (!mero) return null;
-      return run(() => mero.admin.syncGroup(groupId));
+      if (!admin) return null;
+      return run(() => admin.syncGroup(groupId));
     },
-    [mero, run],
+    [admin, run],
   );
 
   return { syncGroup, loading, error };
@@ -1338,24 +1317,15 @@ export function useSyncGroup() {
  * round-tripped from an add is the wrong one to remove with.
  */
 export function useAddGroupMembers() {
-  const { mero, isDelegated } = useMero();
+  const { admin } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const addGroupMembers = useCallback(
     async (groupId: string, request: AddGroupMembersRequest) => {
-      if (isDelegated) {
-        const session = readDelegatedSession();
-        if (!session) return null;
-        return run(async () => {
-          for (const m of request.members) {
-            await governGroup(session, groupId, memberAddedOp(m.identity, m.role as GovernanceMemberRole));
-          }
-        });
-      }
-      if (!mero) return null;
-      return run(() => mero.admin.addGroupMembers(groupId, request));
+      if (!admin) return null;
+      return run(() => admin.addGroupMembers(groupId, request));
     },
-    [mero, run, isDelegated],
+    [admin, run],
   );
 
   return { addGroupMembers, loading, error };
@@ -1367,22 +1337,15 @@ export function useAddGroupMembers() {
  * Both are 32-byte strings, so passing a key names nobody and raises nothing.
  */
 export function useRemoveGroupMembers() {
-  const { mero, isDelegated } = useMero();
+  const { admin } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const removeGroupMembers = useCallback(
     async (groupId: string, request: RemoveGroupMembersRequest) => {
-      if (isDelegated) {
-        const session = readDelegatedSession();
-        if (!session) return null;
-        return run(async () => {
-          for (const member of request.members) await governGroup(session, groupId, memberRemovedOp(member));
-        });
-      }
-      if (!mero) return null;
-      return run(() => mero.admin.removeGroupMembers(groupId, request));
+      if (!admin) return null;
+      return run(() => admin.removeGroupMembers(groupId, request));
     },
-    [mero, run, isDelegated],
+    [admin, run],
   );
 
   return { removeGroupMembers, loading, error };
@@ -1391,21 +1354,21 @@ export function useRemoveGroupMembers() {
 // ---- Namespace Hooks ----
 
 export function useNamespaces() {
-  const { mero } = useMero();
+  const { admin } = useMero();
   const { data, loading, error, refetch } = useAsyncResource<Namespace[]>(
-    mero ? () => mero.admin.listNamespaces() : null,
+    admin ? () => admin.listNamespaces() : null,
     [],
-    [mero],
+    [admin],
   );
   return { namespaces: data, loading, error, refetch };
 }
 
 export function useNamespace(namespaceId?: string | null) {
-  const { mero } = useMero();
+  const { admin } = useMero();
   const { data, loading, error, refetch } = useAsyncResource<Namespace | null>(
-    mero && namespaceId ? () => mero.admin.getNamespace(namespaceId) : null,
+    admin && namespaceId ? () => admin.getNamespace(namespaceId) : null,
     null,
-    [mero, namespaceId],
+    [admin, namespaceId],
   );
   return { namespace: data, loading, error, refetch };
 }
@@ -1416,11 +1379,11 @@ export function useNamespace(namespaceId?: string | null) {
  * addresses nobody. Both are 32-byte strings, so a swap fails silently.
  */
 export function useNodeIdentity() {
-  const { mero } = useMero();
+  const { admin } = useMero();
   const { data, loading, error, refetch } = useAsyncResource<NodeIdentity | null>(
-    mero ? () => mero.admin.getNodeIdentity() : null,
+    admin ? () => admin.getNodeIdentity() : null,
     null,
-    [mero],
+    [admin],
   );
   return { identity: data, loading, error, refetch };
 }
@@ -1433,19 +1396,19 @@ export function useNodeIdentity() {
  * NOT the account member-addressing wants.
  */
 export function useNamespaceIdentity(namespaceId?: string | null) {
-  const { mero } = useMero();
+  const { admin } = useMero();
   const { data, loading, error, refetch } = useAsyncResource<NamespaceIdentity | null>(
-    mero && namespaceId ? () => mero.admin.getNamespaceIdentity(namespaceId) : null,
+    admin && namespaceId ? () => admin.getNamespaceIdentity(namespaceId) : null,
     null,
-    [mero, namespaceId],
+    [admin, namespaceId],
   );
   return { identity: data, loading, error, refetch };
 }
 
 export function useNamespacesForApplication(applicationId?: string | null) {
-  const { mero, isDelegated } = useMero();
+  const { admin, isDelegated } = useMero();
   const { data, loading, error, refetch } = useAsyncResource<Namespace[]>(
-    mero && applicationId
+    admin && applicationId
       ? isDelegated
         ? async () => {
             // The per-application listing is node-wide, so a relay refuses it to
@@ -1454,75 +1417,46 @@ export function useNamespacesForApplication(applicationId?: string | null) {
             const listed = session ? await listDelegatedNamespaces(session) : [];
             return listed.filter((ns) => ns.targetApplicationId === applicationId);
           }
-        : () => mero.admin.listNamespacesForApplication(applicationId)
+        : () => admin.listNamespacesForApplication(applicationId)
       : null,
     [],
-    [mero, applicationId, isDelegated],
+    [admin, applicationId, isDelegated],
   );
   return { namespaces: data, loading, error, refetch };
 }
 
-/** Where an app's package is looked up when the provider names no registry. */
-const DEFAULT_REGISTRY_URL = 'https://apps.calimero.network';
-
 export function useCreateNamespace() {
-  const { mero, isDelegated, app, cloudBaseUrl } = useMero();
+  const { admin } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const createNamespace = useCallback(
     async (request: CreateNamespaceRequest) => {
-      if (isDelegated) {
-        // An account founds it through a relay it already uses (a signed
-        // genesis under a governance warrant; delegated/create-context.ts).
-        // Members it invites get mero-chat's default mask, so they can create
-        // contexts in it without a separate grant.
-        // It is given this app's application in the same call: a namespace
-        // founded through a relay starts with none, and holds no context until
-        // it has one.
-        const session = readDelegatedSession();
-        if (!session) return null;
-        const pkg = app.packageName;
-        return run(async () => {
-          if (!pkg) {
-            throw new Error('this app names no registry package, so a founded namespace could not be given its application');
-          }
-          const version = app.packageVersion ?? (await latestPublishedVersion(app.registryUrl ?? DEFAULT_REGISTRY_URL, pkg));
-          return foundDelegatedNamespace(
-            session,
-            {
-              defaultCapabilities: 231,
-              application: { applicationId: request.applicationId, package: pkg, version },
-            },
-            { cloudBaseUrl },
-          );
-        });
-      }
-      if (!mero) return null;
-      return run(() => mero.admin.createNamespace(request));
+      if (!admin) return null;
+      return run(() => admin.createNamespace(request));
     },
-    [mero, run, isDelegated, app, cloudBaseUrl],
+    [admin, run],
   );
 
   return { createNamespace, loading, error };
 }
 
 export function useDeleteNamespace() {
-  const { mero } = useMero();
+  const { admin } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const deleteNamespace = useCallback(
     async (namespaceId: string) => {
-      if (!mero) return null;
-      return run(() => mero.admin.deleteNamespace(namespaceId));
+      if (!admin) return null;
+      return run(() => admin.deleteNamespace(namespaceId));
     },
-    [mero, run],
+    [admin, run],
   );
 
   return { deleteNamespace, loading, error };
 }
 
 export function useCreateNamespaceInvitation() {
-  const { mero } = useMero();
+  const { admin } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const createNamespaceInvitation = useCallback(
@@ -1530,10 +1464,10 @@ export function useCreateNamespaceInvitation() {
       namespaceId: string,
       request?: CreateNamespaceInvitationRequest,
     ): Promise<CreateNamespaceInvitationResponseData | CreateRecursiveInvitationResponseData | null> => {
-      if (!mero) return null;
-      return run(() => mero.admin.createNamespaceInvitation(namespaceId, request));
+      if (!admin) return null;
+      return run(() => admin.createNamespaceInvitation(namespaceId, request));
     },
-    [mero, run],
+    [admin, run],
   );
 
   return { createNamespaceInvitation, loading, error };
@@ -1549,15 +1483,15 @@ export function useCreateNamespaceInvitation() {
  * recognises a join that landed although its request failed.
  */
 export function useJoinNamespace(options: MutationOptions = {}) {
-  const { mero } = useMero();
+  const { admin } = useMero();
   const { loading, error, failure, run } = useAsyncMutation(options);
 
   const joinNamespace = useCallback(
     async (namespaceId: string, request: JoinNamespaceRequest) => {
-      if (!mero) return null;
-      return run(() => mero.admin.joinNamespace(namespaceId, request));
+      if (!admin) return null;
+      return run(() => admin.joinNamespace(namespaceId, request));
     },
-    [mero, run],
+    [admin, run],
   );
 
   return { joinNamespace, loading, error, failure };
@@ -1575,7 +1509,7 @@ export function useJoinNamespace(options: MutationOptions = {}) {
  * `redeem` resolves `null` only when there is no client to send it through.
  */
 export function useRedeemInvitation() {
-  const { mero } = useMero();
+  const { admin } = useMero();
   const mountedRef = useMountedRef();
   const [loading, setLoading] = useState(false);
   const [outcome, setOutcome] = useState<RedeemOutcome | null>(null);
@@ -1586,70 +1520,46 @@ export function useRedeemInvitation() {
       invitation: JoinNamespaceRequest['invitation'],
       options: { groupName?: string; teamName?: string } = {},
     ): Promise<RedeemOutcome | null> => {
-      if (!mero) return null;
+      if (!admin) return null;
       if (mountedRef.current) {
         setLoading(true);
         setOutcome(null);
       }
       try {
-        const result = await mero.admin.redeemInvitation(namespaceId, invitation, options);
+        const result = await admin.redeemInvitation(namespaceId, invitation, options);
         if (mountedRef.current) setOutcome(result);
         return result;
       } finally {
         if (mountedRef.current) setLoading(false);
       }
     },
-    [mero, mountedRef],
+    [admin, mountedRef],
   );
 
   return { redeem, outcome, loading };
 }
 
 export function useCreateGroupInNamespace() {
-  const { mero, isDelegated } = useMero();
+  const { admin } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const createGroupInNamespace = useCallback(
     async (namespaceId: string, request?: CreateGroupInNamespaceRequest) => {
-      if (isDelegated) {
-        const session = readDelegatedSession();
-        if (!session) return null;
-        // A subgroup's id is derived from its creator and a salt; remembered so later root
-        // ops on it (delete, move, join) know which namespace to post to.
-        return run(async () => {
-          // The relay answers with the subgroup's id as core records it, which
-          // is the one to keep (it need not be the one proposed).
-          const { groupId } = await governRoot(
-            session,
-            namespaceId,
-            // The id is derived from a fresh salt (core#4244); a node refuses any other.
-            (
-              await subgroupCreation({
-                parentId: namespaceId,
-                restricted: request?.visibility !== 'open',
-                admin: session.account,
-              })
-            ).op,
-          );
-          rememberGroupNamespace(session.account, groupId, namespaceId);
-          return { groupId };
-        });
-      }
-      if (!mero) return null;
-      return run(() => mero.admin.createGroupInNamespace(namespaceId, request));
+      if (!admin) return null;
+      return run(() => admin.createGroupInNamespace(namespaceId, request));
     },
-    [mero, run, isDelegated],
+    [admin, run],
   );
 
   return { createGroupInNamespace, loading, error };
 }
 
 export function useNamespaceGroups(namespaceId?: string | null) {
-  const { mero } = useMero();
+  const { admin } = useMero();
   const { data, loading, error, refetch } = useAsyncResource<SubgroupEntry[]>(
-    mero && namespaceId ? () => mero.admin.listNamespaceGroups(namespaceId) : null,
+    admin && namespaceId ? () => admin.listNamespaceGroups(namespaceId) : null,
     [],
-    [mero, namespaceId],
+    [admin, namespaceId],
   );
   return { groups: data, loading, error, refetch };
 }
@@ -1662,97 +1572,80 @@ export function useNamespaceGroups(namespaceId?: string | null) {
  * Both are 32-byte strings, so passing a key names nobody and raises nothing.
  */
 export function useUpdateMemberRole() {
-  const { mero, isDelegated } = useMero();
+  const { admin } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const updateMemberRole = useCallback(
     async (groupId: string, identity: string, request: UpdateMemberRoleRequest) => {
-      if (isDelegated) {
-        const session = readDelegatedSession();
-        if (!session) return null;
-        return run(() => governGroup(session, groupId, memberRoleSetOp(identity, request.role as GovernanceMemberRole)));
-      }
-      if (!mero) return null;
-      return run(() => mero.admin.updateMemberRole(groupId, identity, request));
+      if (!admin) return null;
+      return run(() => admin.updateMemberRole(groupId, identity, request));
     },
-    [mero, run, isDelegated],
+    [admin, run],
   );
 
   return { updateMemberRole, loading, error };
 }
 
 export function useSetDefaultCapabilities() {
-  const { mero, isDelegated } = useMero();
+  const { admin } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const setDefaultCapabilities = useCallback(
     async (groupId: string, request: SetDefaultCapabilitiesRequest) => {
-      if (isDelegated) {
-        const session = readDelegatedSession();
-        if (!session) return null;
-        return run(() => governGroup(session, groupId, defaultCapabilitiesSetOp(request.defaultCapabilities)));
-      }
-      if (!mero) return null;
-      return run(() => mero.admin.setDefaultCapabilities(groupId, request));
+      if (!admin) return null;
+      return run(() => admin.setDefaultCapabilities(groupId, request));
     },
-    [mero, run, isDelegated],
+    [admin, run],
   );
 
   return { setDefaultCapabilities, loading, error };
 }
 
 export function useSetSubgroupVisibility() {
-  const { mero, isDelegated } = useMero();
+  const { admin } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const setSubgroupVisibility = useCallback(
     async (groupId: string, request: SetSubgroupVisibilityRequest) => {
-      if (isDelegated) {
-        const session = readDelegatedSession();
-        if (!session) return null;
-        return run(() =>
-          governGroup(session, groupId, subgroupVisibilitySetOp(request.subgroupVisibility === 'open' ? 'open' : 'restricted')),
-        );
-      }
-      if (!mero) return null;
-      return run(() => mero.admin.setSubgroupVisibility(groupId, request));
+      if (!admin) return null;
+      return run(() => admin.setSubgroupVisibility(groupId, request));
     },
-    [mero, run, isDelegated],
+    [admin, run],
   );
 
   return { setSubgroupVisibility, loading, error };
 }
 
 export function useDefaultCapabilities(groupId?: string | null) {
-  const { mero } = useMero();
+  const { admin } = useMero();
   const { data, loading, error, refetch } = useAsyncResource<number | null>(
-    mero && groupId ? () => mero.admin.getDefaultCapabilities(groupId) : null,
+    admin && groupId ? () => admin.getDefaultCapabilities(groupId) : null,
     null,
-    [mero, groupId],
+    [admin, groupId],
   );
   return { defaultCapabilities: data, loading, error, refetch };
 }
 
 export function useSubgroupVisibility(groupId?: string | null) {
-  const { mero } = useMero();
+  const { admin } = useMero();
   const { data, loading, error, refetch } = useAsyncResource<string | null>(
-    mero && groupId ? () => mero.admin.getSubgroupVisibility(groupId) : null,
+    admin && groupId ? () => admin.getSubgroupVisibility(groupId) : null,
     null,
-    [mero, groupId],
+    [admin, groupId],
   );
   return { subgroupVisibility: data, loading, error, refetch };
 }
 
 export function useSetTeeAdmissionPolicy() {
-  const { mero } = useMero();
+  const { admin } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const setTeeAdmissionPolicy = useCallback(
     async (groupId: string, request: SetTeeAdmissionPolicyRequest) => {
-      if (!mero) return null;
-      return run(() => mero.admin.setTeeAdmissionPolicy(groupId, request));
+      if (!admin) return null;
+      return run(() => admin.setTeeAdmissionPolicy(groupId, request));
     },
-    [mero, run],
+    [admin, run],
   );
 
   return { setTeeAdmissionPolicy, loading, error };
@@ -1761,20 +1654,15 @@ export function useSetTeeAdmissionPolicy() {
 // ---- Metadata Hooks ----
 
 export function useSetGroupMetadata() {
-  const { mero, isDelegated } = useMero();
+  const { admin } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const setGroupMetadata = useCallback(
     async (groupId: string, request: SetMetadataInput) => {
-      if (isDelegated) {
-        const session = readDelegatedSession();
-        if (!session) return null;
-        return run(() => governGroup(session, groupId, groupMetadataSetOp(request)));
-      }
-      if (!mero) return null;
-      return run(() => mero.admin.setGroupMetadata(groupId, request));
+      if (!admin) return null;
+      return run(() => admin.setGroupMetadata(groupId, request));
     },
-    [mero, run, isDelegated],
+    [admin, run],
   );
 
   return { setGroupMetadata, loading, error };
@@ -1786,57 +1674,47 @@ export function useSetGroupMetadata() {
  * Both are 32-byte strings, so passing a key names nobody and raises nothing.
  */
 export function useSetMemberMetadata() {
-  const { mero, isDelegated } = useMero();
+  const { admin } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const setMemberMetadata = useCallback(
     async (groupId: string, identity: string, request: SetMetadataInput) => {
-      if (isDelegated) {
-        const session = readDelegatedSession();
-        if (!session) return null;
-        return run(() => governGroup(session, groupId, memberMetadataSetOp(identity, request)));
-      }
-      if (!mero) return null;
-      return run(() => mero.admin.setMemberMetadata(groupId, identity, request));
+      if (!admin) return null;
+      return run(() => admin.setMemberMetadata(groupId, identity, request));
     },
-    [mero, run, isDelegated],
+    [admin, run],
   );
 
   return { setMemberMetadata, loading, error };
 }
 
 export function useSetContextMetadata() {
-  const { mero, isDelegated } = useMero();
+  const { admin } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const setContextMetadata = useCallback(
     async (groupId: string, contextId: string, request: SetMetadataInput) => {
-      if (isDelegated) {
-        const session = readDelegatedSession();
-        if (!session) return null;
-        return run(() => governGroup(session, groupId, contextMetadataSetOp(contextId, request)));
-      }
-      if (!mero) return null;
-      return run(() => mero.admin.setContextMetadata(groupId, contextId, request));
+      if (!admin) return null;
+      return run(() => admin.setContextMetadata(groupId, contextId, request));
     },
-    [mero, run, isDelegated],
+    [admin, run],
   );
 
   return { setContextMetadata, loading, error };
 }
 
 export function useGroupMetadata(groupId?: string | null) {
-  const { mero } = useMero();
+  const { admin } = useMero();
   const { data, loading, error, refetch } = useAsyncResource<MetadataRecord | null>(
-    mero && groupId ? () => mero.admin.getGroupMetadata(groupId) : null,
+    admin && groupId ? () => admin.getGroupMetadata(groupId) : null,
     null,
-    [mero, groupId],
+    [admin, groupId],
   );
   return { metadata: data, loading, error, refetch };
 }
 
 export function useMemberMetadata(groupId?: string | null, identity?: string | null) {
-  const { mero } = useMero();
+  const { admin } = useMero();
   const [metadata, setMetadata] = useState<MetadataRecord | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
@@ -1863,7 +1741,7 @@ export function useMemberMetadata(groupId?: string | null, identity?: string | n
   // the effect.
   const run = useCallback(
     async (signal: { aborted: boolean }) => {
-      if (!mero || !groupId || !identity) {
+      if (!admin || !groupId || !identity) {
         if (!signal.aborted) {
           setMetadata(null);
           setError(null);
@@ -1876,7 +1754,7 @@ export function useMemberMetadata(groupId?: string | null, identity?: string | n
         setError(null);
       }
       try {
-        const result = await mero.admin.getMemberMetadata(groupId, identity);
+        const result = await admin.getMemberMetadata(groupId, identity);
         if (!signal.aborted) setMetadata(result);
       } catch (err) {
         if (!signal.aborted) setError(toError(err));
@@ -1884,7 +1762,7 @@ export function useMemberMetadata(groupId?: string | null, identity?: string | n
         if (!signal.aborted) setLoading(false);
       }
     },
-    [mero, groupId, identity],
+    [admin, groupId, identity],
   );
 
   useEffect(() => {
@@ -1910,15 +1788,15 @@ export function useMemberMetadata(groupId?: string | null, identity?: string | n
 // ---- Group Signing Key, Upgrades & Hierarchy ----
 
 export function useUpgradeGroup() {
-  const { mero } = useMero();
+  const { admin } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const upgradeGroup = useCallback(
     async (groupId: string, request: UpgradeGroupRequest) => {
-      if (!mero) return null;
-      return run(() => mero.admin.upgradeGroup(groupId, request));
+      if (!admin) return null;
+      return run(() => admin.upgradeGroup(groupId, request));
     },
-    [mero, run],
+    [admin, run],
   );
 
   return { upgradeGroup, loading, error };
@@ -1931,7 +1809,7 @@ export function useUpgradeGroup() {
  * itself change what any group runs; pair it with a subsequent upgrade.
  */
 export function useInstallFromRegistry() {
-  const { mero } = useMero();
+  const { admin } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   /**
@@ -1944,10 +1822,10 @@ export function useInstallFromRegistry() {
    */
   const installFromRegistry = useCallback(
     async (packageName: string, version: string) => {
-      if (!mero) return null;
-      return run(() => mero.admin.installApplication({ package: packageName, version }));
+      if (!admin) return null;
+      return run(() => admin.installApplication({ package: packageName, version }));
     },
-    [mero, run],
+    [admin, run],
   );
 
   return { installFromRegistry, loading, error };
@@ -1959,22 +1837,22 @@ export function useInstallFromRegistry() {
  * flag the context as stranded.
  */
 export function useResyncContext() {
-  const { mero } = useMero();
+  const { admin } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const resyncContext = useCallback(
     async (contextId: string, request: ResyncContextRequest = {}) => {
-      if (!mero) return null;
-      return run(() => mero.admin.resyncContext(contextId, request));
+      if (!admin) return null;
+      return run(() => admin.resyncContext(contextId, request));
     },
-    [mero, run],
+    [admin, run],
   );
 
   return { resyncContext, loading, error };
 }
 
 export function useGroupUpgradeStatus(groupId?: string | null) {
-  const { mero } = useMero();
+  const { admin } = useMero();
   const [upgradeStatus, setUpgradeStatus] = useState<GroupUpgradeStatusResponseData>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
@@ -1985,7 +1863,7 @@ export function useGroupUpgradeStatus(groupId?: string | null) {
 
   const refetch = useCallback(async () => {
     const seq = ++reqRef.current;
-    if (!mero || !groupId) {
+    if (!admin || !groupId) {
       if (mountedRef.current) {
         setUpgradeStatus(null);
         setError(null);
@@ -2000,7 +1878,7 @@ export function useGroupUpgradeStatus(groupId?: string | null) {
     }
 
     try {
-      const result = await mero.admin.getGroupUpgradeStatus(groupId);
+      const result = await admin.getGroupUpgradeStatus(groupId);
       if (mountedRef.current && seq === reqRef.current) {
         setUpgradeStatus(result);
       }
@@ -2014,7 +1892,7 @@ export function useGroupUpgradeStatus(groupId?: string | null) {
         setLoading(false);
       }
     }
-  }, [groupId, mero, mountedRef]);
+  }, [groupId, admin, mountedRef]);
 
   // Clear stale status synchronously when the target group changes (and
   // invalidate any in-flight refetch), mirroring useMigrationStatus.
@@ -2032,15 +1910,15 @@ export function useGroupUpgradeStatus(groupId?: string | null) {
 }
 
 export function useRetryGroupUpgrade() {
-  const { mero } = useMero();
+  const { admin } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const retryGroupUpgrade = useCallback(
     async (groupId: string) => {
-      if (!mero) return null;
-      return run(() => mero.admin.retryGroupUpgrade(groupId));
+      if (!admin) return null;
+      return run(() => admin.retryGroupUpgrade(groupId));
     },
-    [mero, run],
+    [admin, run],
   );
 
   return { retryGroupUpgrade, loading, error };
@@ -2048,34 +1926,26 @@ export function useRetryGroupUpgrade() {
 
 /** Move `childGroupId` under a new parent. */
 export function useReparentGroup() {
-  const { mero, isDelegated } = useMero();
+  const { admin } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const reparentGroup = useCallback(
     async (childGroupId: string, request: ReparentGroupRequest) => {
-      if (isDelegated) {
-        const session = readDelegatedSession();
-        if (!session) return null;
-        return run(async () => {
-          await governRoot(session, childGroupId, groupReparentedOp(childGroupId, request.newParentId));
-          return { reparented: true };
-        });
-      }
-      if (!mero) return null;
-      return run(() => mero.admin.reparentGroup(childGroupId, request));
+      if (!admin) return null;
+      return run(() => admin.reparentGroup(childGroupId, request));
     },
-    [mero, run, isDelegated],
+    [admin, run],
   );
 
   return { reparentGroup, loading, error };
 }
 
 export function useSubgroups(groupId?: string | null) {
-  const { mero } = useMero();
+  const { admin } = useMero();
   const { data, loading, error, refetch } = useAsyncResource<SubgroupEntry[]>(
-    mero && groupId ? () => mero.admin.listSubgroups(groupId) : null,
+    admin && groupId ? () => admin.listSubgroups(groupId) : null,
     [],
-    [mero, groupId],
+    [admin, groupId],
   );
   return { subgroups: data, loading, error, refetch };
 }
@@ -2083,20 +1953,15 @@ export function useSubgroups(groupId?: string | null) {
 // ---- Context-Group Relationship ----
 
 export function useDetachContextFromGroup() {
-  const { mero, isDelegated } = useMero();
+  const { admin } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const detachContextFromGroup = useCallback(
     async (groupId: string, contextId: string) => {
-      if (isDelegated) {
-        const session = readDelegatedSession();
-        if (!session) return null;
-        return run(() => governGroup(session, groupId, contextDetachedOp(contextId)));
-      }
-      if (!mero) return null;
-      return run(() => mero.admin.detachContextFromGroup(groupId, contextId));
+      if (!admin) return null;
+      return run(() => admin.detachContextFromGroup(groupId, contextId));
     },
-    [mero, run, isDelegated],
+    [admin, run],
   );
 
   return { detachContextFromGroup, loading, error };
@@ -2176,7 +2041,7 @@ export function useMigrationStatus(
   namespaceId?: string | null,
   options?: { pollIntervalMs?: number },
 ) {
-  const { mero } = useMero();
+  const { admin } = useMero();
   const [status, setStatus] = useState<MigrationStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
@@ -2187,7 +2052,7 @@ export function useMigrationStatus(
   const reqRef = useRef(0);
 
   const refetch = useCallback(async () => {
-    if (!mero || !namespaceId) {
+    if (!admin || !namespaceId) {
       if (mountedRef.current) {
         setStatus(null);
         setError(null);
@@ -2203,7 +2068,7 @@ export function useMigrationStatus(
     }
 
     try {
-      const result = await mero.admin.getMigrationStatus(namespaceId);
+      const result = await admin.getMigrationStatus(namespaceId);
       if (mountedRef.current && seq === reqRef.current) {
         setStatus(result);
       }
@@ -2217,7 +2082,7 @@ export function useMigrationStatus(
         setLoading(false);
       }
     }
-  }, [namespaceId, mero, mountedRef]);
+  }, [namespaceId, admin, mountedRef]);
 
   // Clear stale state the instant the namespace changes, so the panel shows a
   // loading state rather than the previous namespace's data during the refetch.
@@ -2245,10 +2110,10 @@ export function useMigrationStatus(
     options?.pollIntervalMs ??
     (sseLive ? undefined : DEFAULT_MIGRATION_POLL_INTERVAL_MS);
   useEffect(() => {
-    if (!pollIntervalMs || !mero || !namespaceId) return;
+    if (!pollIntervalMs || !admin || !namespaceId) return;
     const handle = setInterval(() => void refetch(), pollIntervalMs);
     return () => clearInterval(handle);
-  }, [pollIntervalMs, mero, namespaceId, refetch]);
+  }, [pollIntervalMs, admin, namespaceId, refetch]);
 
   const rollup: MigrationStatusRollup | null = status?.rollup ?? null;
   const members: MemberMigrationStatusEntry[] = status?.members ?? [];
@@ -2280,7 +2145,7 @@ export function useMigrationStatus(
  * `AppVersionChanged` so a live flip updates `appVersion` without a refetch.
  */
 export function useAppVersion(contextId?: string | null, expected?: string) {
-  const { mero } = useMero();
+  const { mero, admin } = useMero();
   const [appVersion, setAppVersion] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
@@ -2289,7 +2154,7 @@ export function useAppVersion(contextId?: string | null, expected?: string) {
   const reqRef = useRef(0);
 
   const refetch = useCallback(async () => {
-    if (!mero || !contextId) {
+    if (!admin || !contextId) {
       if (mountedRef.current) {
         setAppVersion(undefined);
         setError(null);
@@ -2305,7 +2170,7 @@ export function useAppVersion(contextId?: string | null, expected?: string) {
     }
 
     try {
-      const context = await mero.admin.getContext(contextId);
+      const context = await admin.getContext(contextId);
       if (mountedRef.current && seq === reqRef.current) {
         setAppVersion(context.applicationVersion);
       }
@@ -2319,7 +2184,7 @@ export function useAppVersion(contextId?: string | null, expected?: string) {
         setLoading(false);
       }
     }
-  }, [contextId, mero, mountedRef]);
+  }, [contextId, admin, mountedRef]);
 
   // Reset on context change so a stale version isn't shown during the refetch.
   useEffect(() => {
@@ -2364,7 +2229,7 @@ export function useLatestVersion(
   packageName?: string | null,
   currentVersion?: string | null,
 ) {
-  const { mero } = useMero();
+  const { admin } = useMero();
   const [versions, setVersions] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
@@ -2373,7 +2238,7 @@ export function useLatestVersion(
   const reqRef = useRef(0);
 
   const refetch = useCallback(async () => {
-    if (!mero || !registryUrl || !packageName) {
+    if (!admin || !registryUrl || !packageName) {
       // Invalidate any in-flight request so a late response can't repopulate
       // stale versions for the previous package after the inputs were cleared.
       reqRef.current += 1;
@@ -2392,7 +2257,7 @@ export function useLatestVersion(
     }
 
     try {
-      const result = await mero.admin.getRegistryVersions(registryUrl, packageName);
+      const result = await admin.getRegistryVersions(registryUrl, packageName);
       if (mountedRef.current && seq === reqRef.current) {
         setVersions(result);
       }
@@ -2406,7 +2271,7 @@ export function useLatestVersion(
         setLoading(false);
       }
     }
-  }, [mero, registryUrl, packageName, mountedRef]);
+  }, [admin, registryUrl, packageName, mountedRef]);
 
   // Clear stale versions the instant the package/registry changes.
   useEffect(() => {
@@ -2467,7 +2332,7 @@ function isZeroAppKey(appKey?: string): boolean {
  * workspace can make the rollup stale.
  */
 export function useGroupAppVersion(groupId?: string) {
-  const { mero } = useMero();
+  const { mero, admin } = useMero();
   const [data, setData] = useState<GroupAppVersion>(EMPTY_GROUP_APP_VERSION);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
@@ -2477,7 +2342,7 @@ export function useGroupAppVersion(groupId?: string) {
 
   const refetch = useCallback(async () => {
     const seq = ++reqRef.current;
-    if (!mero || !groupId) {
+    if (!admin || !groupId) {
       if (mountedRef.current) {
         setData(EMPTY_GROUP_APP_VERSION);
         setError(null);
@@ -2495,7 +2360,7 @@ export function useGroupAppVersion(groupId?: string) {
       // Namespace-first resolution: a top-level group is a namespace; only
       // subgroups need the getGroupInfo fallback (which also carries
       // activeUpgrade, so we surface it without a third call).
-      const namespaces = await mero.admin.listNamespaces();
+      const namespaces = await admin.listNamespaces();
       const namespace = namespaces.find((entry) => entry.namespaceId === groupId);
 
       let appKey: string | undefined;
@@ -2506,7 +2371,7 @@ export function useGroupAppVersion(groupId?: string) {
         appKey = namespace.appKey;
         applicationId = namespace.targetApplicationId;
       } else {
-        const info = await mero.admin.getGroupInfo(groupId);
+        const info = await admin.getGroupInfo(groupId);
         appKey = info.appKey;
         applicationId = info.targetApplicationId;
         activeUpgrade = info.activeUpgrade ?? null;
@@ -2515,7 +2380,7 @@ export function useGroupAppVersion(groupId?: string) {
       let version: string | null = null;
       let pendingApply = false;
       if (applicationId) {
-        const { application } = await mero.admin.getApplication(applicationId);
+        const { application } = await admin.getApplication(applicationId);
         version = application?.version ?? null;
         if (application && !isZeroAppKey(appKey)) {
           const installedHex = base58ToHex(application.blob.bytecode).toLowerCase();
@@ -2536,7 +2401,7 @@ export function useGroupAppVersion(groupId?: string) {
         setLoading(false);
       }
     }
-  }, [groupId, mero, mountedRef]);
+  }, [groupId, admin, mountedRef]);
 
   // Clear stale state synchronously when the target group changes (and
   // invalidate any in-flight refetch). Mirrors useGroupUpgradeStatus.
@@ -2695,14 +2560,14 @@ function isBlobNotFound(error: Error | null): boolean {
  * with one. See {@link BlobHookOptions}.
  */
 export function useBlobInfo(blobId?: string | null, options?: BlobHookOptions) {
-  const { mero } = useMero();
+  const { admin } = useMero();
   const contextId = options?.contextId;
   const { data, loading, error, refetch } = useAsyncResource<GetBlobInfoResponseData | null>(
-    mero && blobId
-      ? () => mero.admin.getBlobInfo(blobId, contextId ? { contextId } : undefined)
+    admin && blobId
+      ? () => admin.getBlobInfo(blobId, contextId ? { contextId } : undefined)
       : null,
     null,
-    [mero, blobId, contextId],
+    [admin, blobId, contextId],
   );
 
   return { info: data, notFound: isBlobNotFound(error), loading, error, refetch };
@@ -2730,7 +2595,7 @@ export function useBlobInfo(blobId?: string | null, options?: BlobHookOptions) {
  * transport failure; `error` is set for both.
  */
 export function useBlobUrl(blobId?: string | null, options?: UseBlobUrlOptions) {
-  const { mero } = useMero();
+  const { admin } = useMero();
   const contextId = options?.contextId;
   const type = options?.type;
   const mountedRef = useMountedRef();
@@ -2752,14 +2617,14 @@ export function useBlobUrl(blobId?: string | null, options?: UseBlobUrlOptions) 
 
   const refetch = useCallback(async () => {
     const seq = ++reqRef.current;
-    if (!mero || !blobId) return;
+    if (!admin || !blobId) return;
 
     if (mountedRef.current) {
       setLoading(true);
       setError(null);
     }
     try {
-      const bytes = await mero.admin.getBlob(blobId, contextId ? { contextId } : undefined);
+      const bytes = await admin.getBlob(blobId, contextId ? { contextId } : undefined);
       // Check BEFORE creating the object URL: a loser allocates nothing, so
       // there is nothing to leak and nothing to overwrite the winner with.
       if (!mountedRef.current || seq !== reqRef.current) return;
@@ -2772,7 +2637,7 @@ export function useBlobUrl(blobId?: string | null, options?: UseBlobUrlOptions) 
     } finally {
       if (mountedRef.current && seq === reqRef.current) setLoading(false);
     }
-  }, [mero, blobId, contextId, type, revoke, mountedRef]);
+  }, [admin, blobId, contextId, type, revoke, mountedRef]);
 
   // Invalidate the in-flight request and drop the current URL synchronously
   // when the inputs change, so the consumer never sees the previous blob's URL
@@ -2783,7 +2648,7 @@ export function useBlobUrl(blobId?: string | null, options?: UseBlobUrlOptions) 
     setUrl(null);
     setError(null);
     setLoading(false);
-  }, [mero, blobId, contextId, type, revoke]);
+  }, [admin, blobId, contextId, type, revoke]);
 
   useEffect(() => {
     void refetch();
@@ -2806,15 +2671,15 @@ export function useBlobUrl(blobId?: string | null, options?: UseBlobUrlOptions) 
  * {@link useBlobInfo}. Without it the blob is only readable on this node.
  */
 export function useUploadBlob() {
-  const { mero } = useMero();
+  const { admin } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const uploadBlob = useCallback(
     async (request: UploadBlobRequest) => {
-      if (!mero) return null;
-      return run(() => mero.admin.uploadBlob(request));
+      if (!admin) return null;
+      return run(() => admin.uploadBlob(request));
     },
-    [mero, run],
+    [admin, run],
   );
 
   return { uploadBlob, loading, error };

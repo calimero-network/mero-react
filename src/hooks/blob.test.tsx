@@ -48,7 +48,7 @@ afterEach(() => {
 describe('useBlobInfo', () => {
   it('does not fetch when blobId is null', async () => {
     const mero = createMero();
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useBlobInfo(null));
 
@@ -63,7 +63,7 @@ describe('useBlobInfo', () => {
 
   it('reads locally when no contextId is supplied', async () => {
     const mero = createMero();
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useBlobInfo('blob-1'));
 
@@ -75,7 +75,7 @@ describe('useBlobInfo', () => {
 
   it('opts into discovery when a contextId is supplied', async () => {
     const mero = createMero();
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useBlobInfo('blob-1', { contextId: 'ctx-1' }));
 
@@ -91,7 +91,7 @@ describe('useBlobInfo', () => {
     const mero = createMero({
       getBlobInfo: vi.fn().mockResolvedValue({ blobId: 'blob-1', size: 262144000, source: 'peer' }),
     });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useBlobInfo('blob-1', { contextId: 'ctx-1' }));
 
@@ -108,7 +108,7 @@ describe('useBlobInfo', () => {
     const mero = createMero({
       getBlobInfo: vi.fn().mockRejectedValue(httpError(404, 'not found')),
     });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useBlobInfo('blob-1', { contextId: 'ctx-1' }));
 
@@ -123,7 +123,7 @@ describe('useBlobInfo', () => {
     const mero = createMero({
       getBlobInfo: vi.fn().mockRejectedValue(new Error('network down')),
     });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useBlobInfo('blob-1'));
 
@@ -137,7 +137,7 @@ describe('useBlobInfo', () => {
 describe('useBlobUrl', () => {
   it('does not fetch when blobId is null', async () => {
     const mero = createMero();
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useBlobUrl(null));
 
@@ -151,7 +151,7 @@ describe('useBlobUrl', () => {
 
   it('yields an object URL for the fetched bytes', async () => {
     const mero = createMero();
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useBlobUrl('blob-1', { contextId: 'ctx-1' }));
 
@@ -164,7 +164,7 @@ describe('useBlobUrl', () => {
 
   it('revokes the object URL on unmount', async () => {
     const mero = createMero();
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result, unmount } = renderHook(() => useBlobUrl('blob-1'));
 
@@ -179,7 +179,7 @@ describe('useBlobUrl', () => {
 
   it('revokes the old URL and clears it when the blobId changes', async () => {
     const mero = createMero();
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result, rerender } = renderHook(({ id }) => useBlobUrl(id), {
       initialProps: { id: 'blob-1' as string | null },
@@ -210,7 +210,7 @@ describe('useBlobUrl', () => {
         }),
     );
     const mero = createMero({ getBlob });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result, rerender } = renderHook(({ id }) => useBlobUrl(id), {
       initialProps: { id: 'blob-1' as string | null },
@@ -245,7 +245,7 @@ describe('useBlobUrl', () => {
     const mero = createMero({
       getBlob: vi.fn().mockRejectedValue(httpError(404)),
     });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useBlobUrl('blob-1', { contextId: 'ctx-1' }));
 
@@ -261,7 +261,7 @@ describe('useBlobUrl', () => {
 describe('useUploadBlob', () => {
   it('uploads bytes and returns the blob id', async () => {
     const mero = createMero();
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useUploadBlob());
 
@@ -280,7 +280,7 @@ describe('useUploadBlob', () => {
     const mero = createMero({
       uploadBlob: vi.fn().mockRejectedValue(new Error('upload boom')),
     });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     const { result } = renderHook(() => useUploadBlob());
 
