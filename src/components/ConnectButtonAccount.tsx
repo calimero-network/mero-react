@@ -261,6 +261,9 @@ export function ConnectButtonAccount({
         }}
         onClose={() => setIsNodeModalOpen(false)}
         theme={resolvedTheme ?? theme}
+        // This component runs the account path itself (the hook above); the node
+        // dialog stays node-only so the single-use callback has one reader.
+        cloud={false}
       />
     </div>
   );

@@ -18,7 +18,7 @@ vi.mock('@calimero-network/mero-js', async (orig) => ({
 
 import { RelayClient } from '@calimero-network/mero-js';
 import { MeroContext } from '../context';
-import { useAccountEnrolment } from './useAccountEnrolment';
+import { isReturningFromWallet, useAccountEnrolment } from './useAccountEnrolment';
 import { foundDelegatedNamespace } from './create-context';
 import { readDelegatedSession, saveDelegatedSession, type DelegatedSession } from './session';
 
@@ -245,5 +245,26 @@ describe('useAccountEnrolment', () => {
       expect(session).toEqual({ relayUrl: RELAY, account: ACCOUNT, credential: 'cred', deviceSecret: KEYS.signSk });
       await expect(foundDelegatedNamespace(session)).rejects.toThrow(/executor account/);
     });
+  });
+});
+
+// A peek, for the one thing the hook cannot do for a caller that owns `isOpen`:
+// decide to open the modal on the load that comes back from the wallet. It must
+// not consume the fragment, or the hook that follows it finds nothing.
+describe('isReturningFromWallet', () => {
+  it('is false on an ordinary page load', () => {
+    expect(isReturningFromWallet({ hash: '' })).toBe(false);
+    expect(isReturningFromWallet({ hash: '#section-2' })).toBe(false);
+    expect(isReturningFromWallet({ hash: '#credential=only' })).toBe(false);
+  });
+  it('is true for a completed enrolment and for a declined one', () => {
+    expect(isReturningFromWallet({ hash: '#credential=aa&account=bb&device=cc&state=dd' })).toBe(true);
+    expect(isReturningFromWallet({ hash: '#error=cancelled' })).toBe(true);
+  });
+  it('leaves the fragment where it is', () => {
+    const location = { hash: '#credential=aa&account=bb&device=cc' };
+    isReturningFromWallet(location);
+    expect(location.hash).toBe('#credential=aa&account=bb&device=cc');
+    expect(window.location.hash).toBe('');
   });
 });

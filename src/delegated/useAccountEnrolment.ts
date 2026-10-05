@@ -209,6 +209,33 @@ async function deviceKeys(): Promise<DeviceKeys> {
 }
 
 
+/**
+ * Whether this page load is the one coming back from the wallet — a completed
+ * enrolment or a declined one — WITHOUT consuming it.
+ *
+ * `useAccountEnrolment` reads the callback once and strips it from the address
+ * bar, so a second reader finds nothing. That makes `returning` from the hook
+ * unusable for the one decision that has to be taken before the hook runs: a
+ * component that owns `LoginModal`'s `isOpen` and wants the dialog open on the
+ * way back. This is the answer for it, as a `useState` initialiser:
+ *
+ * ```tsx
+ * const [open, setOpen] = useState(isReturningFromWallet);
+ * <LoginModal isOpen={open} ... />  // sources its own Cloud tab, lands on it
+ * ```
+ *
+ * The parent's initialiser runs before the modal's hook reads the fragment, so
+ * the two agree. `ConnectButton` needs none of this: it owns both.
+ */
+export function isReturningFromWallet(
+  location: { hash: string } | undefined = typeof window === 'undefined' ? undefined : window.location,
+): boolean {
+  if (!location) return false;
+  const params = new URLSearchParams(location.hash.replace(/^#/, ''));
+  if (params.get('error')) return true;
+  return Boolean(params.get('credential') && params.get('account') && params.get('device'));
+}
+
 export interface UseAccountEnrolmentOptions {
   /**
    * Point enrolment at a wallet other than the hosted one.

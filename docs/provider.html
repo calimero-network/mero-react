@@ -124,7 +124,7 @@
 
 <div class="card gh">
 <h2>LoginModal</h2>
-<p style="margin-bottom:12px;">Modal dialog for node URL selection. Used internally by <span class="code">ConnectButton</span> but also available standalone for custom connect flows.</p>
+<p style="margin-bottom:12px;">The connect dialog: a <strong>Node</strong> tab (local node discovery + manual URL) and a <strong>Cloud</strong> tab (sign in with a Calimero account by enrolling at the wallet). Used internally by <span class="code">ConnectButton</span> and available standalone for custom connect flows; by default it sources the Cloud tab itself from <span class="code">useAccountEnrolment()</span>, so a standalone mount gets account sign-in with nothing wired. Must sit inside <span class="code">MeroProvider</span>.</p>
 <div class="typedef">
 <span class="kw">import</span> &#123; <span class="ty">LoginModal</span> &#125; <span class="kw">from</span> <span class="comment">'@calimero-network/mero-react'</span>;<br><br>
 &lt;<span class="ty">LoginModal</span><br>
@@ -139,6 +139,8 @@
 <div class="fr"><div class="fp">onClose</div><div class="fd"><strong>Required.</strong> <code>() =&gt; void</code> — called when the modal is dismissed.</div></div>
 <div class="fr"><div class="fp">connectionType</div><div class="fd"><strong>Required.</strong> <span class="ty">ConnectionType</span> | <span class="ty">CustomConnectionConfig</span> — controls which options are shown.</div></div>
 <div class="fr"><div class="fp">theme?</div><div class="fd"><span class="ty">MeroTheme</span> — partial palette override. Defaults to the green Calimero palette when omitted. See <a href="#theming">Theming</a>.</div></div>
+<div class="fr"><div class="fp">cloud?</div><div class="fd"><span class="ty">false</span> | <span class="ty">{ onEnrol, note?, walletUrl?, customWallet? }</span> — omitted: Cloud tab shown, sourced by the modal (default). <span class="code">false</span>: no tabs, the node dialog only. An object: the caller's own enrolment, used verbatim (what <span class="code">ConnectButton</span> passes).</div></div>
+<div class="fr"><div class="fp">initialTab?</div><div class="fd"><span class="ty">'node'</span> | <span class="ty">'cloud'</span> — the tab the modal opens on. Default <span class="code">node</span>, or <span class="code">cloud</span> on the load coming back from the wallet when the modal sources its own tab. To also open the modal on that load, seed <span class="code">isOpen</span> with <span class="code">isReturningFromWallet()</span>.</div></div>
 <p style="margin-top:10px;">Rendered via <span class="code">createPortal</span> at <span class="code">document.body</span> — unaffected by parent overflow or z-index. Uses inline styles, no external CSS dependency.</p>
 </div>
 

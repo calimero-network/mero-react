@@ -10,16 +10,22 @@
  * default node (`node1.127.0.0.1.nip.io`) that doesn't resolve in most setups;
  * discovery + manual entry covers both cases properly.
  *
- * Opt-in via the `cloud` prop, the modal gains two tabs: **Node** (everything
- * above, unchanged, selected by default) and **Cloud** (sign in with a Calimero
- * account — see `AccountSignInPanel` / `useAccountEnrolment`). Without `cloud`
- * there are no tabs and the modal renders exactly as before.
+ * By default the modal has two tabs: **Node** (everything above, unchanged,
+ * selected by default) and **Cloud** (sign in with a Calimero account — see
+ * `AccountSignInPanel` / `useAccountEnrolment`). The Cloud tab is sourced from
+ * `useAccountEnrolment` inside the modal, so an app that mounts `LoginModal`
+ * itself gets account sign-in with no wiring; `cloud={false}` removes it, and
+ * a `cloud` object (what `ConnectButton` passes) replaces it with the caller's.
+ *
+ * Because of that the modal reads `useMero()` and must sit inside a
+ * `MeroProvider`, as every app's does.
  */
 
 import { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { CalimeroLogo } from './CalimeroLogo';
 import { AccountSignInPanel } from './AccountSignInPanel';
+import { useAccountEnrolment } from '../delegated/useAccountEnrolment';
 import type { ConnectionType, CustomConnectionConfig } from '../types';
 import {
   discoverLocalNodes,
@@ -59,25 +65,40 @@ export interface LoginModalProps {
    */
   localNodePorts?: readonly number[];
   /**
-   * Adds a second way in: a **Cloud** tab, signing in with a Calimero account
-   * by enrolling this tab's device key at the wallet. Absent, the modal is
-   * exactly the node dialog, with no tabs.
+   * The second way in: a **Cloud** tab, signing in with a Calimero account by
+   * enrolling this tab's device key at the wallet.
    *
-   * The values are `useAccountEnrolment`'s; the modal only renders them.
+   * - **Omitted** (the default): the tab is shown, sourced from
+   *   `useAccountEnrolment()` inside the modal — enrolment starts from the tab,
+   *   and a page coming back from the wallet is completed here, whether or not
+   *   the modal is open. Nothing to wire; the modal must be inside a
+   *   `MeroProvider`.
+   * - **`false`**: no Cloud tab and no tabs at all — the node dialog as it was.
+   *   The modal reads no enrolment callback, leaving it to whichever component
+   *   does.
+   * - **An object**: the caller's own enrolment, used verbatim; the modal reads
+   *   none itself. The values are `useAccountEnrolment`'s, as `ConnectButton`
+   *   passes them.
    */
-  cloud?: {
-    /** Start enrolment — normally `useAccountEnrolment().goToWallet`. */
-    onEnrol: () => void;
-    /** What the last enrolment had to say, shown on the Cloud tab. */
-    note?: string | null;
-    /** The wallet enrolment goes to. Shown only when `customWallet`. */
-    walletUrl?: string;
-    /** Whether `walletUrl` is an override rather than the hosted wallet. */
-    customWallet?: boolean;
-  };
+  cloud?:
+    | false
+    | {
+        /** Start enrolment — normally `useAccountEnrolment().goToWallet`. */
+        onEnrol: () => void;
+        /** What the last enrolment had to say, shown on the Cloud tab. */
+        note?: string | null;
+        /** The wallet enrolment goes to. Shown only when `customWallet`. */
+        walletUrl?: string;
+        /** Whether `walletUrl` is an override rather than the hosted wallet. */
+        customWallet?: boolean;
+      };
   /**
-   * The tab selected when the modal opens. Only meaningful with `cloud`.
-   * Default `'node'`.
+   * The tab selected when the modal opens. Ignored with `cloud={false}`.
+   *
+   * Default `'node'` — except that a modal sourcing its own Cloud tab opens on
+   * `'cloud'` when the page is coming back from the wallet, so whatever the
+   * completion has to say is where the person is looking. An explicit value
+   * always wins.
    */
   initialTab?: LoginModalTab;
 }
@@ -407,8 +428,32 @@ export function LoginModal({
   theme,
   localNodePorts = DEFAULT_LOCAL_NODE_PORTS,
   cloud,
-  initialTab = 'node',
+  initialTab: initialTabProp,
 }: LoginModalProps) {
+  // The modal's own enrolment, for the default case only. A caller that passed
+  // its own `cloud` already holds an enabled hook, and the callback it reads is
+  // single-use: a second enabled reader here would find nothing, or — if it
+  // rendered first — take the callback away from the caller. So this is on
+  // exactly when nobody else is. Called before the `isOpen` early return, so a
+  // tab coming back from the wallet is completed while the modal is closed too.
+  const own = useAccountEnrolment({ enabled: cloud === undefined });
+  const cloudTab = useMemo(
+    () =>
+      cloud === undefined
+        ? {
+            onEnrol: () => {
+              void own.goToWallet();
+            },
+            note: own.note,
+            walletUrl: own.walletUrl,
+            customWallet: own.customWallet,
+          }
+        : cloud || null,
+    [cloud, own.goToWallet, own.note, own.walletUrl, own.customWallet],
+  );
+  const initialTab: LoginModalTab =
+    initialTabProp ?? (cloud === undefined && own.returning ? 'cloud' : 'node');
+
   const [tab, setTab] = useState<LoginModalTab>(initialTab);
   // Each opening starts on `initialTab`: the modal stays mounted while closed,
   // so without this a reopen would land on whatever tab was left selected.
@@ -419,7 +464,7 @@ export function LoginModal({
     node: null,
     cloud: null,
   });
-  const activeTab: LoginModalTab = cloud ? tab : 'node';
+  const activeTab: LoginModalTab = cloudTab ? tab : 'node';
 
   // `selected` is a discovered node URL or CUSTOM.
   const [selected, setSelected] = useState<string>(CUSTOM_SELECTION);
@@ -674,7 +719,7 @@ export function LoginModal({
         </div>
       </>
     );
-    if (!cloud) return body;
+    if (!cloudTab) return body;
     return (
       <div
         role="tabpanel"
@@ -749,9 +794,9 @@ export function LoginModal({
             <h1 style={styles.title}>Connect to Calimero</h1>
           </div>
 
-          {cloud && renderTabs()}
+          {cloudTab && renderTabs()}
 
-          {activeTab === 'cloud' && cloud ? (
+          {activeTab === 'cloud' && cloudTab ? (
             <div
               role="tabpanel"
               id="mero-login-panel-cloud"
@@ -759,10 +804,10 @@ export function LoginModal({
               tabIndex={0}
             >
               <AccountSignInPanel
-                onEnrol={cloud.onEnrol}
-                note={cloud.note}
-                walletUrl={cloud.walletUrl}
-                customWallet={cloud.customWallet}
+                onEnrol={cloudTab.onEnrol}
+                note={cloudTab.note}
+                walletUrl={cloudTab.walletUrl}
+                customWallet={cloudTab.customWallet}
                 theme={theme}
               />
             </div>

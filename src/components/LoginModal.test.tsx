@@ -8,6 +8,25 @@ import {
   cleanup,
 } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// The modal sources its own Cloud tab from `useAccountEnrolment` unless the
+// caller supplies one. Mocked the way `ConnectButton.test.tsx` does, so these
+// tests need no provider and can steer `returning` / `note` directly. The real
+// hook, inside a real provider, is covered by `LoginModal.provider.test.tsx`.
+const { enrolment, useAccountEnrolmentMock } = vi.hoisted(() => {
+  const enrolment = {
+    goToWallet: vi.fn(async () => {}),
+    note: null as string | null,
+    returning: false,
+    walletUrl: 'https://wallet.cloud.calimero.network/account-enroll',
+    customWallet: false,
+  };
+  return { enrolment, useAccountEnrolmentMock: vi.fn(() => enrolment) };
+});
+vi.mock('../delegated/useAccountEnrolment', () => ({
+  useAccountEnrolment: useAccountEnrolmentMock,
+}));
+
 import { LoginModal } from './LoginModal';
 
 /**
@@ -58,6 +77,11 @@ const isAuthedCalls = (mock: ReturnType<typeof mockFetch>) =>
 
 beforeEach(() => {
   localStorage.clear();
+  enrolment.note = null;
+  enrolment.returning = false;
+  enrolment.customWallet = false;
+  useAccountEnrolmentMock.mockClear();
+  enrolment.goToWallet.mockClear();
 });
 
 afterEach(() => {
@@ -206,18 +230,131 @@ describe('LoginModal — no node found', () => {
   });
 });
 
-describe('LoginModal — tabs', () => {
-  it('has no tabs without `cloud`', async () => {
+describe('LoginModal — Cloud tab by default', () => {
+  it('without `cloud`, shows Node and Cloud tabs with Node selected', async () => {
     vi.stubGlobal('fetch', mockFetch([]));
     renderModal();
+
+    await screen.findByTestId('node-url-input');
+    const tabs = screen.getAllByRole('tab');
+    expect(tabs.map((t) => t.textContent)).toEqual(['Node', 'Cloud']);
+    expect(tabs[0].getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByTestId('connect-button')).toBeTruthy();
+    expect(useAccountEnrolmentMock).toHaveBeenCalledWith(
+      expect.objectContaining({ enabled: true }),
+    );
+  });
+
+  it('without `cloud`, "Enrol with your account" starts enrolment through the hook', async () => {
+    vi.stubGlobal('fetch', mockFetch([]));
+    renderModal();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Cloud' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Enrol with your account' }));
+    expect(enrolment.goToWallet).toHaveBeenCalledTimes(1);
+  });
+
+  it('without `cloud`, shows the hook\'s note and custom-wallet hint', () => {
+    vi.stubGlobal('fetch', mockFetch([]));
+    enrolment.note = 'Signed in, with nowhere to write yet';
+    enrolment.customWallet = true;
+    enrolment.walletUrl = 'http://localhost:8090/account-enroll';
+    try {
+      renderModal({ initialTab: 'cloud' });
+      expect(screen.getByTestId('account-note').textContent).toContain('nowhere to write yet');
+      expect(screen.getByText('http://localhost:8090/account-enroll')).toBeTruthy();
+    } finally {
+      enrolment.walletUrl = 'https://wallet.cloud.calimero.network/account-enroll';
+    }
+  });
+
+  it('without `cloud`, opens on the Cloud tab when coming back from the wallet', () => {
+    vi.stubGlobal('fetch', mockFetch([]));
+    enrolment.returning = true;
+    enrolment.note = 'This enrolment could not be verified as one this tab started';
+    renderModal();
+
+    const cloud = screen.getByRole('tab', { name: 'Cloud' });
+    expect(cloud.getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByTestId('account-note').textContent).toContain('could not be verified');
+  });
+
+  it('an explicit `initialTab` wins over the wallet return', async () => {
+    vi.stubGlobal('fetch', mockFetch([]));
+    enrolment.returning = true;
+    renderModal({ initialTab: 'node' });
+
+    await screen.findByTestId('node-url-input');
+    expect(screen.getByRole('tab', { name: 'Node' }).getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('completes an enrolment while closed: the hook runs whether or not the modal is open', () => {
+    vi.stubGlobal('fetch', mockFetch([]));
+    renderModal({ isOpen: false });
+
+    expect(screen.queryByRole('tab')).toBeNull();
+    expect(useAccountEnrolmentMock).toHaveBeenCalledWith(
+      expect.objectContaining({ enabled: true }),
+    );
+  });
+
+  it('`cloud={false}` has no tabs and disables the hook', async () => {
+    vi.stubGlobal('fetch', mockFetch([]));
+    renderModal({ cloud: false });
 
     await screen.findByTestId('node-url-input');
     expect(screen.queryByRole('tablist')).toBeNull();
     expect(screen.queryByRole('tab')).toBeNull();
     expect(screen.queryByRole('tabpanel')).toBeNull();
     expect(screen.getByTestId('connect-button')).toBeTruthy();
+    expect(useAccountEnrolmentMock).toHaveBeenCalledWith(
+      expect.objectContaining({ enabled: false }),
+    );
   });
 
+  it('`cloud={false}` stays on the node dialog even when coming back from the wallet', async () => {
+    vi.stubGlobal('fetch', mockFetch([]));
+    enrolment.returning = true;
+    renderModal({ cloud: false });
+
+    await screen.findByTestId('node-url-input');
+    expect(screen.queryByRole('tab')).toBeNull();
+    expect(screen.queryByTestId('enrol-button')).toBeNull();
+  });
+
+  it('an explicit `cloud` object is used verbatim, and the hook is left off', async () => {
+    vi.stubGlobal('fetch', mockFetch([]));
+    enrolment.returning = true;
+    enrolment.note = 'from the hook';
+    const onEnrol = vi.fn();
+    renderModal({
+      cloud: {
+        onEnrol,
+        note: 'from the caller',
+        walletUrl: 'http://caller.example/account-enroll',
+        customWallet: true,
+      },
+    });
+
+    // The caller's `initialTab` default applies, not the hook's `returning`.
+    await screen.findByTestId('node-url-input');
+    expect(screen.getByRole('tab', { name: 'Node' }).getAttribute('aria-selected')).toBe('true');
+    fireEvent.click(screen.getByRole('tab', { name: 'Cloud' }));
+    expect(screen.getByTestId('account-note').textContent).toContain('from the caller');
+    expect(screen.queryByText('from the hook')).toBeNull();
+    expect(screen.getByText('http://caller.example/account-enroll')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Enrol with your account' }));
+    expect(onEnrol).toHaveBeenCalledTimes(1);
+    expect(enrolment.goToWallet).not.toHaveBeenCalled();
+    // A caller that brought its own enrolment owns the single-use callback;
+    // the modal must not read it a second time.
+    expect(useAccountEnrolmentMock).toHaveBeenCalledWith(
+      expect.objectContaining({ enabled: false }),
+    );
+  });
+});
+
+describe('LoginModal — tabs', () => {
   it('with `cloud`, shows Node and Cloud tabs with Node selected', async () => {
     vi.stubGlobal('fetch', mockFetch([]));
     renderModal({ cloud: { onEnrol: vi.fn() } });

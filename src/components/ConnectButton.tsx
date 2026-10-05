@@ -276,7 +276,7 @@ export function ConnectButton({
                 walletUrl: enrolment.walletUrl,
                 customWallet: enrolment.customWallet,
               }
-            : undefined
+            : false
         }
         initialTab={cloud && enrolment.returning ? 'cloud' : 'node'}
       />
