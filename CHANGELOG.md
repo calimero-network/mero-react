@@ -1,3 +1,9 @@
+## [9.11.2](https://github.com/calimero-network/mero-react/compare/mero-react-v9.11.1...mero-react-v9.11.2) (2026-10-05)
+
+### Bug Fixes
+
+* **hooks:** every hook writes through the session's account-aware admin, not the raw client ([#95](https://github.com/calimero-network/mero-react/issues/95)) ([c861a74](https://github.com/calimero-network/mero-react/commit/c861a74bb30074e34c74a6663be5800c27b71921))
+
 ## [9.11.1](https://github.com/calimero-network/mero-react/compare/mero-react-v9.11.0...mero-react-v9.11.1) (2026-10-05)
 
 ### Bug Fixes
