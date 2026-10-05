@@ -16,6 +16,9 @@ const mockGetContextIdentitiesOwned = vi.fn();
 // — mirrors that and avoids a test-double-only churn the production
 // effects were never meant to tolerate.
 let currentMero: unknown;
+// The session `admin` (node admin or account admin). `useEphemeral` must NOT
+// read its self key from here: null by default, a decoy in the test that pins it.
+let currentAdmin: unknown = null;
 
 const mockMero = {
   ephemeral: {
@@ -40,13 +43,14 @@ const mockMero = {
 // `ephemeral` surface (the mero-js < 9.1.0 case) while keeping the default
 // object referentially stable, exactly as a real memoized provider would.
 vi.mock('../context', () => ({
-  useMero: () => ({ mero: currentMero }),
+  useMero: () => ({ mero: currentMero, admin: currentAdmin }),
 }));
 
 const emit = (e: unknown) => act(() => { listeners.forEach(h => h(e)); });
 
 beforeEach(() => {
   currentMero = mockMero;
+  currentAdmin = null;
   listeners.length = 0;
   subscribeCalls.length = 0;
   mockSet.mockReset().mockResolvedValue(undefined);
@@ -202,6 +206,26 @@ describe('useEphemeral write path', () => {
 
     expect(result.current.peers.has('OTHER')).toBe(true);
     expect(result.current.peers.has('SELF')).toBe(false);
+  });
+
+  it('resolves self from the RAW client, not the session admin, so the filtered key is the author the node stamps', async () => {
+    // An account admin answers `getContextIdentitiesOwned` with the ACCOUNT id;
+    // the entries the client behind `mero.ephemeral` publishes are stamped with
+    // the node's key for this context. Filtering by the account's answer would
+    // let every own echo through (the live e2e caught exactly that).
+    const adminLookup = vi.fn().mockResolvedValue({ identities: ['ACCOUNT'] });
+    currentAdmin = { getContextIdentitiesOwned: adminLookup };
+
+    const { result } = renderHook(() => useEphemeral<{ x: number }>('ctx-1'));
+    await waitFor(() => expect(mockGetContextIdentitiesOwned).toHaveBeenCalledWith('ctx-1'));
+    await act(async () => { await Promise.resolve(); });
+
+    emit({ author: 'SELF', state: { x: 1 }, ageMs: 0 });
+    emit({ author: 'ACCOUNT', state: { x: 2 }, ageMs: 0 });
+
+    expect(adminLookup).not.toHaveBeenCalled();
+    expect(result.current.peers.has('SELF')).toBe(false);
+    expect(result.current.peers.has('ACCOUNT')).toBe(true);
   });
 
   it('includes self when includeSelf is true', async () => {

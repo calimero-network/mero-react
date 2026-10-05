@@ -32,7 +32,7 @@ describe('MigrationAdminPanel', () => {
         subscribe: vi.fn().mockResolvedValue(undefined),
       },
     };
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     render(<MigrationAdminPanel namespaceId="ns1" />);
 

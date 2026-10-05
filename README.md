@@ -121,9 +121,12 @@ const {
   contextId,        // string | null — from auth callback
   contextIdentity,  // string | null — executor public key from auth callback
   connectToNode,    // (url: string) => void — starts auth redirect
+  admin,            // AdminApiClient | null — the session's admin: node admin on a node, account admin on an account
   logout,           // () => void — clears tokens and state
 } = useMero();
 ```
+
+Every hook in this package goes through that `admin`, never the raw `mero.admin`: on a node it is the node's own admin API; on an account (delegated session) it is the account admin, whose reads go to the relay and whose writes are the account's own form of the call (invitations signed with the device key, joins through the admit route, group changes as governance ops under warrants). An app gets the same result from `useCreateNamespaceInvitation`, `useJoinNamespace`, `useAddGroupMembers` and the rest on a node and on an account; a call an account has no form of (`useUpgradeGroup`, `useDeleteNamespace`, `useJoinGroup`, ...) surfaces `NotForAccountError` through `error`.
 
 How an account (delegated session) learns its `applicationId`: `packageName` decides. When the app passes one, the id is derived from the registry: `sha256(borsh((package, signerId)))` of the newest non-yanked bundle, exactly as merod computes it at install, so a brand-new account can found its first namespace (`admin.createNamespace({ applicationId })`) and an account already used in other apps is never handed one of THEIR ids. The account's own contexts on the relay are consulted only when the app passes no `packageName` (or the registry did not answer, after one `console.warn`): one distinct application across them is the answer; several leaves it `null` on purpose (nothing says which the tab is for). When the registry lists the package under more than one publisher, it stays `null`. `applicationIdForBundle` and `resolveApplicationIdFromRegistry` are exported for apps that need the same derivation.
 

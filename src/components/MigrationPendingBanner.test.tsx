@@ -17,7 +17,7 @@ function meroWith(rpc: Record<string, unknown>) {
 describe('MigrationPendingBanner', () => {
   it('renders nothing when no entries are pending', async () => {
     const mero = meroWith({ countMyPending: vi.fn().mockResolvedValue(0) });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
     render(<MigrationPendingBanner contextId="ctx1" />);
 
@@ -32,7 +32,7 @@ describe('MigrationPendingBanner', () => {
       countMyPending: vi.fn().mockResolvedValue(2),
       migrateMyEntries,
     });
-    mockUseMero.mockReturnValue({ mero } as never);
+    mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
     const onMigrated = vi.fn();
 
     render(<MigrationPendingBanner contextId="ctx1" onMigrated={onMigrated} />);
