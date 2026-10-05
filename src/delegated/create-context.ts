@@ -21,6 +21,7 @@ import {
   type NonceSource,
 } from '@calimero-network/mero-js';
 import { knownRelays, markContextNonceSpent, readRelayMap, rememberRelay, type DelegatedSession } from './session';
+import { fetchRegistryBundles, selectLatestBundle } from './application-id';
 
 /**
  * A governance warrant's nonce, for one (relay, group): spent in a sliding
@@ -298,28 +299,15 @@ async function enableHaBestEffort(
 
 /**
  * The latest version of `pkg` the registry publishes. Used when the app names
- * its package but not a version.
+ * its package but not a version. Same selection as the id derivation
+ * ({@link selectLatestBundle}): the newest version that is not yanked.
  */
 export async function latestPublishedVersion(
   registryUrl: string,
   pkg: string,
   fetchFn: typeof fetch = globalThis.fetch,
 ): Promise<string> {
-  const url = `${registryUrl.replace(/\/+$/, '')}/api/v2/bundles?package=${encodeURIComponent(pkg)}`;
-  const response = await fetchFn(url, { headers: { Accept: 'application/json' } });
-  if (!response.ok) throw new Error(`the registry has no ${pkg} (HTTP ${response.status})`);
-  const bundles = (await response.json()) as Array<{ appVersion?: string }>;
-  const newer = (a: string, b: string) => {
-    const [x, y] = [a, b].map((v) => v.split(/[.-]/).map((n) => Number.parseInt(n, 10) || 0));
-    for (let i = 0; i < Math.max(x.length, y.length); i++) {
-      if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) > (y[i] ?? 0);
-    }
-    return false;
-  };
-  const latest = bundles
-    .map((b) => b.appVersion)
-    .filter((v): v is string => typeof v === 'string' && v.length > 0)
-    .reduce<string | undefined>((best, v) => (!best || newer(v, best) ? v : best), undefined);
+  const latest = selectLatestBundle(await fetchRegistryBundles(registryUrl, pkg, fetchFn));
   if (!latest) throw new Error(`the registry lists no version of ${pkg}`);
-  return latest;
+  return latest.appVersion!;
 }

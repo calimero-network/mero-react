@@ -52,8 +52,12 @@ import {
   saveDelegatedSession,
   type DelegatedSession,
 } from '../delegated/session';
+import { resolveApplicationIdFromRegistry } from '../delegated/application-id';
 
 const MeroContext = createContext<MeroContextValue | null>(null);
+
+/** The registry an app's package is looked up in when none is configured; the account admin's default too. */
+const DEFAULT_REGISTRY_URL = 'https://apps.calimero.network';
 
 const isBrowser = typeof window !== 'undefined';
 
@@ -400,7 +404,28 @@ export function MeroProvider({
         // "I don't know" leaves the app's own "waiting for this session to report
         // which application" message honest, and a chooser is the follow-up.
         //
-        // Zero contexts also stays null: there is no application to infer.
+        // Zero contexts: no context names an application, but the app itself
+        // does, by `packageName`. A brand-new account has to found its first
+        // namespace from somewhere, and founding REQUIRES the id — the founder
+        // signs `TargetApplicationSet` naming it — which a node learns at
+        // install and an account never installs. The id is a pure function of
+        // the package and its publisher's signing key (core's
+        // `ApplicationId::for_bundle`), both of which the registry lists, so it
+        // is derived from there. Without a `packageName` there is nothing to
+        // derive from, and this stays null.
+        if (apps.length === 0 && packageName) {
+          try {
+            const { applicationId: derived } = await resolveApplicationIdFromRegistry(
+              registryUrl ?? DEFAULT_REGISTRY_URL,
+              packageName,
+            );
+            if (active) setApplicationIdState(derived);
+          } catch (e) {
+            // Left null, once: a registry that did not answer is not asked
+            // again until the session or its chosen context changes.
+            console.warn(`[mero-react] could not learn the application id of ${packageName} from the registry`, e);
+          }
+        }
       } catch {
         // Left null, and deliberately not surfaced as a connection failure. The
         // writes work — every one carries its own warrant — and a read that did
@@ -414,7 +439,7 @@ export function MeroProvider({
       // `close` is a node-client concern; a relay client has nothing to tear
       // down, so do not reach for it.
     };
-  }, [delegated, contextId]);
+  }, [delegated, contextId, packageName, registryUrl]);
 
   // Initialization effect
   useEffect(() => {
