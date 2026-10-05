@@ -263,10 +263,33 @@ describe('createAccountAdmin', () => {
       expect(deps.signInvitation).toHaveBeenCalled();
     });
 
-    it('refuses, without signing, when the cloud hosts the namespace on no node', async () => {
+    // The cloud routes only namespaces whose founder linked the account (HA).
+    // An unlinked founder's namespace still has a relay in it: the one that
+    // founded it and serves this very session, which admits through its own
+    // `/admit`. The invitation names it, and carries where it is reached, so a
+    // claimant the cloud cannot route still has a door to knock on.
+    it("mints through the namespace's relay when the cloud hosts it nowhere: the relay admits, its address rides along", async () => {
       const routing = vi.fn(async () => ({ nodes: [] }));
       const { admin, deps, read } = rig({ routing });
       withRelay(read);
+      await expect(admin.createNamespaceInvitation(NS)).resolves.toMatchObject({ invitation: { inviter_signature: 'sig' } });
+      expect(deps.signInvitation).toHaveBeenCalledWith(
+        expect.objectContaining({ admitters: [RELAY], admitterAddrs: [S.relayUrl] }),
+      );
+    });
+
+    it('carries no address when the cloud does route the namespace: the claimant finds the relay there', async () => {
+      const routing = vi.fn(async () => ({ nodes: [{ account: RELAY }] }));
+      const { admin, deps, read } = rig({ routing });
+      withRelay(read);
+      await admin.createNamespaceInvitation(NS);
+      const call = (deps.signInvitation.mock.calls[0] as unknown as [{ admitterAddrs?: string[] }])[0];
+      expect(call.admitterAddrs).toBeUndefined();
+    });
+
+    it('refuses, without signing, when the cloud hosts the namespace on no node and no relay is in it', async () => {
+      const routing = vi.fn(async () => ({ nodes: [] }));
+      const { admin, deps } = rig({ routing });
       const err = await admin.createNamespaceInvitation(NS).catch((e: unknown) => e);
       expect(err).toBeInstanceOf(InvitationNotClaimableError);
       expect((err as InvitationNotClaimableError).reason).toBe('not-hosted');
