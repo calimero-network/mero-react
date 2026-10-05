@@ -1,3 +1,9 @@
+## [9.11.1](https://github.com/calimero-network/mero-react/compare/mero-react-v9.11.0...mero-react-v9.11.1) (2026-10-05)
+
+### Bug Fixes
+
+* **account:** the app's package name decides its application id, not the account's other contexts ([#94](https://github.com/calimero-network/mero-react/issues/94)) ([4a2a575](https://github.com/calimero-network/mero-react/commit/4a2a57522302ecc352f3f0e92d233afc7a8f94a0))
+
 ## [9.11.0](https://github.com/calimero-network/mero-react/compare/mero-react-v9.10.0...mero-react-v9.11.0) (2026-10-05)
 
 ### Features
