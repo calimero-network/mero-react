@@ -387,45 +387,55 @@ export function MeroProvider({
         setIsLoading(false);
         if (!nodeKey) return;
       }
+      // The app names its application by `packageName`, and that decides. The
+      // account's contexts do not: one account is used across apps, so a
+      // kv-store tab may well see chess's contexts — two applications, or only
+      // another app's. Reading the id off them would leave it null when several
+      // appear and, worse, point this app at another's contract when exactly
+      // one foreign one does (founding a namespace signs `TargetApplicationSet`
+      // with that id). The id is a pure function of the package and its
+      // publisher's signing key (core's `ApplicationId::for_bundle`), both of
+      // which the registry lists, so it is derived from there — also for a
+      // brand-new account with no contexts, which has to found its first
+      // namespace from somewhere. Should the registry not answer, warn once and
+      // fall back to the contexts below, so an app without registry access
+      // keeps working as before.
+      if (packageName) {
+        try {
+          const { applicationId: derived } = await resolveApplicationIdFromRegistry(
+            registryUrl ?? DEFAULT_REGISTRY_URL,
+            packageName,
+          );
+          if (!active) return;
+          setApplicationIdState(derived);
+          return;
+        } catch (e) {
+          // Once: a registry that did not answer is not asked again until the
+          // session or its chosen context changes.
+          console.warn(`[mero-react] could not learn the application id of ${packageName} from the registry`, e);
+          if (!active) return;
+        }
+      }
       try {
-        // Across every relay this account uses, each answering for itself.
+        // Without a `packageName` (or with a registry that did not answer), the
+        // contexts are the only thing that names an application. Across every
+        // relay this account uses, each answering for itself.
         const contexts = await listDelegatedContexts(delegated);
+        if (!active) return;
         const apps = [
           ...new Set((contexts ?? []).map((c) => c.applicationId).filter(Boolean)),
         ];
-        if (!active) return;
         if (apps.length === 1) {
           setApplicationIdState(apps[0]);
         }
-        // More than one, and this stays null ON PURPOSE. A tab holds one
+        // More than one, and this stays null ON PURPOSE — only without a
+        // `packageName`, which would have decided above. A tab holds one
         // application's UI and nothing here says which — the account simply has
         // contexts for several. Picking the first would silently point the app at
         // another app's contract, which answers none of its methods; admitting
         // "I don't know" leaves the app's own "waiting for this session to report
         // which application" message honest, and a chooser is the follow-up.
-        //
-        // Zero contexts: no context names an application, but the app itself
-        // does, by `packageName`. A brand-new account has to found its first
-        // namespace from somewhere, and founding REQUIRES the id — the founder
-        // signs `TargetApplicationSet` naming it — which a node learns at
-        // install and an account never installs. The id is a pure function of
-        // the package and its publisher's signing key (core's
-        // `ApplicationId::for_bundle`), both of which the registry lists, so it
-        // is derived from there. Without a `packageName` there is nothing to
-        // derive from, and this stays null.
-        if (apps.length === 0 && packageName) {
-          try {
-            const { applicationId: derived } = await resolveApplicationIdFromRegistry(
-              registryUrl ?? DEFAULT_REGISTRY_URL,
-              packageName,
-            );
-            if (active) setApplicationIdState(derived);
-          } catch (e) {
-            // Left null, once: a registry that did not answer is not asked
-            // again until the session or its chosen context changes.
-            console.warn(`[mero-react] could not learn the application id of ${packageName} from the registry`, e);
-          }
-        }
+        // Zero contexts and no `packageName`: nothing to derive from, null too.
       } catch {
         // Left null, and deliberately not surfaced as a connection failure. The
         // writes work — every one carries its own warrant — and a read that did

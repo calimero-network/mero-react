@@ -103,22 +103,9 @@ describe('MeroProvider — an account learns its applicationId', () => {
     expect(registryReads()).toEqual([]);
   });
 
-  it('from its contexts when it has some, without asking the registry', async () => {
-    contexts = [
-      { id: 'ctx-1', applicationId: 'ff'.repeat(32) },
-      { id: 'ctx-2', applicationId: 'ff'.repeat(32) },
-    ];
-    render(
-      <MeroProvider mode={AppMode.MultiContext} packageName="com.calimero.kv-store">
-        <Capture />
-      </MeroProvider>,
-    );
-    await settled();
-    await waitFor(() => expect(seen!.applicationId).toBe('ff'.repeat(32)));
-    expect(registryReads()).toEqual([]);
-  });
-
-  it('stays null when its contexts span several applications, on purpose', async () => {
+  it('from the registry, by packageName, even when the account has contexts of two applications', async () => {
+    // One account used in two apps (mero-chess and kv-store, as reproduced):
+    // the tab is kv-store's, and kv-store says so by its packageName.
     contexts = [
       { id: 'ctx-1', applicationId: 'ff'.repeat(32) },
       { id: 'ctx-2', applicationId: 'ee'.repeat(32) },
@@ -129,12 +116,60 @@ describe('MeroProvider — an account learns its applicationId', () => {
       </MeroProvider>,
     );
     await settled();
+    await waitFor(() => expect(seen!.applicationId).toBe(KV_ID));
+    expect(registryReads()).toEqual([`${REGISTRY}/api/v2/bundles?package=com.calimero.kv-store`]);
+  });
+
+  it("from the registry, by packageName, not from the account's contexts of ANOTHER application", async () => {
+    // An account whose only contexts are chess's opens kv-store: the id must be
+    // kv-store's, or kv-store would found a namespace targeting chess's contract.
+    contexts = [
+      { id: 'ctx-1', applicationId: 'ff'.repeat(32) },
+      { id: 'ctx-2', applicationId: 'ff'.repeat(32) },
+    ];
+    render(
+      <MeroProvider mode={AppMode.MultiContext} packageName="com.calimero.kv-store">
+        <Capture />
+      </MeroProvider>,
+    );
+    await settled();
+    await waitFor(() => expect(seen!.applicationId).toBe(KV_ID));
+    expect(seen!.applicationId).not.toBe('ff'.repeat(32));
+    expect(registryReads()).toHaveLength(1);
+  });
+
+  it('from its contexts, without asking the registry, when the app passes no packageName', async () => {
+    contexts = [
+      { id: 'ctx-1', applicationId: 'ff'.repeat(32) },
+      { id: 'ctx-2', applicationId: 'ff'.repeat(32) },
+    ];
+    render(
+      <MeroProvider mode={AppMode.MultiContext}>
+        <Capture />
+      </MeroProvider>,
+    );
+    await settled();
+    await waitFor(() => expect(seen!.applicationId).toBe('ff'.repeat(32)));
+    expect(registryReads()).toEqual([]);
+  });
+
+  it('stays null, with no packageName, when its contexts span several applications, on purpose', async () => {
+    contexts = [
+      { id: 'ctx-1', applicationId: 'ff'.repeat(32) },
+      { id: 'ctx-2', applicationId: 'ee'.repeat(32) },
+    ];
+    render(
+      <MeroProvider mode={AppMode.MultiContext}>
+        <Capture />
+      </MeroProvider>,
+    );
+    await settled();
     await waitFor(() => expect(requests.some((u) => u.startsWith(`${RELAY}/admin-api/contexts`))).toBe(true));
     expect(seen!.applicationId).toBeNull();
     expect(registryReads()).toEqual([]);
   });
 
-  it('stays null, warning once, when the registry fails', async () => {
+  it('stays null, warning once, when the registry fails and the account has no contexts', async () => {
     registry = () => json({ error: 'boom' }, 500);
     render(
       <MeroProvider mode={AppMode.MultiContext} packageName="com.calimero.kv-store">
@@ -149,6 +184,23 @@ describe('MeroProvider — an account learns its applicationId', () => {
     expect(seen!.applicationId).toBeNull();
     expect(vi.mocked(console.warn).mock.calls.filter((c) => String(c[0]).includes('application id'))).toHaveLength(1);
     // No retry loop: one ask, one answer.
+    expect(registryReads()).toHaveLength(1);
+  });
+
+  it('warns once when the registry fails, then falls back to the one application its contexts name', async () => {
+    registry = () => json({ error: 'boom' }, 500);
+    contexts = [
+      { id: 'ctx-1', applicationId: 'ff'.repeat(32) },
+      { id: 'ctx-2', applicationId: 'ff'.repeat(32) },
+    ];
+    render(
+      <MeroProvider mode={AppMode.MultiContext} packageName="com.calimero.kv-store">
+        <Capture />
+      </MeroProvider>,
+    );
+    await settled();
+    await waitFor(() => expect(seen!.applicationId).toBe('ff'.repeat(32)));
+    expect(vi.mocked(console.warn).mock.calls.filter((c) => String(c[0]).includes('application id'))).toHaveLength(1);
     expect(registryReads()).toHaveLength(1);
   });
 });

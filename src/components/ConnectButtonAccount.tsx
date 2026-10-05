@@ -37,10 +37,11 @@
  *   Google sign-in, no account root.
  * - the **wallet** is a platform constant, defaulted here, overridable only for
  *   working on the wallet itself.
- * - the **context** is chosen after connecting, not before. `MeroContext` derives
- *   this tab's `applicationId` from `admin.getContexts()` — caller-scoped by the
- *   request proof — so an app's own context picker has what it needs and the
- *   person picks from a list instead of pasting a 64-hex id.
+ * - the **context** is chosen after connecting, not before. `MeroContext` learns
+ *   this tab's `applicationId` from the registry by the app's `packageName`
+ *   (the account's contexts, caller-scoped by the request proof, name it only
+ *   when the app passes none), so an app's own context picker has what it needs
+ *   and the person picks from a list instead of pasting a 64-hex id.
  *
  * So the account path is one button.
  *
