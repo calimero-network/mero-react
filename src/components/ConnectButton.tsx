@@ -12,7 +12,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useMero } from '../context';
 import { LoginModal } from './LoginModal';
 import { useAccountEnrolment } from '../delegated/useAccountEnrolment';
-import { readDelegatedSession } from '../delegated/session';
+import { readDelegatedSession } from '@calimero-network/mero-js';
 import { CalimeroLogo } from './CalimeroLogo';
 import type { ConnectionType, CustomConnectionConfig } from '../types';
 import { ConnectionType as ConnectionTypeEnum } from '../types';

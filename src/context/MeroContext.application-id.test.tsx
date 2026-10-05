@@ -22,7 +22,7 @@ vi.mock('@calimero-network/mero-js', async (importActual) => {
 import { MeroProvider, useMero } from './MeroContext';
 import { AppMode } from '../types';
 import type { MeroContextValue } from '../types';
-import { pinRelayNodeKey, saveDelegatedSession } from '../delegated/session';
+import { pinRelayNodeKey, saveDelegatedSession } from '@calimero-network/mero-js';
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });

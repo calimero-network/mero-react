@@ -6,10 +6,13 @@ import { renderHook } from '@testing-library/react';
 const { mockBootstrap } = vi.hoisted(() => ({
   mockBootstrap: vi.fn(async () => ({ ok: false, step: 'admitters-lookup', reason: 'stub' })),
 }));
-vi.mock('./bootstrap-from-invitation', () => ({ bootstrapFromInvitation: mockBootstrap }));
+vi.mock('@calimero-network/mero-js', async (importActual) => ({
+  ...(await importActual<typeof import('@calimero-network/mero-js')>()),
+  bootstrapFromInvitation: mockBootstrap,
+}));
 
 import { MeroContext } from '../context';
-import { saveDelegatedCredential } from './session';
+import { saveDelegatedCredential } from '@calimero-network/mero-js';
 import { useDelegatedBootstrap } from './useDelegatedBootstrap';
 
 function wrapper(cloudBaseUrl?: string) {

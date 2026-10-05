@@ -3,7 +3,7 @@ import React from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import { MeroContext } from '../context';
-import { saveDelegatedCredential } from '../delegated/session';
+import { saveDelegatedCredential } from '@calimero-network/mero-js';
 import { useJoinInvitation } from './useJoinInvitation';
 
 const value = { mero: null, isDelegated: true, connectWithAccount: () => {} } as unknown as React.ContextType<typeof MeroContext>;

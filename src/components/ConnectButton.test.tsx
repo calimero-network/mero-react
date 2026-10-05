@@ -20,7 +20,7 @@ vi.mock('../delegated/useAccountEnrolment', () => ({
 
 import { MeroContext } from '../context';
 import type { MeroContextValue } from '../types';
-import { saveDelegatedSession } from '../delegated/session';
+import { saveDelegatedSession } from '@calimero-network/mero-js';
 import { ConnectButton } from './ConnectButton';
 
 function ctx(over: Partial<MeroContextValue> = {}): MeroContextValue {

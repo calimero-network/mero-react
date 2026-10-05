@@ -45,7 +45,7 @@ import {
   HTTPError,
 } from '@calimero-network/mero-js';
 import type { TokenStore } from '@calimero-network/mero-js';
-import { pinRelayNodeKey, readDelegatedSession, saveDelegatedSession } from '../delegated/session';
+import { pinRelayNodeKey, readDelegatedSession, saveDelegatedSession } from '@calimero-network/mero-js';
 
 const meroMock = vi.mocked(MeroJs);
 const mockParseAuthCallback = vi.mocked(parseAuthCallback);

@@ -18,7 +18,12 @@ export { ConnectButton } from './components';
 export type { ConnectButtonProps } from './components';
 export { ConnectButtonAccount } from './components';
 export type { ConnectButtonAccountProps } from './components';
-export type { DelegatedSession, DelegatedCredential } from './delegated/session';
+// The account (delegated) layer lives in mero-js (src/account/) and is
+// re-exported here under the names apps already import. mero-js names the
+// session type `DelegatedAccountSession` (its login module owns the bare
+// `DelegatedSession`); this package keeps calling it `DelegatedSession`, and
+// this explicit export is what shadows the star re-export below.
+export type { DelegatedAccountSession as DelegatedSession, DelegatedCredential } from '@calimero-network/mero-js';
 export {
   readDelegatedCredential,
   saveDelegatedCredential,
@@ -29,42 +34,42 @@ export {
   readRelayMap,
   relayForContext,
   rememberRelay,
-} from './delegated/session';
+} from '@calimero-network/mero-js';
 
 // Bootstrapping an account that is a member of nothing, from an invitation —
 // the one step between a freshly enrolled account and a usable relay.
-export { resolveRelayFromInvitation, normaliseAccount } from './delegated/relay-from-invitation';
+export { resolveRelayFromInvitation, normaliseAccount } from '@calimero-network/mero-js';
 export type {
   RelayResolutionStep,
   RelayResolutionFailure,
   ResolvedInvitationRelay,
   ResolveRelayResult,
   ResolveRelayFromInvitationInput,
-} from './delegated/relay-from-invitation';
-export { joinWithNode } from './delegated/join-with-node';
+} from '@calimero-network/mero-js';
+export { joinWithNode } from '@calimero-network/mero-js';
 export type {
   JoinWithNodeInput,
   JoinWithNodeResult,
   JoinWithNodeSuccess,
   JoinWithNodeFailure,
   JoinWithNodeStep,
-} from './delegated/join-with-node';
-export { bootstrapFromInvitation } from './delegated/bootstrap-from-invitation';
+} from '@calimero-network/mero-js';
+export { bootstrapFromInvitation } from '@calimero-network/mero-js';
 export type {
   BootstrapStep,
   BootstrapResult,
   BootstrapSuccess,
   BootstrapFailure,
   BootstrapFromInvitationInput,
-} from './delegated/bootstrap-from-invitation';
+} from '@calimero-network/mero-js';
 export { useDelegatedBootstrap } from './delegated/useDelegatedBootstrap';
-export { createDelegatedContext, HA_ACCOUNT_NOT_LINKED_MESSAGE, HA_REFUSAL_MESSAGES } from './delegated/create-context';
-export type { FoundedDelegatedNamespace } from './delegated/create-context';
-export { applicationIdForBundle, resolveApplicationIdFromRegistry, selectLatestBundle } from './delegated/application-id';
-export type { RegistryBundle, ResolvedApplication } from './delegated/application-id';
-export { createAccountAdmin, InvitationNotClaimableError, NoRelayError, NotForAccountError } from './delegated/account-admin';
-export { createNodeAdmin } from './admin/node-admin';
-export type { AccountAdminDeps } from './delegated/account-admin';
+export { createDelegatedContext, HA_ACCOUNT_NOT_LINKED_MESSAGE, HA_REFUSAL_MESSAGES } from '@calimero-network/mero-js';
+export type { FoundedDelegatedNamespace } from '@calimero-network/mero-js';
+export { applicationIdForBundle, resolveApplicationIdFromRegistry, selectLatestBundle } from '@calimero-network/mero-js';
+export type { RegistryBundle, ResolvedApplication } from '@calimero-network/mero-js';
+export { createAccountAdmin, InvitationNotClaimableError, NoRelayError, NotForAccountError } from '@calimero-network/mero-js';
+export { createNodeAdmin } from '@calimero-network/mero-js';
+export type { AccountAdminDeps } from '@calimero-network/mero-js';
 
 // One call to join from an invitation, whatever the connection.
 export { useJoinInvitation, isFinalInvitationError } from './join/useJoinInvitation';

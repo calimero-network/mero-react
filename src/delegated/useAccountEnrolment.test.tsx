@@ -3,24 +3,26 @@ import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 
-const { readEnrolmentCallback, completeDeviceEnrolment, getAccountRelays, enableHaAsAccount } = vi.hoisted(() => ({
+const { readEnrolmentCallback, completeDeviceEnrolment, getAccountRelays } = vi.hoisted(() => ({
   readEnrolmentCallback: vi.fn(),
   completeDeviceEnrolment: vi.fn(),
   getAccountRelays: vi.fn(),
-  enableHaAsAccount: vi.fn(),
 }));
 vi.mock('@calimero-network/mero-js', async (orig) => ({
   ...(await orig<typeof import('@calimero-network/mero-js')>()),
   readEnrolmentCallback,
   completeDeviceEnrolment,
-  CloudClient: vi.fn(() => ({ getAccountRelays, enableHaAsAccount })),
+  CloudClient: vi.fn(() => ({ getAccountRelays })),
 }));
+// `foundDelegatedNamespace` lives in mero-js and enables HA through mero-js's own
+// `CloudClient`, which the module mock above cannot reach; its prototype can be.
+const { CloudClient: RealCloudClient } = await vi.importActual<typeof import('@calimero-network/mero-js')>('@calimero-network/mero-js');
 
 import { RelayClient } from '@calimero-network/mero-js';
 import { MeroContext } from '../context';
 import { isReturningFromWallet, useAccountEnrolment } from './useAccountEnrolment';
-import { foundDelegatedNamespace } from './create-context';
-import { readDelegatedSession, saveDelegatedSession, type DelegatedSession } from './session';
+import { foundDelegatedNamespace } from '@calimero-network/mero-js';
+import { readDelegatedSession, saveDelegatedSession, type DelegatedAccountSession as DelegatedSession } from '@calimero-network/mero-js';
 
 const connectWithAccount = vi.fn();
 function wrapper({ children }: { children: React.ReactNode }) {
@@ -36,7 +38,6 @@ beforeEach(() => {
   readEnrolmentCallback.mockReset();
   completeDeviceEnrolment.mockReset();
   getAccountRelays.mockReset();
-  enableHaAsAccount.mockReset();
   connectWithAccount.mockReset();
 });
 afterEach(() => vi.clearAllMocks());
@@ -210,7 +211,7 @@ describe('useAccountEnrolment', () => {
         .spyOn(RelayClient.prototype, 'foundNamespace')
         .mockResolvedValue({ namespaceId: 'ab'.repeat(32), salt: 'cd'.repeat(32), teeEnabled: true } as never);
       const describeGovernance = vi.spyOn(RelayClient.prototype, 'describeGovernance');
-      enableHaAsAccount.mockResolvedValue({ status: 'enabled' });
+      const enableHa = vi.spyOn(RealCloudClient.prototype, 'enableHaAsAccount').mockResolvedValue({ status: 'enabled' } as never);
       try {
         const session = await enrol([
           { peerId: 'p', relayUrl: RELAY, fresh: true, executorAccount: EXECUTOR, assigned: true },
@@ -231,6 +232,7 @@ describe('useAccountEnrolment', () => {
       } finally {
         founded.mockRestore();
         describeGovernance.mockRestore();
+        enableHa.mockRestore();
       }
     });
 
