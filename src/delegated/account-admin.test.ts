@@ -169,6 +169,18 @@ describe('createAccountAdmin', () => {
     expect(deps.createContext).toHaveBeenCalledWith(S, expect.objectContaining({ groupId: SUB, name: 'room' }));
   });
 
+  // The relay executes as the account, so the account IS its identity in the
+  // context it just created, as `joinContext` and `getContextIdentitiesOwned`
+  // already say. An empty key here was written into app state as the owner.
+  it('names the account as the member key of the context it creates', async () => {
+    const { admin } = rig();
+    await expect(admin.createContext({ applicationId: 'ap'.repeat(32), groupId: SUB })).resolves.toEqual({
+      contextId: CTX,
+      memberPublicKey: ME,
+      groupId: SUB,
+    });
+  });
+
   it('names the bundle service and the seed in the context it creates', async () => {
     // mero-docs creates its `registry` context as an account: the warrant must
     // say which service of the bundle, or the relay runs the default one's init.

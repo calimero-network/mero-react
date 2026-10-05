@@ -290,7 +290,10 @@ export function createAccountAdmin(
         serviceName: req.serviceName, contextSeed: req.contextSeed,
         name: req.name, initializationParams: req.initializationParams,
       });
-      return { contextId, memberPublicKey: '', groupId: req.groupId };
+      // The relay executes as the account, so the account is its member key
+      // here as it is in `joinContext` and `getContextIdentitiesOwned`. Apps
+      // record this key as the context's owner; an empty one was being stored.
+      return { contextId, memberPublicKey: s.account, groupId: req.groupId };
     },
     async createNamespaceInvitation(namespaceId: string) {
       const [{ members }, info] = await Promise.all([relay().listGroupMembers(namespaceId), relay().getGroupInfo(namespaceId)]);
