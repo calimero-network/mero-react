@@ -58,8 +58,9 @@ import {
   useInstallFromRegistry,
   useMyAuthoredMigration,
 } from './index';
-import { HTTPError, type SignedGroupOpenInvitation } from '@calimero-network/mero-js';
+import { HTTPError, RelayClient, type SignedGroupOpenInvitation } from '@calimero-network/mero-js';
 import { useMero } from '../context';
+import { clearDelegatedSession, saveDelegatedSession } from '../delegated/session';
 
 vi.mock('../context', () => ({
   useMero: vi.fn(),
@@ -2162,5 +2163,38 @@ describe('hooks under an account session write through the context admin', () =>
 
     expect(response).toBeNull();
     expect(mero.admin.createNamespaceInvitation).not.toHaveBeenCalled();
+  });
+
+  it('useCreateContext names the bundle service in the creation warrant', async () => {
+    // The delegated branch builds the relay call itself: every field of the
+    // request with a warrant equivalent must reach it, serviceName first of all.
+    saveDelegatedSession({ account: 'aa'.repeat(32), credential: 'cc', deviceSecret: '11'.repeat(32), relayUrl: 'https://relay.example' } as never);
+    const created = vi
+      .spyOn(RelayClient.prototype, 'createContext')
+      .mockResolvedValue({ contextId: 'cd'.repeat(32), groupId: 'ab'.repeat(32), memberPublicKey: 'ee'.repeat(32) } as never);
+    try {
+      const { mero, admin } = delegated();
+      const { result } = renderHook(() => useCreateContext());
+      let response: unknown;
+      await act(async () => {
+        response = await result.current.createContext({
+          applicationId: 'ap'.repeat(32),
+          groupId: 'ab'.repeat(32),
+          serviceName: 'registry',
+          name: 'Registry',
+          contextSeed: 'ff'.repeat(32),
+          initializationParams: [],
+        });
+      });
+      expect(response).toEqual({ contextId: 'cd'.repeat(32) });
+      expect(created).toHaveBeenCalledWith(
+        expect.objectContaining({ groupId: 'ab'.repeat(32), serviceName: 'registry', name: 'Registry', seed: 'ff'.repeat(32), initArgs: {} }),
+      );
+      expect(mero.admin.createContext).not.toHaveBeenCalled();
+      expect(admin.createContext).not.toHaveBeenCalled();
+    } finally {
+      created.mockRestore();
+      clearDelegatedSession();
+    }
   });
 });

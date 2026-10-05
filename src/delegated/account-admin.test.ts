@@ -169,6 +169,18 @@ describe('createAccountAdmin', () => {
     expect(deps.createContext).toHaveBeenCalledWith(S, expect.objectContaining({ groupId: SUB, name: 'room' }));
   });
 
+  it('names the bundle service and the seed in the context it creates', async () => {
+    // mero-docs creates its `registry` context as an account: the warrant must
+    // say which service of the bundle, or the relay runs the default one's init.
+    const { admin, deps } = rig();
+    const contextSeed = 'ff'.repeat(32);
+    await admin.createContext({ applicationId: 'ap'.repeat(32), groupId: NS, serviceName: 'registry', name: 'Registry', contextSeed, initializationParams: [] });
+    expect(deps.createContext).toHaveBeenCalledWith(
+      S,
+      expect.objectContaining({ namespaceId: NS, groupId: NS, serviceName: 'registry', name: 'Registry', contextSeed, initializationParams: [] }),
+    );
+  });
+
   it("founds a namespace with this app's package at the registry's latest version", async () => {
     const { admin, deps } = rig();
     await expect(admin.createNamespace({ applicationId: 'ap'.repeat(32), name: 'Team' })).resolves.toMatchObject({ namespaceId: NS });
