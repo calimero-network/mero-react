@@ -1,3 +1,9 @@
+## [9.10.0](https://github.com/calimero-network/mero-react/compare/mero-react-v9.9.1...mero-react-v9.10.0) (2026-10-05)
+
+### Features
+
+* **login:** the connect dialog offers the Cloud tab by default ([#92](https://github.com/calimero-network/mero-react/issues/92)) ([b1b23d5](https://github.com/calimero-network/mero-react/commit/b1b23d58357d2a0cf8fe598511996a8693d5218c))
+
 ## [9.9.1](https://github.com/calimero-network/mero-react/compare/mero-react-v9.9.0...mero-react-v9.9.1) (2026-10-04)
 
 ### Bug Fixes
