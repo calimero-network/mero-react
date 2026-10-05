@@ -109,3 +109,40 @@ describe('buildDelegatedClient: reads of an account go through the query route',
     expect(fake.queryContext).not.toHaveBeenCalled();
   });
 });
+
+describe('buildDelegatedClient: no events on a hosted relay before its key is attested', () => {
+  it('advertises no subscription and its stream opens nothing, so nothing loops on a 401', async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+    const client = buildDelegatedClient(S, null)!;
+    expect(client.canSubscribe).toBe(false);
+    const events = client.events;
+    expect(events).not.toBe(fake.events);
+    // What the hooks do with a stream: connect, subscribe, and later close. The
+    // connect never settles rather than failing, so no caller sees an error to
+    // retry on; the close resolves whatever waits.
+    let settled = false;
+    void events.connect().finally(() => { settled = true; });
+    await events.subscribe({ contextIds: [CTX] });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(settled).toBe(false);
+    client.close();
+    expect(fake.close).toHaveBeenCalled();
+    expect(client.events).toBe(events);
+  });
+
+  it('with the key attested, the events are the client\'s own session-backed stream', () => {
+    pinRelayNodeKey(RELAY, 'ab'.repeat(32));
+    const client = buildDelegatedClient(S, null)!;
+    expect(client.canSubscribe).toBe(true);
+    expect(client.events).toBe(fake.events);
+    expect((fake.config as { observe?: { nodeKey?: string } }).observe?.nodeKey).toBe('ab'.repeat(32));
+  });
+
+  it('a loopback relay is a dev rig whose proof the node accepts: events as given', () => {
+    const client = buildDelegatedClient({ ...S, relayUrl: 'http://localhost:2428' }, null)!;
+    expect(client.canSubscribe).toBe(true);
+    expect(client.events).toBe(fake.events);
+  });
+});

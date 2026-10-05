@@ -23,6 +23,7 @@ import {
   fetchNodeRelease,
   fetchNodeReleaseVersion,
   login,
+  SseClient,
   type DcapVerify,
   type ExecuteParams,
   type ExecuteResult,
@@ -659,14 +660,53 @@ function readsThroughQuery(client: MeroClient, relayUrl: string): ExecuteTranspo
 }
 
 /**
- * The relay client as a delegated session uses it: `rpc` reading by query when
- * the client has a session. Everything else is the client's own, `this` kept.
+ * An event stream that opens nothing: for a hosted relay whose node key is not
+ * attested yet.
+ *
+ * A hosted relay's `/sse` sits behind forward-auth that knows a Bearer token
+ * and nothing else, so the proof-authenticated stream mero-js builds without a
+ * node key is answered 401 `missing_token` — not one of the terminal auth
+ * errors, so `SseClient` reconnected on a timer for as long as the key stayed
+ * unknown. The hooks take `client.events` and connect without asking, so the
+ * stream handed out meanwhile is a real `SseClient` whose connect waits for a
+ * close instead of fetching: it holds its subscriptions, emits no error, and
+ * reaches the network never. The client built once the key is learned brings
+ * the session-backed stream, and the hooks' effects move onto it.
  */
-function delegatedClient(client: MeroClient, opts: { relayUrl: string; session: boolean }): MeroClient {
+function dormantEvents(relayUrl: string): SseClient {
+  return new SseClient({
+    baseUrl: relayUrl,
+    authorize: async () => ({}),
+    fetch: (_url, init) =>
+      new Promise<Response>((_, reject) => {
+        const abort = () => reject(Object.assign(new Error('the stream was closed before the relay was attested'), { name: 'AbortError' }));
+        if (init?.signal?.aborted) return abort();
+        init?.signal?.addEventListener('abort', abort, { once: true });
+      }),
+  });
+}
+
+/**
+ * The relay client as a delegated session uses it: `rpc` reading by query when
+ * the client has a session, and no events until the relay is attested.
+ * Everything else is the client's own, `this` kept.
+ */
+function delegatedClient(client: MeroClient, opts: { relayUrl: string; session: boolean; attested: boolean }): MeroClient {
   const rpc = opts.session ? readsThroughQuery(client, opts.relayUrl) : null;
+  let dormant: SseClient | null = null;
   return new Proxy(client, {
     get(target, prop) {
       if (prop === 'rpc' && rpc) return rpc;
+      if (!opts.attested) {
+        if (prop === 'canSubscribe') return false;
+        if (prop === 'events') return (dormant ??= dormantEvents(opts.relayUrl));
+        if (prop === 'close') {
+          return () => {
+            dormant?.close();
+            target.close();
+          };
+        }
+      }
       const value = Reflect.get(target, prop, target);
       return typeof value === 'function' ? value.bind(target) : value;
     },
@@ -732,7 +772,14 @@ export function buildDelegatedClient(
     // through its own device-certificate login instead.
     observe: nodeKey ? { nodeKey } : undefined,
   });
-  return delegatedClient(client, { relayUrl: s.relayUrl, session: nodeKey !== null });
+  // Events wait for the relay's node key on a hosted relay, whose forward-auth
+  // answers the proof-only stream 401 and would have it reconnect forever. A
+  // loopback relay is a dev rig that takes the proof as a node does.
+  return delegatedClient(client, {
+    relayUrl: s.relayUrl,
+    session: nodeKey !== null,
+    attested: nodeKey !== null || isLoopback(s.relayUrl),
+  });
 }
 
 // ------------------------------------------------------------------ relay map
