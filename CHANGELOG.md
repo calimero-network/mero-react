@@ -1,3 +1,9 @@
+## [9.11.3](https://github.com/calimero-network/mero-react/compare/mero-react-v9.11.2...mero-react-v9.11.3) (2026-10-05)
+
+### Bug Fixes
+
+* **account:** an account's context creation names the bundle service it is for ([#96](https://github.com/calimero-network/mero-react/issues/96)) ([bfdb574](https://github.com/calimero-network/mero-react/commit/bfdb574c21928dee6e308a35d47b1a91f3160c5a))
+
 ## [9.11.2](https://github.com/calimero-network/mero-react/compare/mero-react-v9.11.1...mero-react-v9.11.2) (2026-10-05)
 
 ### Bug Fixes
