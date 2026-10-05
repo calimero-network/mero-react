@@ -125,7 +125,7 @@ const {
 } = useMero();
 ```
 
-How an account (delegated session) learns its `applicationId`: first from its own contexts on the relay — one distinct application across them is the answer; several leaves it `null` on purpose (nothing says which the tab is for). With no contexts yet, it is derived from the registry by `packageName`: the id is `sha256(borsh((package, signerId)))` of the newest non-yanked bundle, exactly as merod computes it at install, so a brand-new account can found its first namespace (`admin.createNamespace({ applicationId })`). Without a `packageName`, or when the registry lists the package under more than one publisher, it stays `null`. `applicationIdForBundle` and `resolveApplicationIdFromRegistry` are exported for apps that need the same derivation.
+How an account (delegated session) learns its `applicationId`: `packageName` decides. When the app passes one, the id is derived from the registry: `sha256(borsh((package, signerId)))` of the newest non-yanked bundle, exactly as merod computes it at install, so a brand-new account can found its first namespace (`admin.createNamespace({ applicationId })`) and an account already used in other apps is never handed one of THEIR ids. The account's own contexts on the relay are consulted only when the app passes no `packageName` (or the registry did not answer, after one `console.warn`): one distinct application across them is the answer; several leaves it `null` on purpose (nothing says which the tab is for). When the registry lists the package under more than one publisher, it stays `null`. `applicationIdForBundle` and `resolveApplicationIdFromRegistry` are exported for apps that need the same derivation.
 
 Through `mero` you access the full MeroJs API:
 
