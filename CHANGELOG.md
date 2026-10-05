@@ -1,3 +1,9 @@
+## [9.11.4](https://github.com/calimero-network/mero-react/compare/mero-react-v9.11.3...mero-react-v9.11.4) (2026-10-05)
+
+### Bug Fixes
+
+* **account:** invitations for unlinked founders, context identity, reads via query, no proof-only events on relays ([#97](https://github.com/calimero-network/mero-react/issues/97)) ([dd3f431](https://github.com/calimero-network/mero-react/commit/dd3f431d2d7c755bddd64d8e045e917c25c0aaac))
+
 ## [9.11.3](https://github.com/calimero-network/mero-react/compare/mero-react-v9.11.2...mero-react-v9.11.3) (2026-10-05)
 
 ### Bug Fixes
