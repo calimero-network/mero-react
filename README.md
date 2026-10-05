@@ -117,13 +117,15 @@ const {
   isOnline,         // boolean — SSE connection state
   isLoading,        // boolean — initial session restore
   nodeUrl,          // string | null
-  applicationId,    // string | null — resolved from auth callback
+  applicationId,    // string | null — node: from the auth callback; account: see below
   contextId,        // string | null — from auth callback
   contextIdentity,  // string | null — executor public key from auth callback
   connectToNode,    // (url: string) => void — starts auth redirect
   logout,           // () => void — clears tokens and state
 } = useMero();
 ```
+
+How an account (delegated session) learns its `applicationId`: first from its own contexts on the relay — one distinct application across them is the answer; several leaves it `null` on purpose (nothing says which the tab is for). With no contexts yet, it is derived from the registry by `packageName`: the id is `sha256(borsh((package, signerId)))` of the newest non-yanked bundle, exactly as merod computes it at install, so a brand-new account can found its first namespace (`admin.createNamespace({ applicationId })`). Without a `packageName`, or when the registry lists the package under more than one publisher, it stays `null`. `applicationIdForBundle` and `resolveApplicationIdFromRegistry` are exported for apps that need the same derivation.
 
 Through `mero` you access the full MeroJs API:
 

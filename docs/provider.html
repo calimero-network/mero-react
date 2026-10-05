@@ -83,7 +83,7 @@
 &nbsp;&nbsp;<span class="field">isOnline</span>: <span class="ty">boolean</span>;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">// true when node is reachable</span><br>
 &nbsp;&nbsp;<span class="field">isLoading</span>: <span class="ty">boolean</span>;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">// true during initialisation</span><br>
 &nbsp;&nbsp;<span class="field">nodeUrl</span>: <span class="ty">string</span> | <span class="ty">null</span>;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">// current node URL</span><br>
-&nbsp;&nbsp;<span class="field">applicationId</span>: <span class="ty">string</span> | <span class="ty">null</span>;&nbsp;&nbsp;&nbsp;<span class="comment">// current application ID</span><br>
+&nbsp;&nbsp;<span class="field">applicationId</span>: <span class="ty">string</span> | <span class="ty">null</span>;&nbsp;&nbsp;&nbsp;<span class="comment">// node: from the auth callback; account: from its contexts, else the registry by packageName</span><br>
 &nbsp;&nbsp;<span class="field">contextId</span>: <span class="ty">string</span> | <span class="ty">null</span>;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">// active context ID</span><br>
 &nbsp;&nbsp;<span class="field">contextIdentity</span>: <span class="ty">string</span> | <span class="ty">null</span>;<span class="comment">// context identity (executor public key)</span><br>
 &nbsp;&nbsp;<span class="field">connectToNode</span>: (<span class="field">url</span>: <span class="ty">string</span>) =&gt; <span class="ty">void</span>;&nbsp;<span class="comment">// set node URL and init</span><br>
