@@ -1,3 +1,5 @@
+## [9.11.5](https://github.com/calimero-network/mero-react/compare/mero-react-v9.11.4...mero-react-v9.11.5) (2026-10-05)
+
 ## [9.11.4](https://github.com/calimero-network/mero-react/compare/mero-react-v9.11.3...mero-react-v9.11.4) (2026-10-05)
 
 ### Bug Fixes
