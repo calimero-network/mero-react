@@ -11,6 +11,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useMero } from '../context';
 import { LoginModal } from './LoginModal';
+import { isDesktopWindow } from '../utils/desktop';
 import { useAccountEnrolment } from '../delegated/useAccountEnrolment';
 import { readDelegatedSession } from '@calimero-network/mero-js';
 import { CalimeroLogo } from './CalimeroLogo';
@@ -47,8 +48,10 @@ export interface ConnectButtonProps {
     | { connect?: string; connected?: string; reconnecting?: string };
   /**
    * Offer the **Cloud** tab — sign in with a Calimero account — next to the
-   * node dialog. Default true. With false the modal has no tabs, and this
-   * button reads no enrolment callback, leaving it to whichever component does.
+   * node dialog. Default true in a browser, false inside a Calimero Desktop
+   * window (already bound to the desktop's node; see `isDesktopWindow`). With
+   * false the modal has no tabs, and this button reads no enrolment callback,
+   * leaving it to whichever component does.
    */
   cloud?: boolean;
   /**
@@ -78,9 +81,10 @@ export function ConnectButton({
   theme,
   logoOnly = false,
   label,
-  cloud = true,
+  cloud: cloudProp,
   accountDefaults,
 }: ConnectButtonProps) {
+  const cloud = cloudProp ?? !isDesktopWindow();
   const { isAuthenticated, connectToNode, logout, nodeUrl, isOnline, isDelegated } = useMero();
   const enrolment = useAccountEnrolment({
     walletUrl: accountDefaults?.walletUrl,

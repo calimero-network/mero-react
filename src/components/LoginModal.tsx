@@ -26,6 +26,7 @@ import { createPortal } from 'react-dom';
 import { CalimeroLogo } from './CalimeroLogo';
 import { AccountSignInPanel } from './AccountSignInPanel';
 import { useAccountEnrolment } from '../delegated/useAccountEnrolment';
+import { isDesktopWindow } from '../utils/desktop';
 import type { ConnectionType, CustomConnectionConfig } from '../types';
 import {
   discoverLocalNodes,
@@ -74,6 +75,8 @@ export interface LoginModalProps {
    *   the modal is open. Nothing to wire; the modal must be inside a
    *   `MeroProvider`.
    * - **`false`**: no Cloud tab and no tabs at all — the node dialog as it was.
+   * - **omitted inside a Calimero Desktop window**: as `false` — the window is
+   *   already bound to the desktop's node. Pass a `cloud` object to override.
    *   The modal reads no enrolment callback, leaving it to whichever component
    *   does.
    * - **An object**: the caller's own enrolment, used verbatim; the modal reads
@@ -436,10 +439,15 @@ export function LoginModal({
   // rendered first — take the callback away from the caller. So this is on
   // exactly when nobody else is. Called before the `isOpen` early return, so a
   // tab coming back from the wallet is completed while the modal is closed too.
-  const own = useAccountEnrolment({ enabled: cloud === undefined });
+  //
+  // Inside a Calimero Desktop window there is no default Cloud tab: the window
+  // is already bound to the desktop's node (see `isDesktopWindow`). A caller
+  // that passes its own `cloud` object still gets it.
+  const ownCloud = cloud === undefined && !isDesktopWindow();
+  const own = useAccountEnrolment({ enabled: ownCloud });
   const cloudTab = useMemo(
     () =>
-      cloud === undefined
+      ownCloud
         ? {
             onEnrol: () => {
               void own.goToWallet();
@@ -449,10 +457,10 @@ export function LoginModal({
             customWallet: own.customWallet,
           }
         : cloud || null,
-    [cloud, own.goToWallet, own.note, own.walletUrl, own.customWallet],
+    [cloud, ownCloud, own.goToWallet, own.note, own.walletUrl, own.customWallet],
   );
   const initialTab: LoginModalTab =
-    initialTabProp ?? (cloud === undefined && own.returning ? 'cloud' : 'node');
+    initialTabProp ?? (ownCloud && own.returning ? 'cloud' : 'node');
 
   const [tab, setTab] = useState<LoginModalTab>(initialTab);
   // Each opening starts on `initialTab`: the modal stays mounted while closed,

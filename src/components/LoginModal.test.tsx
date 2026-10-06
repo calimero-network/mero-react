@@ -298,6 +298,35 @@ describe('LoginModal — Cloud tab by default', () => {
     );
   });
 
+  describe('inside a Calimero Desktop window', () => {
+    beforeEach(() => {
+      (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {};
+    });
+    afterEach(() => {
+      delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__;
+    });
+
+    it('without `cloud`, has no Cloud tab and disables the hook', async () => {
+      vi.stubGlobal('fetch', mockFetch([]));
+      enrolment.returning = true;
+      renderModal();
+
+      await screen.findByTestId('node-url-input');
+      expect(screen.queryByRole('tab')).toBeNull();
+      expect(useAccountEnrolmentMock).toHaveBeenCalledWith(
+        expect.objectContaining({ enabled: false }),
+      );
+    });
+
+    it('an explicit `cloud` object still shows the Cloud tab', async () => {
+      vi.stubGlobal('fetch', mockFetch([]));
+      renderModal({ cloud: { onEnrol: vi.fn(), note: null, walletUrl: 'w', customWallet: false } });
+
+      const tabs = await screen.findAllByRole('tab');
+      expect(tabs.map((t) => t.textContent)).toEqual(['Node', 'Cloud']);
+    });
+  });
+
   it('`cloud={false}` has no tabs and disables the hook', async () => {
     vi.stubGlobal('fetch', mockFetch([]));
     renderModal({ cloud: false });

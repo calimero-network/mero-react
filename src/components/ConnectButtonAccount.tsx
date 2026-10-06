@@ -57,6 +57,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useMero } from '../context';
 import { useAccountEnrolment } from '../delegated/useAccountEnrolment';
 import { LoginModal } from './LoginModal';
+import { isDesktopWindow } from '../utils/desktop';
 import { CalimeroLogo } from './CalimeroLogo';
 import { resolveMeroTheme, themeToCssVars, type MeroTheme } from '../theme';
 
@@ -77,6 +78,12 @@ export interface ConnectButtonAccountProps {
    * - the **context** is chosen after connecting, from the account's own contexts,
    *   which `admin.getContexts()` answers caller-scoped through the request proof.
    */
+  /**
+   * Show the "I have an account" path. Default true in a browser, false inside
+   * a Calimero Desktop window, which is already bound to the desktop's node
+   * (see `isDesktopWindow`).
+   */
+  cloud?: boolean;
   defaults?: {
     /**
      * Point enrolment at a wallet other than the hosted one.
@@ -94,7 +101,9 @@ export function ConnectButtonAccount({
   style,
   theme,
   defaults = {},
+  cloud: cloudProp,
 }: ConnectButtonAccountProps) {
+  const cloud = cloudProp ?? !isDesktopWindow();
   const { isAuthenticated, isOnline, nodeUrl, isDelegated, connectToNode, logout } = useMero();
 
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -118,7 +127,10 @@ export function ConnectButtonAccount({
     return () => document.removeEventListener('mousedown', onOutside);
   }, []);
 
-  const { goToWallet, note, walletUrl } = useAccountEnrolment({ walletUrl: defaults.walletUrl });
+  const { goToWallet, note, walletUrl } = useAccountEnrolment({
+    walletUrl: defaults.walletUrl,
+    enabled: cloud,
+  });
 
   if (isAuthenticated && !isOnline) {
     return (
@@ -198,16 +210,18 @@ export function ConnectButtonAccount({
           <CalimeroLogo size={18} className="mero-logo" />
           I run a node
         </button>
-        <button
-          className={['mero-connect-button', className].filter(Boolean).join(' ')}
-          style={style}
-          onClick={() => setIsAccountOpen((p) => !p)}
-        >
-          I have an account
-        </button>
+        {cloud && (
+          <button
+            className={['mero-connect-button', className].filter(Boolean).join(' ')}
+            style={style}
+            onClick={() => setIsAccountOpen((p) => !p)}
+          >
+            I have an account
+          </button>
+        )}
       </div>
 
-      {isAccountOpen && (
+      {cloud && isAccountOpen && (
         <div
           style={{
             marginTop: 12,
