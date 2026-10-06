@@ -1,3 +1,9 @@
+## [9.12.0](https://github.com/calimero-network/mero-react/compare/mero-react-v9.11.5...mero-react-v9.12.0) (2026-10-06)
+
+### Features
+
+* **login:** no Cloud sign-in by default inside a Calimero Desktop window ([#99](https://github.com/calimero-network/mero-react/issues/99)) ([0e6cdb1](https://github.com/calimero-network/mero-react/commit/0e6cdb194e04fbb2b967a10c4fe1877de7268d66))
+
 ## [9.11.5](https://github.com/calimero-network/mero-react/compare/mero-react-v9.11.4...mero-react-v9.11.5) (2026-10-05)
 
 ## [9.11.4](https://github.com/calimero-network/mero-react/compare/mero-react-v9.11.3...mero-react-v9.11.4) (2026-10-05)
