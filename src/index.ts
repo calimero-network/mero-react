@@ -234,6 +234,9 @@ export {
   clearAllStorage,
 } from './storage';
 
+// Is this a Calimero Desktop (Tauri) app window? Drives the Cloud sign-in's default.
+export { isDesktopWindow } from './utils/desktop';
+
 // Re-export everything from mero-js so apps only need one import
 export * from '@calimero-network/mero-js';
 

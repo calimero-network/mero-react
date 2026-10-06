@@ -96,6 +96,24 @@ describe('ConnectButton — connect dialog tabs', () => {
     expect(enrolment.goToWallet).toHaveBeenCalledTimes(1);
   });
 
+  it('inside a Calimero Desktop window there is no Cloud tab unless asked for', () => {
+    const w = window as unknown as Record<string, unknown>;
+    w.__TAURI_FETCH_PROXY_INJECTED__ = true;
+    try {
+      renderButton();
+      fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+      expect(screen.queryByRole('tablist')).toBeNull();
+      expect(useAccountEnrolmentMock).toHaveBeenCalledWith(expect.objectContaining({ enabled: false }));
+      cleanup();
+
+      renderButton({ cloud: true });
+      fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+      expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Node', 'Cloud']);
+    } finally {
+      delete w.__TAURI_FETCH_PROXY_INJECTED__;
+    }
+  });
+
   it('`cloud={false}` shows no tabs and disables the hook', () => {
     renderButton({ cloud: false });
     fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
