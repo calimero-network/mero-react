@@ -1,2 +1,2 @@
-export { MeroProvider, useMero, MeroContext } from './MeroContext';
+export { MeroProvider, useMero, MeroContext, getPermissionsForMode } from './MeroContext';
 export type { MeroProviderProps } from './MeroContext';

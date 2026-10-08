@@ -89,7 +89,10 @@ const isBrowser = typeof window !== 'undefined';
  * (`validator.rs`). An app that may create contexts may delete them, so
  * `useDeleteContext` works on a node instead of answering 403.
  *
- * Exported for tests.
+ * Public: whatever mints a token for a mero-react app on its behalf (the
+ * desktop's per-app key, admin-dashboard's, auth-frontend's allowlist) should
+ * test against this rather than a hand copy. Three copies went without
+ * `context:delete` and every app's context delete answered 403.
  */
 export function getPermissionsForMode(mode: AppMode): string[] {
   switch (mode) {
