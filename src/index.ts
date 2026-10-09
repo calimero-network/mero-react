@@ -10,7 +10,7 @@
 import './components/styles.css';
 
 // Context & Provider
-export { MeroProvider, useMero, MeroContext } from './context';
+export { MeroProvider, useMero, MeroContext, getPermissionsForMode } from './context';
 export type { MeroProviderProps } from './context';
 
 // Components
