@@ -1,3 +1,9 @@
+## [9.13.0](https://github.com/calimero-network/mero-react/compare/mero-react-v9.12.0...mero-react-v9.13.0) (2026-10-09)
+
+### Features
+
+* export getPermissionsForMode from the package entry ([#101](https://github.com/calimero-network/mero-react/issues/101)) ([7c31074](https://github.com/calimero-network/mero-react/commit/7c310745ed869fb7eb21447aef5fe8810bd9bd03))
+
 ## [9.12.0](https://github.com/calimero-network/mero-react/compare/mero-react-v9.11.5...mero-react-v9.12.0) (2026-10-06)
 
 ### Features
