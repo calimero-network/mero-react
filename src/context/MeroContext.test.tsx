@@ -81,7 +81,10 @@ function Consumer() {
 const settled = () =>
   waitFor(() => expect(screen.getByTestId('loading').textContent).toBe('false'));
 
+let page = 0;
 beforeEach(() => {
+  // The provider parses each href once per module, so each test is a new page.
+  window.history.replaceState(null, '', `/?page=${++page}`);
   localStorage.clear();
   meroMock.mockClear();
   mockParseAuthCallback.mockReset();

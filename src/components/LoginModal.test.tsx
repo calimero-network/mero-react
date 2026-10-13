@@ -300,7 +300,7 @@ describe('LoginModal — Cloud tab by default', () => {
 
   describe('inside a Calimero Desktop window', () => {
     beforeEach(() => {
-      (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {};
+      (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = { invoke: () => Promise.resolve() };
     });
     afterEach(() => {
       delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__;
