@@ -87,7 +87,7 @@ describe('useAccountEnrolment', () => {
     expect(result.current.returning).toBe(true);
   });
 
-  it('a callback this tab did not start is refused', async () => {
+  it('a callback the SDK did not start is refused, with its reason as the note', async () => {
     localStorage.setItem('calimero.device', JSON.stringify(KEYS));
     readEnrolmentCallback.mockReturnValue({ state: 'x', cert: 'c' });
     // mero-js matches the state to a request this browser began, and throws.
@@ -101,7 +101,7 @@ describe('useAccountEnrolment', () => {
     expect(connectWithAccount).not.toHaveBeenCalled();
   });
 
-  it('a callback it started completes and connects', async () => {
+  it('a callback completes and connects, in whichever tab the wallet returns to', async () => {
     localStorage.setItem('calimero.device', JSON.stringify(KEYS));
     readEnrolmentCallback.mockReturnValue({ state: 'sent-state', cert: 'c' });
     completeDeviceEnrolment.mockResolvedValue({ account: 'ee'.repeat(32), credential: 'cred' });
@@ -132,7 +132,7 @@ describe('useAccountEnrolment', () => {
     expect(result.current.note).toMatch(/nowhere to write yet/);
   });
 
-  it('goToWallet remembers a state and leaves for the wallet', async () => {
+  it('goToWallet leaves for the wallet with the state the SDK minted', async () => {
     localStorage.setItem('calimero.device', JSON.stringify(KEYS));
     readEnrolmentCallback.mockReturnValue(null);
     const assign = vi.fn();
@@ -146,6 +146,7 @@ describe('useAccountEnrolment', () => {
       expect(url.origin + url.pathname).toBe('https://wallet.test/enrol');
       // The state is mero-js's: `deviceEnrolmentUrl` mints and remembers it.
       expect(url.searchParams.get('state')).toMatch(/^[0-9a-f]{32}$/);
+      expect(sessionStorage.length).toBe(0);
     } finally {
       Object.defineProperty(window, 'location', { configurable: true, value: original });
     }
