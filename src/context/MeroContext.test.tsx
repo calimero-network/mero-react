@@ -25,7 +25,8 @@ vi.mock('@calimero-network/mero-js', async (importActual) => {
     ...actual,
     AuthRevokedError: actual.AuthRevokedError,
     HTTPError: actual.HTTPError,
-    MeroJs: vi.fn().mockImplementation((config: { tokenStore?: TokenStore }) => ({
+    // An implementation passed to vi.fn() survives the restoreAllMocks in afterEach.
+    MeroJs: vi.fn((config: { tokenStore?: TokenStore }) => ({
       ...sdkTokens(config),
       admin: { getContexts: vi.fn().mockResolvedValue([]) },
       auth: {
