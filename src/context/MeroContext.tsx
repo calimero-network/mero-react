@@ -65,6 +65,26 @@ const isBrowser = typeof window !== 'undefined';
 /** Read once at load from globals only the host sets, so no URL, storage or later script can flip it. */
 const DESKTOP_HOST = isDesktopWindow();
 
+/** The callback parsed for an href; mero-js spends the login state, so each href is parsed once. */
+let parsedCallback: { href: string; result: AuthCallbackResult | null } | null = null;
+
+function readAuthCallback(): AuthCallbackResult | null {
+  const href = window.location.href;
+  if (parsedCallback?.href !== href) {
+    // Calimero Desktop puts tokens in the hash without a login begun in this page.
+    parsedCallback = { href, result: parseAuthCallback(href, { allowUnsolicited: DESKTOP_HOST }) };
+  }
+  return parsedCallback.result;
+}
+
+/** Drop callback tokens and the login state from the address bar, adopted or not. */
+function clearAuthCallbackFromUrl(): void {
+  if (!new URLSearchParams(window.location.hash.slice(1)).has('access_token')) return;
+  const url = new URL(window.location.href);
+  url.searchParams.delete('auth_state');
+  window.history.replaceState({}, '', url.pathname + url.search);
+}
+
 /**
  * Permission grants requested for the client token at login.
  *
@@ -174,11 +194,10 @@ export function MeroProvider({
   // stack concurrent validate/refresh attempts over one single-use refresh token.
   const recoveringRef = useRef(false);
 
-  // Parse auth callback ONCE in a ref (StrictMode-safe: refs persist across unmount/remount)
+  // StrictMode renders twice and keeps the second ref, so the parse is cached per href outside it.
   const callbackRef = useRef<AuthCallbackResult | null | undefined>(undefined);
   if (callbackRef.current === undefined && isBrowser) {
-    // Calimero Desktop puts tokens in the hash without a login begun in this page.
-    callbackRef.current = parseAuthCallback(window.location.href, { allowUnsolicited: DESKTOP_HOST });
+    callbackRef.current = readAuthCallback();
   }
 
   const createMeroInstance = useCallback(
@@ -462,6 +481,8 @@ export function MeroProvider({
 
   // Initialization effect
   useEffect(() => {
+    // The callback was read at render; whatever its outcome, tokens leave the address bar.
+    if (isBrowser) clearAuthCallbackFromUrl();
     // A delegated tab is already connected by the effect above. This whole
     // path — callback parsing, token adoption, node-URL trust, /auth/validate —
     // describes a session the delegated client does not have.
@@ -494,11 +515,6 @@ export function MeroProvider({
           allowedNodeUrls,
         });
 
-        // Always strip the callback params (tokens + node_url) from the address
-        // bar and consume the parsed callback, whatever the trust outcome.
-        if (isBrowser) {
-          window.history.replaceState({}, '', window.location.pathname + window.location.search);
-        }
         callbackRef.current = null;
 
         if (rejected) {
