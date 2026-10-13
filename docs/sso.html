@@ -46,7 +46,8 @@ https://your-app.example.com/<br>
 <h2>What MeroProvider does with them</h2>
 <div class="typedef">
 <span class="comment">// On mount, provider runs (StrictMode-safe via ref):</span><br>
-<span class="kw">const</span> <span class="field">auth</span> = <span class="ty">parseAuthCallback</span>(window.location.href);<br>
+<span class="comment">// inDesktop: read once at load from the global Calimero Desktop injects, never from the URL</span><br>
+<span class="kw">const</span> <span class="field">auth</span> = <span class="ty">parseAuthCallback</span>(window.location.href, &#123; <span class="field">allowUnsolicited</span>: inDesktop &#125;);<br>
 <span class="kw">if</span> (<span class="field">auth</span>) &#123;<br>
 &nbsp;&nbsp;<span class="comment">// 1. Store tokens</span><br>
 &nbsp;&nbsp;tokenStore.<span class="ty">setTokens</span>(&#123; <span class="field">access_token</span>, <span class="field">refresh_token</span>, <span class="field">expires_at</span> &#125;);<br>

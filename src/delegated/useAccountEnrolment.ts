@@ -30,8 +30,6 @@ import { saveDelegatedCredential } from '@calimero-network/mero-js';
 
 /** Where this tab's device keypair lives. */
 const DEVICE_KEY = 'calimero.device';
-/** The state parameter this tab sent to the wallet, to check what comes back. */
-const STATE_KEY = 'calimero.enrol.state';
 
 /**
  * The hosted wallet, which is a property of the platform rather than of any app.
@@ -336,37 +334,11 @@ export function useAccountEnrolment({
         // typed relay and context; both are now answered by the credential this
         // returns, so the record held nothing and the "they were lost, try
         // again" failure it guarded cannot happen.
-        // The state we sent, not the one that came back. `expectState: back.state`
-        // compared the returned value against itself and therefore always passed,
-        // which left the parameter as decoration: any page able to drive this
-        // origin's callback could have had a credential adopted here.
-        const sent = (() => {
-          try {
-            return sessionStorage.getItem(STATE_KEY);
-          } catch {
-            return null;
-          }
-        })();
-        try {
-          sessionStorage.removeItem(STATE_KEY);
-        } catch {
-          /* single-use where storage allows it; the comparison below is the gate */
-        }
-        if (!sent) {
-          // No record of having started this. Refused rather than adopted: this is
-          // either a callback we did not initiate, or storage that lost the value
-          // mid-flow, and neither justifies accepting a certificate.
-          setNote(
-            'This enrolment could not be verified as one this tab started, so it was not ' +
-              'accepted. Start again from "Enrol with your account".',
-          );
-          return;
-        }
+        // mero-js remembered the state it sent and refuses an answer to any other.
         const enrolled = await completeDeviceEnrolment({
           ...back,
           devicePublicKey: keys.signPk,
           kemPublicKey: keys.kemPk,
-          expectState: sent,
         });
 
         /*
@@ -454,24 +426,12 @@ export function useAccountEnrolment({
       setNote(e instanceof Error ? e.message : String(e));
       return;
     }
-    // Remembered before leaving, so what comes back can be checked against what
-    // we sent. Without this the state parameter is decoration: comparing the
-    // returned value to itself always passes, which is what it did here.
-    const state = hex(crypto.getRandomValues(new Uint8Array(16)));
-    try {
-      sessionStorage.setItem(STATE_KEY, state);
-    } catch {
-      // Storage unavailable (private mode, blocked site data). The redirect
-      // still works and the check below reports it as unverifiable rather than
-      // silently passing.
-    }
     window.location.assign(
       deviceEnrolmentUrl({
         walletUrl,
         devicePublicKey: keys.signPk,
         kemPublicKey: keys.kemPk,
         returnTo: window.location.origin + window.location.pathname,
-        state,
       }),
     );
   }, [walletUrl]);
