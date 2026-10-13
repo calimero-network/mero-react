@@ -55,7 +55,8 @@
 <span class="comment">//    https://your-app.com/#access_token=eyJ...&amp;refresh_token=eyJ...</span><br>
 <span class="comment">//    &amp;node_url=http://node:2428&amp;application_id=abc&amp;context_id=xyz&amp;context_identity=pub</span><br><br>
 <span class="comment">// 2. MeroProvider.useEffect on mount:</span><br>
-<span class="kw">const</span> <span class="field">auth</span> = <span class="ty">parseAuthCallback</span>(window.location.href);<br>
+<span class="comment">// inDesktop: read once at load from the global Calimero Desktop injects, never from the URL</span><br>
+<span class="kw">const</span> <span class="field">auth</span> = <span class="ty">parseAuthCallback</span>(window.location.href, &#123; <span class="field">allowUnsolicited</span>: inDesktop &#125;);<br>
 <span class="kw">if</span> (<span class="field">auth</span>) &#123;<br>
 &nbsp;&nbsp;mero.<span class="ty">setTokenData</span>(&#123; <span class="field">access_token</span>: <span class="field">auth</span>.<span class="field">accessToken</span>, ... &#125;);<br>
 &nbsp;&nbsp;<span class="ty">setNodeUrl</span>(<span class="field">auth</span>.<span class="field">nodeUrl</span>);<br>

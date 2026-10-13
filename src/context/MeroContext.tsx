@@ -24,6 +24,7 @@ import { joinAsAccount } from '@calimero-network/mero-js';
 import { foundDelegatedNamespace } from '@calimero-network/mero-js';
 import { resolveTrustedNodeUrl } from '../auth/node-trust';
 import { resolveTokenAdoption } from '../auth/token-adoption';
+import { isDesktopWindow } from '../utils/desktop';
 import {
   getNodeUrl,
   setNodeUrl,
@@ -60,6 +61,9 @@ const MeroContext = createContext<MeroContextValue | null>(null);
 const DEFAULT_REGISTRY_URL = 'https://apps.calimero.network';
 
 const isBrowser = typeof window !== 'undefined';
+
+/** Read once at load from globals only the host sets, so no URL, storage or later script can flip it. */
+const DESKTOP_HOST = isDesktopWindow();
 
 /**
  * Permission grants requested for the client token at login.
@@ -173,7 +177,8 @@ export function MeroProvider({
   // Parse auth callback ONCE in a ref (StrictMode-safe: refs persist across unmount/remount)
   const callbackRef = useRef<AuthCallbackResult | null | undefined>(undefined);
   if (callbackRef.current === undefined && isBrowser) {
-    callbackRef.current = parseAuthCallback(window.location.href);
+    // Calimero Desktop puts tokens in the hash without a login begun in this page.
+    callbackRef.current = parseAuthCallback(window.location.href, { allowUnsolicited: DESKTOP_HOST });
   }
 
   const createMeroInstance = useCallback(
