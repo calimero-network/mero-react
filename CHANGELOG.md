@@ -1,3 +1,10 @@
+## [9.13.1](https://github.com/calimero-network/mero-react/compare/mero-react-v9.13.0...mero-react-v9.13.1) (2026-10-14)
+
+### Bug Fixes
+
+* **deps:** take mero-js 24.2.0, which signs namespace ops at schema 23 and binds device ids to their account ([8a1539d](https://github.com/calimero-network/mero-react/commit/8a1539dc2cdec8295c853244ed480af17543ac77))
+* **deps:** take mero-js 24.5.0, which pins each data warrant to the release core names ([d9e7dc8](https://github.com/calimero-network/mero-react/commit/d9e7dc8c8ef1024c41114972aa158cfccd5eee38))
+
 ## [9.13.0](https://github.com/calimero-network/mero-react/compare/mero-react-v9.12.0...mero-react-v9.13.0) (2026-10-09)
 
 ### Features
