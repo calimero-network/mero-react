@@ -22,7 +22,7 @@ import { RelayClient } from '@calimero-network/mero-js';
 import { MeroContext } from '../context';
 import { isReturningFromWallet, useAccountEnrolment } from './useAccountEnrolment';
 import { foundDelegatedNamespace } from '@calimero-network/mero-js';
-import { readDelegatedSession, saveDelegatedSession, type DelegatedAccountSession as DelegatedSession } from '@calimero-network/mero-js';
+import { pinRelayNodeKey, readDelegatedSession, saveDelegatedSession, type DelegatedAccountSession as DelegatedSession } from '@calimero-network/mero-js';
 
 const connectWithAccount = vi.fn();
 function wrapper({ children }: { children: React.ReactNode }) {
@@ -222,12 +222,13 @@ describe('useAccountEnrolment', () => {
         expect(restored.executorAccount).toBe(EXECUTOR);
         // Nothing joined: the account's relay map is empty.
         expect(localStorage.getItem(`calimero.delegated.relays.${ACCOUNT}`)).toBeNull();
+        pinRelayNodeKey(RELAY, 'ef'.repeat(32));
 
         await expect(foundDelegatedNamespace(restored)).resolves.toMatchObject({
           namespaceId: 'ab'.repeat(32),
           haEnabled: true,
         });
-        expect(founded).toHaveBeenCalledWith(expect.objectContaining({ executorAccount: EXECUTOR }));
+        expect(founded).toHaveBeenCalledWith(expect.objectContaining({ executor: { executorAccount: EXECUTOR, executorKey: 'ef'.repeat(32) } }));
         expect(describeGovernance).not.toHaveBeenCalled();
       } finally {
         founded.mockRestore();
