@@ -201,7 +201,8 @@ export function MeroProvider({
       // `context:list` — which single-context tokens (execute-only) and
       // app-scoped tokens don't hold, so probing it 403'd valid sessions and
       // bounced every app straight back to the login page.
-      const accessToken = tokenStore.getTokens()?.access_token;
+      // Through the client: it reads back only the bundle its own node issued.
+      const accessToken = instance.getTokenData()?.access_token;
       if (!accessToken) return false;
 
       const validate = async (token: string): Promise<boolean> => {
@@ -230,16 +231,16 @@ export function MeroProvider({
       // away, and the app bounced to login; a second reload would then "fix"
       // itself, which is exactly how this reads as a random logout.
       //
-      // So: re-read the store, and if the transport rotated it underneath us,
+      // So: re-read the token, and if the transport rotated it underneath us,
       // judge the session on the token we ACTUALLY hold now. We never call
       // /auth/refresh ourselves — doing so would race mero-js's single-flight
       // lock over a single-use refresh token and get the whole family revoked
       // (calimero-network/core#3083).
-      const rotated = tokenStore.getTokens()?.access_token;
+      const rotated = instance.getTokenData()?.access_token;
       if (!rotated || rotated === accessToken) return false;
       return validate(rotated);
     },
-    [tokenStore],
+    [],
   );
 
   const connectToNode = useCallback(
@@ -466,6 +467,7 @@ export function MeroProvider({
     const init = async () => {
       const callback = callbackRef.current;
       let nodeFromCallback: string | null = null;
+      let instance: MeroJs | null = null;
 
       if (callback) {
         // Read BEFORE the callback overwrites either of them.
@@ -513,16 +515,18 @@ export function MeroProvider({
           // every holder. Adopt only a fresh, newer, or different-node bundle, and
           // merge rather than replace so an access-only hash (hosts are dropping
           // `refresh_token` from the hash) can never strip a live refresh token.
+          // Written through the client, which binds the bundle to its node.
+          instance = createMeroInstance(url);
           const decision = resolveTokenAdoption({
             callbackAccessToken: callback.accessToken,
             callbackRefreshToken: callback.refreshToken,
             callbackNodeUrl: url,
-            stored: tokenStore.getTokens(),
+            stored: instance.getTokenData(),
             storedNodeUrl: tokenNodeUrl,
           });
 
           if (decision.adopt) {
-            tokenStore.setTokens(decision.tokens);
+            instance.setTokenData(decision.tokens);
             setTokenNodeUrl(url);
           } else {
             console.warn(
@@ -558,7 +562,7 @@ export function MeroProvider({
         return;
       }
 
-      const instance = createMeroInstance(savedUrl);
+      instance ??= createMeroInstance(savedUrl);
       const authed = await checkAuth(instance);
 
       if (!active) return;
@@ -582,7 +586,7 @@ export function MeroProvider({
     return () => {
       active = false;
     };
-  }, [createMeroInstance, checkAuth, allowedNodeUrls, tokenStore, delegated]);
+  }, [createMeroInstance, checkAuth, allowedNodeUrls, delegated]);
 
   // SSE connection for online/offline detection — no polling.
   useEffect(() => {
@@ -700,8 +704,8 @@ export function MeroProvider({
       sse.off('connect', onConnect);
       sse.off('error', onError);
     };
-    // `checkAuth` and `logout` are both useCallback-stable (they close over the
-    // memoized `tokenStore`), so listing them does not re-subscribe the stream.
+    // `checkAuth` and `logout` are both useCallback-stable (`logout` closes over
+    // the memoized `tokenStore`), so listing them does not re-subscribe the stream.
     // Not for a delegated client: this stream is opened from the node client's
     // own `events`, and a relay client observes only when it was given the
     // relay's node key — which `buildDelegatedClient` wires up itself.

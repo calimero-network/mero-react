@@ -3,6 +3,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, act, cleanup } from '@testing-library/react';
 
+// The client owns the token store, as in mero-js: every read and write goes through it.
+const { sdkTokens } = vi.hoisted(() => ({
+  sdkTokens: ({ tokenStore }: { tokenStore?: TokenStore }) => ({
+    getTokenData: () => tokenStore?.getTokens() ?? null,
+    setTokenData: (data: TokenData) => tokenStore?.setTokens(data),
+  }),
+}));
+
 // Mock only the mero-js module; node-trust + storage run for real.
 //
 // `AuthRevokedError` and `HTTPError` come from the ACTUAL module on purpose.
@@ -17,7 +25,9 @@ vi.mock('@calimero-network/mero-js', async (importActual) => {
     ...actual,
     AuthRevokedError: actual.AuthRevokedError,
     HTTPError: actual.HTTPError,
-    MeroJs: vi.fn().mockImplementation(() => ({
+    // An implementation passed to vi.fn() survives the restoreAllMocks in afterEach.
+    MeroJs: vi.fn((config: { tokenStore?: TokenStore }) => ({
+      ...sdkTokens(config),
       admin: { getContexts: vi.fn().mockResolvedValue([]) },
       auth: {
         validateToken: vi.fn().mockResolvedValue({ valid: true, headers: {}, status: 200 }),
@@ -44,7 +54,7 @@ import {
   AuthRevokedError,
   HTTPError,
 } from '@calimero-network/mero-js';
-import type { TokenStore } from '@calimero-network/mero-js';
+import type { TokenData, TokenStore } from '@calimero-network/mero-js';
 import { pinRelayNodeKey, readDelegatedSession, saveDelegatedSession } from '@calimero-network/mero-js';
 
 const meroMock = vi.mocked(MeroJs);
@@ -363,7 +373,7 @@ describe('MeroProvider — checkAuth (scope-enforced cores, rc.9+)', () => {
       clearToken: vi.fn(),
       close: vi.fn(),
     };
-    meroMock.mockImplementation(() => instance as never);
+    meroMock.mockImplementation((config) => ({ ...sdkTokens(config), ...instance }) as never);
     return instance;
   }
 
@@ -416,6 +426,97 @@ describe('MeroProvider — checkAuth (scope-enforced cores, rc.9+)', () => {
 
     expect(screen.getByTestId('authed').textContent).toBe('false');
     expect(instance.auth.validateToken).not.toHaveBeenCalled();
+  });
+});
+
+describe('MeroProvider — tokens are stored and read through the client', () => {
+  // mero-js stamps a stored bundle with the node that issued it and reads back
+  // only its own node's bundle, so the provider must never go around the client.
+  const NODE = 'https://node-a.example.com';
+  type Stamped = TokenData & { node_origin?: string };
+
+  function nodeBoundClients() {
+    let stored: Stamped | null = null;
+    const store = {
+      getTokens: () => stored,
+      setTokens: (t: Stamped) => {
+        stored = t;
+      },
+      clear: () => {
+        stored = null;
+      },
+    } as TokenStore;
+    const validateToken = vi.fn().mockResolvedValue({ valid: true, headers: {}, status: 200 });
+    const clients: Array<{ getTokenData(): TokenData | null }> = [];
+    meroMock.mockImplementation(({ baseUrl }) => {
+      const own = (t: Stamped | null) => (t?.node_origin === baseUrl ? t : null);
+      let data = own(stored);
+      const client = {
+        getTokenData: () => data,
+        setTokenData: (t: TokenData) => {
+          data = t;
+          stored = { ...t, node_origin: baseUrl };
+        },
+        admin: { getContexts: vi.fn().mockResolvedValue([]) },
+        auth: { validateToken },
+        events: { on: vi.fn(), off: vi.fn(), connect: vi.fn().mockResolvedValue(undefined) },
+        clearToken: vi.fn(),
+        close: vi.fn(),
+      };
+      clients.push(client);
+      return client as never;
+    });
+    return {
+      store,
+      validateToken,
+      clients,
+      seed: (t: Stamped) => {
+        stored = t;
+      },
+    };
+  }
+
+  it('a callback login leaves the client holding the callback token', async () => {
+    localStorage.setItem('mero:node_url', NODE);
+    mockParseAuthCallback.mockReturnValue({
+      accessToken: 'a.b.c',
+      refreshToken: 'r',
+      nodeUrl: NODE,
+    } as never);
+    const { store, validateToken, clients } = nodeBoundClients();
+
+    render(
+      <MeroProvider mode={AppMode.MultiContext} tokenStore={store}>
+        <Consumer />
+      </MeroProvider>,
+    );
+    await settled();
+
+    expect(clients[clients.length - 1]?.getTokenData()?.access_token).toBe('a.b.c');
+    expect(validateToken).toHaveBeenCalledWith('a.b.c');
+    expect(screen.getByTestId('authed').textContent).toBe('true');
+  });
+
+  it('never sends a bundle another node issued to /auth/validate', async () => {
+    localStorage.setItem('mero:node_url', NODE);
+    mockParseAuthCallback.mockReturnValue(null as never);
+    const { store, validateToken, seed } = nodeBoundClients();
+    seed({
+      access_token: 'node-b-token',
+      refresh_token: 'r',
+      expires_at: Date.now() + 3_600_000,
+      node_origin: 'https://node-b.example.com',
+    });
+
+    render(
+      <MeroProvider mode={AppMode.MultiContext} tokenStore={store}>
+        <Consumer />
+      </MeroProvider>,
+    );
+    await settled();
+
+    expect(validateToken).not.toHaveBeenCalled();
+    expect(screen.getByTestId('authed').textContent).toBe('false');
   });
 });
 
@@ -526,8 +627,9 @@ describe('MeroProvider — session survives an expired access token', () => {
   function mountWith(validateToken: ReturnType<typeof vi.fn>, store: MockStore) {
     const events = { on: vi.fn(), off: vi.fn(), connect: vi.fn().mockResolvedValue(undefined) };
     meroMock.mockImplementation(
-      () =>
+      (config) =>
         ({
+          ...sdkTokens(config),
           admin: { getContexts: vi.fn().mockResolvedValue([]) },
           auth: { validateToken },
           events,
@@ -587,8 +689,9 @@ describe('MeroProvider — an SSE 401 must not destroy the token store', () => {
       connect: vi.fn().mockResolvedValue(undefined),
     };
     meroMock.mockImplementation(
-      () =>
+      (config) =>
         ({
+          ...sdkTokens(config),
           admin: { getContexts: vi.fn().mockResolvedValue([]) },
           auth: { validateToken },
           events,
@@ -793,7 +896,7 @@ describe('MeroProvider — admin and can, per session', () => {
       clearToken: vi.fn(),
       close: vi.fn(),
     };
-    meroMock.mockImplementation(() => instance as never);
+    meroMock.mockImplementation((config) => ({ ...sdkTokens(config), ...instance }) as never);
 
     render(
       <MeroProvider mode={AppMode.MultiContext} tokenStore={store}>
