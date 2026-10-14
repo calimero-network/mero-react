@@ -1,3 +1,9 @@
+## [9.13.2](https://github.com/calimero-network/mero-react/compare/mero-react-v9.13.1...mero-react-v9.13.2) (2026-10-14)
+
+### Bug Fixes
+
+* **provider:** store and read session tokens through the MeroJs client ([fb84696](https://github.com/calimero-network/mero-react/commit/fb84696035eb3bf65d5b626fefbe04aed4c91765))
+
 ## [9.13.1](https://github.com/calimero-network/mero-react/compare/mero-react-v9.13.0...mero-react-v9.13.1) (2026-10-14)
 
 ### Bug Fixes
