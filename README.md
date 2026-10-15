@@ -264,6 +264,50 @@ import {
 
 These are used internally by `MeroProvider` but exported for apps that need direct access.
 
+### Invitations by link
+
+An invitation reaches an app only by its link being opened: `https://links.calimero.network/<package>/join?invitation=…`. The links page opens the app with `?invitation=…` appended, and a desktop app that is already open receives a `deep-link` event. This module covers that path end to end:
+
+```tsx
+import {
+  primeInvitationCapture,
+  useInviteRedemption,
+  InvitationDialog,
+  buildInviteLink,
+} from '@calimero-network/mero-react';
+
+// main.tsx, before the router runs: take the link from the URL or the desktop
+// bridge and buffer it until something asks.
+primeInvitationCapture('my-app', { slug: 'com.example.my-app' });
+
+// The app root, once: ask, join, wait for the data, done.
+function Invitations() {
+  const redemption = useInviteRedemption({
+    parse: (token) => decodeMyToken(token), // { namespaceId, invitation, teamName? }
+    redeemer: { join, isMember },            // mero-js `InviteRedeemer`
+    onJoined: (namespaceId) => navigate(`/w/${namespaceId}`),
+  });
+  return <InvitationDialog redemption={redemption} noun="workspace" appName="My App" />;
+}
+
+// Sharing: one link shape for every app.
+const link = buildInviteLink('com.example.my-app', token);
+```
+
+`InvitationDialog` walks through every stage in one modal: **ask** (Join / Not now) → **joining** (cannot be closed) → **syncing** → **ready** (closes by itself), or **already a member**, or **failed** (the reason in plain words, with Try again when a retry can help).
+
+**Syncing** lasts until the joined namespace's data has arrived. Redemption marks the namespace just-joined, and the page that reads its data clears that mark:
+
+```tsx
+// The page showing the namespace: `settled` once a read has come back,
+// including an empty one.
+const { isSyncing, dismiss } = useJoinSync({ namespaceId, settled: !loading });
+```
+
+An app whose root already knows can pass `synced` to the dialog instead. A sync that never settles says so after `JOIN_SYNC_WATCHDOG_MS` and lets go at `JOIN_SYNC_MAX_MS`. `JoinSyncBanner` is the matching in-page strip.
+
+The dialog is styled with the same `--mero-*` variables as `<ConnectButton>` and `<LoginModal>` (see [Theming](#theming)). Its test ids are `invite-prompt` (with `data-stage`), `invite-accept`, `invite-decline`, `invite-continue`, `invite-done`, `invite-retry` and `invite-error`.
+
 ### Re-exports from mero-js
 
 mero-react re-exports everything from mero-js via `export * from '@calimero-network/mero-js'`. Any new API added to mero-js is automatically available from mero-react — no manual sync needed.

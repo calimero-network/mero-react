@@ -181,3 +181,190 @@
 @keyframes meroSpin {
   to { transform: rotate(360deg); }
 }
+
+/* Invitation dialog (InvitationDialog) */
+.mero-invite-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: var(--mero-overlay);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    Oxygen, Ubuntu, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.mero-invite-dialog {
+  box-sizing: border-box;
+  width: min(420px, 100%);
+  padding: 24px;
+  border: 1px solid var(--mero-border);
+  border-radius: calc(var(--mero-radius) * 1.5);
+  background: var(--mero-bg-secondary);
+  color: var(--mero-text);
+  box-shadow: 0 16px 48px var(--mero-shadow);
+  outline: none;
+  animation: mero-invite-in 0.16s ease-out;
+}
+
+.mero-invite-app {
+  margin: 0 0 12px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mero-text-secondary);
+}
+
+.mero-invite-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.mero-invite-title {
+  margin: 0;
+  min-width: 0;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.mero-invite-body {
+  margin: 12px 0 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--mero-text-secondary);
+}
+
+.mero-invite-body-error {
+  color: var(--mero-error);
+}
+
+.mero-invite-icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--mero-bg-tertiary);
+  color: var(--mero-accent);
+}
+
+.mero-invite-icon-error {
+  color: var(--mero-error);
+}
+
+.mero-invite-spinner {
+  box-sizing: border-box;
+  width: 36px;
+  height: 36px;
+  border: 3px solid var(--mero-bg-tertiary);
+  border-top-color: var(--mero-accent);
+  background: none;
+  animation: mero-invite-spin 0.8s linear infinite;
+}
+
+.mero-invite-progress {
+  position: relative;
+  height: 3px;
+  margin-top: 16px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--mero-bg-tertiary);
+}
+
+.mero-invite-progress-bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 40%;
+  border-radius: 2px;
+  background: var(--mero-accent);
+  animation: mero-invite-progress 1.4s ease-in-out infinite;
+}
+
+.mero-invite-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.mero-invite-actions:empty {
+  display: none;
+}
+
+.mero-invite-button {
+  padding: 9px 16px;
+  border-radius: var(--mero-radius);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.mero-invite-button:focus-visible {
+  outline: 2px solid var(--mero-accent);
+  outline-offset: 2px;
+}
+
+.mero-invite-primary {
+  border: 1px solid var(--mero-accent);
+  background: var(--mero-accent);
+  color: var(--mero-on-primary);
+}
+
+.mero-invite-primary:hover {
+  border-color: var(--mero-accent-hover);
+  background: var(--mero-accent-hover);
+}
+
+.mero-invite-secondary {
+  border: 1px solid var(--mero-border);
+  background: transparent;
+  color: var(--mero-text);
+}
+
+.mero-invite-secondary:hover {
+  background: var(--mero-bg-tertiary);
+}
+
+@keyframes mero-invite-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes mero-invite-progress {
+  from {
+    left: -40%;
+  }
+  to {
+    left: 100%;
+  }
+}
+
+@keyframes mero-invite-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mero-invite-dialog,
+  .mero-invite-spinner,
+  .mero-invite-progress-bar {
+    animation: none;
+  }
+}
