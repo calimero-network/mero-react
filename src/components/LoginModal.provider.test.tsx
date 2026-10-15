@@ -29,6 +29,7 @@ function ctx(): MeroContextValue {
     connectToNode: vi.fn(),
     connectWithAccount: vi.fn(),
     isDelegated: false,
+    delegatedSession: null,
     admin: null,
     can: { createNamespace: true, createContext: true, invite: true, upgrade: true },
     app: {},
