@@ -273,6 +273,7 @@ import {
   primeInvitationCapture,
   useInviteRedemption,
   InvitationDialog,
+  InvitationGate,
   buildInviteLink,
 } from '@calimero-network/mero-react';
 
@@ -287,7 +288,13 @@ function Invitations() {
     redeemer: { join, isMember },            // mero-js `InviteRedeemer`
     onJoined: (namespaceId) => navigate(`/w/${namespaceId}`),
   });
-  return <InvitationDialog redemption={redemption} noun="workspace" appName="My App" />;
+  return (
+    <>
+      {/* Logged out: "You're invited", with the login. Logged in: nothing. */}
+      <InvitationGate parse={decodeMyToken} noun="workspace" appName="My App" />
+      <InvitationDialog redemption={redemption} noun="workspace" appName="My App" />
+    </>
+  );
 }
 
 // Sharing: one link shape for every app.
@@ -295,6 +302,8 @@ const link = buildInviteLink('com.example.my-app', token);
 ```
 
 An app whose join does more than join the namespace (entering a context, choosing where to land) passes `redeem: (parsed) => Promise<RedeemOutcome>` instead of `redeemer`; `parse` may return extra fields, which reach `redeem` and come back as `parsed`. The dialog takes `detail` (the app's own words under the question) and `status` (the step a slow join is on).
+
+`InvitationGate` is what a link shows someone who is not logged in. Without it they land on the app's ordinary logged-out page (usually its marketing landing), with nothing saying they were invited, while the invitation waits in storage for a login they have to think of themselves. The gate shows a full page instead: **You're invited to join “Design team”** (decoded by the app's own `parse`, which needs no session), in which app, with **Log in to join** (`ConnectButton` and its Node / Cloud dialog) and **Not now** (acks the invitation, so it does not come back). While the session is still restoring it shows a blank page with a spinner, so neither the landing page nor the invite screen flashes; once logged in it renders nothing and the dialog takes over. Mounted with no children it covers the page as a full-page layer; wrapped around the app (`<InvitationGate …>{app}</InvitationGate>`) it renders instead of the app. Test ids: `invite-landing` (with `data-state`: `checking`, `invited`, `invalid`), `invite-landing-login`, `invite-landing-decline`.
 
 `InvitationDialog` walks through every stage in one modal: **ask** (Join / Not now) → **joining** (cannot be closed) → **syncing** → **ready** (closes by itself), or **already a member**, or **failed** (the reason in plain words, with Try again when a retry can help).
 
