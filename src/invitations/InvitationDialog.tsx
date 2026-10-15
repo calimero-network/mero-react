@@ -60,6 +60,14 @@ export interface InvitationDialogProps {
    * reads the data clear the flag with `useJoinSync({ settled })`.
    */
   synced?: boolean;
+  /**
+   * Optional: the app's own words under the question, for an invitation whose
+   * grant needs spelling out ("Joining gives you this vault and the rest of
+   * the team it belongs to.").
+   */
+  detail?: string;
+  /** Optional: which step a slow join is on, shown while joining. */
+  status?: string | null;
 }
 
 /** The stage the dialog shows: redemption's, plus the wait for the data. */
@@ -84,6 +92,8 @@ export function InvitationDialog({
   noun = 'team',
   appName,
   synced,
+  detail,
+  status,
 }: InvitationDialogProps) {
   const { state, accept, decline, retry, dismiss } = redemption;
   const joinedId = state.stage === 'joined' ? state.namespaceId : null;
@@ -180,11 +190,15 @@ export function InvitationDialog({
   let body: string | null = null;
   if (stage === 'awaiting-confirmation') {
     title = teamName ? `Join “${teamName}”?` : `Join this ${noun}?`;
-    body = `You have been invited. Joining makes this device a member, and the ${noun}'s data syncs to it from the other members.`;
+    body =
+      detail ??
+      `You have been invited. Joining makes this device a member, and the ${noun}'s data syncs to it from the other members.`;
   } else if (stage === 'joining') {
     icon = 'spinner';
     title = `Joining ${named}…`;
-    body = 'Asking a member to let you in. With few members online this can take up to a minute.';
+    body =
+      status ||
+      'Asking a member to let you in. With few members online this can take up to a minute.';
   } else if (stage === 'syncing') {
     icon = 'spinner';
     title = `Syncing ${named}…`;

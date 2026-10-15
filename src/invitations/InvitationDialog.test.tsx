@@ -69,6 +69,23 @@ describe('InvitationDialog', () => {
     expect(r.decline).toHaveBeenCalledTimes(2);
   });
 
+  it("shows the app's own words while asking, and a slow join's step", () => {
+    const { rerender } = render(
+      <InvitationDialog
+        redemption={redemption({ stage: 'awaiting-confirmation' })}
+        detail="Joining gives you this vault and the rest of the team."
+      />,
+    );
+    expect(screen.getByText('Joining gives you this vault and the rest of the team.')).toBeTruthy();
+    rerender(
+      <InvitationDialog
+        redemption={redemption({ stage: 'joining' })}
+        status="Opening the vault…"
+      />,
+    );
+    expect(screen.getByText('Opening the vault…')).toBeTruthy();
+  });
+
   it('cannot be closed mid-join', () => {
     const r = redemption({ stage: 'joining', teamName: 'Design team' });
     render(<InvitationDialog redemption={r} />);

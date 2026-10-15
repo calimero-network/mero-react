@@ -41,14 +41,26 @@ export type InviteState =
       retryable: boolean;
     };
 
-export interface UseInviteRedemptionOptions {
+export interface UseInviteRedemptionOptions<P extends ParsedInvitation = ParsedInvitation> {
   /**
    * Read a raw token into its parts. Return `null` (or throw) if it is not a
    * usable invitation — the app owns this because the codecs differ slightly.
+   * Extra fields the app returns (a vault name, a context id) come back as
+   * `parsed` and are handed to `redeem`.
    */
-  parse: (token: string, params: Record<string, string>) => ParsedInvitation | null;
-  /** The two calls that differ between apps. */
-  redeemer: InviteRedeemer;
+  parse: (token: string, params: Record<string, string>) => P | null;
+  /**
+   * The two calls that differ between apps, for the standard join: join the
+   * namespace, then check membership (mero-js `redeemInvitation`).
+   */
+  redeemer?: InviteRedeemer;
+  /**
+   * An app's own join flow, for one that does more than join the namespace
+   * (enter a context, pick where to land). Takes precedence over `redeemer`.
+   * Report a failure as a `failed` outcome rather than throwing; a throw is
+   * read as an `unknown`, retryable failure.
+   */
+  redeem?: (parsed: P) => Promise<RedeemOutcome>;
   /**
    * Ask before joining, rather than joining on arrival.
    *
@@ -80,12 +92,12 @@ export interface UseInviteRedemptionOptions {
   enabled?: boolean;
 }
 
-export interface InviteRedemption {
+export interface InviteRedemption<P extends ParsedInvitation = ParsedInvitation> {
   state: InviteState;
   /** The captured token, for prefilling a manual join field. */
   token: string | null;
   /** What the invitation names, available while confirming. */
-  parsed: ParsedInvitation | null;
+  parsed: P | null;
   /** Go ahead with a join that is `awaiting-confirmation`. */
   accept: () => void;
   /** Decline it, and ack it so it does not come back. */
@@ -104,16 +116,17 @@ export interface InviteRedemption {
  * only loses the on-screen state, never the invitation (it is acked on the
  * outcome, not on the render).
  */
-export function useInviteRedemption({
+export function useInviteRedemption<P extends ParsedInvitation = ParsedInvitation>({
   parse,
   redeemer,
+  redeem,
   confirm = true,
   onJoined,
   enabled = true,
-}: UseInviteRedemptionOptions): InviteRedemption {
+}: UseInviteRedemptionOptions<P>): InviteRedemption<P> {
   const [state, setState] = useState<InviteState>({ stage: "idle" });
   const [token, setToken] = useState<string | null>(null);
-  const [parsed, setParsed] = useState<ParsedInvitation | null>(null);
+  const [parsed, setParsed] = useState<P | null>(null);
 
   // Read through refs so a re-created `parse`/`redeemer`/`onJoined` — which is
   // every render, in most apps — does not resubscribe and re-fire the join.
@@ -121,6 +134,8 @@ export function useInviteRedemption({
   parseRef.current = parse;
   const redeemerRef = useRef(redeemer);
   redeemerRef.current = redeemer;
+  const redeemRef = useRef(redeem);
+  redeemRef.current = redeem;
   const onJoinedRef = useRef(onJoined);
   onJoinedRef.current = onJoined;
   const confirmRef = useRef(confirm);
@@ -130,7 +145,7 @@ export function useInviteRedemption({
   const attempted = useRef<Set<string>>(new Set());
   /** The pending ack for the captured invitation, held for confirm/retry. */
   const pending = useRef<CapturedInvitation | null>(null);
-  const parsedRef = useRef<ParsedInvitation | null>(null);
+  const parsedRef = useRef<P | null>(null);
   const alive = useRef(true);
   useEffect(() => {
     alive.current = true;
@@ -141,12 +156,13 @@ export function useInviteRedemption({
 
   /** Do the join and report the outcome. */
   const perform = useCallback(
-    async (captured: CapturedInvitation, invitation: ParsedInvitation) => {
+    async (captured: CapturedInvitation, invitation: P) => {
       if (alive.current)
         setState({ stage: "joining", teamName: invitation.teamName });
 
-      const outcome: RedeemOutcome = await redeemInvitation(
+      const outcome = await runRedeem(
         invitation,
+        redeemRef.current,
         redeemerRef.current,
       );
 
@@ -181,7 +197,7 @@ export function useInviteRedemption({
   /** Parse, then either ask or go. */
   const begin = useCallback(
     (captured: CapturedInvitation) => {
-      let invitation: ParsedInvitation | null = null;
+      let invitation: P | null = null;
       try {
         invitation = parseRef.current(captured.token, captured.params);
       } catch {
@@ -258,4 +274,31 @@ export function useInviteRedemption({
   const dismiss = useCallback(() => setState({ stage: "idle" }), []);
 
   return { state, token, parsed, accept, decline, retry, dismiss };
+}
+
+/** The app's own flow, or the standard join; a throw is an unknown failure. */
+async function runRedeem<P extends ParsedInvitation>(
+  invitation: P,
+  redeem: ((parsed: P) => Promise<RedeemOutcome>) | undefined,
+  redeemer: InviteRedeemer | undefined,
+): Promise<RedeemOutcome> {
+  try {
+    if (redeem) return await redeem(invitation);
+    if (redeemer) return await redeemInvitation(invitation, redeemer);
+    return {
+      status: "failed",
+      namespaceId: invitation.namespaceId,
+      message: "This app cannot redeem invitations: no redeemer is configured.",
+      reason: "unknown",
+      retryable: false,
+    };
+  } catch (err) {
+    return {
+      status: "failed",
+      namespaceId: invitation.namespaceId,
+      message: err instanceof Error ? err.message : String(err),
+      reason: "unknown",
+      retryable: true,
+    };
+  }
 }

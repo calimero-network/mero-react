@@ -294,6 +294,8 @@ function Invitations() {
 const link = buildInviteLink('com.example.my-app', token);
 ```
 
+An app whose join does more than join the namespace (entering a context, choosing where to land) passes `redeem: (parsed) => Promise<RedeemOutcome>` instead of `redeemer`; `parse` may return extra fields, which reach `redeem` and come back as `parsed`. The dialog takes `detail` (the app's own words under the question) and `status` (the step a slow join is on).
+
 `InvitationDialog` walks through every stage in one modal: **ask** (Join / Not now) → **joining** (cannot be closed) → **syncing** → **ready** (closes by itself), or **already a member**, or **failed** (the reason in plain words, with Try again when a retry can help).
 
 **Syncing** lasts until the joined namespace's data has arrived. Redemption marks the namespace just-joined, and the page that reads its data clears that mark:

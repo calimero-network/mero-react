@@ -54,6 +54,67 @@ describe("useInviteRedemption", () => {
     expect(onJoined).toHaveBeenCalledExactlyOnceWith(NS, "Design");
   });
 
+  it("runs the app's own redeem flow when given one, with the app's parsed fields", async () => {
+    openWith("TOK");
+    const r = redeemer();
+    const redeem = vi.fn(async (p: { namespaceId: string; vault: string }) => ({
+      status: "joined" as const,
+      namespaceId: p.namespaceId,
+      teamName: p.vault,
+    }));
+    const { result } = renderHook(() =>
+      useInviteRedemption({
+        confirm: false,
+        parse: (token: string) => ({ ...parse(token)!, vault: "Shared" }),
+        redeemer: r,
+        redeem,
+      }),
+    );
+
+    await waitFor(() => expect(result.current.state.stage).toBe("joined"));
+    expect(redeem).toHaveBeenCalledOnce();
+    expect(redeem.mock.calls[0][0].vault).toBe("Shared");
+    expect(r.join).not.toHaveBeenCalled();
+    expect(result.current.parsed?.vault).toBe("Shared");
+  });
+
+  it("reports the app's own failure, and reads a throw as a retryable unknown", async () => {
+    openWith("TOK");
+    const { result } = renderHook(() =>
+      useInviteRedemption({
+        confirm: false,
+        parse,
+        redeem: async () => ({
+          status: "failed",
+          namespaceId: NS,
+          message: "gone",
+          reason: "expired",
+          retryable: false,
+        }),
+      }),
+    );
+    await waitFor(() => expect(result.current.state.stage).toBe("failed"));
+    expect(result.current.state).toMatchObject({ reason: "expired", retryable: false });
+
+    cleanup();
+    openWith("TOK2");
+    const thrown = renderHook(() =>
+      useInviteRedemption({
+        confirm: false,
+        parse,
+        redeem: async () => {
+          throw new Error("socket closed");
+        },
+      }),
+    );
+    await waitFor(() => expect(thrown.result.current.state.stage).toBe("failed"));
+    expect(thrown.result.current.state).toMatchObject({
+      reason: "unknown",
+      retryable: true,
+      message: "socket closed",
+    });
+  });
+
   // The handoff to the post-join sync gate, so the app the user lands on knows
   // to wait for state rather than render an empty workspace.
   it("marks the namespace as just-joined for the sync gate", async () => {
