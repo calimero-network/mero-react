@@ -1,5 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { clearNamespaceJustJoined, isNamespaceJustJoined } from "./justJoined";
+import { useEffect, useReducer, useRef } from "react";
+import {
+  clearNamespaceJustJoined,
+  isNamespaceJustJoined,
+  subscribeJustJoined,
+} from "./justJoined";
 
 /**
  * Base window for the gate. A governance op plus the namespace's own state
@@ -60,32 +64,46 @@ export function useJoinSync({
   settled,
   active,
 }: JoinSyncOptions): JoinSyncState {
-  // Bumped to re-read the session store after we mutate it.
-  const [tick, setTick] = useState(0);
+  // The flag, read on every render, with a render on every mark or clear in the
+  // page: a join can mark the namespace this page already shows (an invitation
+  // to a workspace this node joined before), and a read keyed only on
+  // `namespaceId` would never see that mark. Every change, not just a flip of
+  // this namespace's flag: a clear and a re-mark in one batch leave the flag
+  // where it was, and the clear below still has to run again.
+  const [, storeChanged] = useReducer((n: number) => n + 1, 0);
+  useEffect(() => {
+    const unsubscribe = subscribeJustJoined(storeChanged);
+    // A change between the first render and this subscription.
+    storeChanged();
+    return unsubscribe;
+  }, []);
+  const flagged = isNamespaceJustJoined(namespaceId);
+  // When this namespace was first seen flagged, for the watchdog. Dropped once
+  // the flag clears, so a later join of the same namespace gets a full window.
   const firstSeen = useRef<Map<string, number>>(new Map());
+  if (namespaceId && flagged && !firstSeen.current.has(namespaceId)) {
+    firstSeen.current.set(namespaceId, Date.now());
+  } else if (namespaceId && !flagged) {
+    firstSeen.current.delete(namespaceId);
+  }
   // Read from a ref inside the watchdog so a change in activity does not
   // restart the timer — which would let a chatty sync postpone the deadline
   // indefinitely.
   const activeRef = useRef(active);
   activeRef.current = active;
 
-  const flagged = useMemo(() => {
-    if (!namespaceId) return false;
-    if (!isNamespaceJustJoined(namespaceId)) return false;
-    if (!firstSeen.current.has(namespaceId)) {
-      firstSeen.current.set(namespaceId, Date.now());
-    }
-    return true;
-    // `tick` is the re-evaluate lever; `namespaceId` the real input.
-  }, [namespaceId, tick]);
-
   // Settled is the happy path: the data arrived, so stop gating and forget the
   // namespace. Runs before the watchdog ever fires in the normal case.
+  //
+  // After every render, reading the store itself: a mark that lands in the
+  // same batch as this clear (an app's own mark, then the redemption's) leaves
+  // `flagged` true throughout, so an effect keyed on it would not run again and
+  // the flag would stay set. The clear notifies, which renders again, so this
+  // stops once the flag is gone.
   useEffect(() => {
-    if (!namespaceId || !flagged || !settled) return;
+    if (!namespaceId || !settled || !isNamespaceJustJoined(namespaceId)) return;
     clearNamespaceJustJoined(namespaceId);
-    setTick((t) => t + 1);
-  }, [namespaceId, flagged, settled]);
+  });
 
   useEffect(() => {
     if (!namespaceId || !flagged || settled) return;
@@ -98,7 +116,6 @@ export function useJoinSync({
         (elapsed >= JOIN_SYNC_WATCHDOG_MS && !activeRef.current);
       if (giveUp) {
         clearNamespaceJustJoined(namespaceId);
-        setTick((t) => t + 1);
         return;
       }
       timer = setTimeout(check, JOIN_SYNC_POLL_MS);
@@ -112,7 +129,6 @@ export function useJoinSync({
     dismiss: () => {
       if (!namespaceId) return;
       clearNamespaceJustJoined(namespaceId);
-      setTick((t) => t + 1);
     },
   };
 }

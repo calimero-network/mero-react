@@ -6,6 +6,7 @@ import { useJoinSync, JOIN_SYNC_WATCHDOG_MS, JOIN_SYNC_MAX_MS } from "./useJoinS
 import {
   markNamespaceJustJoined,
   isNamespaceJustJoined,
+  subscribeJustJoined,
   __readJustJoinedSet,
 } from "./justJoined";
 import { JoinSyncBanner } from "./JoinSyncBanner";
@@ -73,6 +74,66 @@ describe("the gate lifts", () => {
     expect(state()).toBe("idle");
     // Forgotten, so navigating back does not re-gate a settled workspace.
     expect(isNamespaceJustJoined(NS)).toBe(false);
+  });
+
+  // The page already shows the namespace (its data on hand) when a join marks
+  // it: an invitation to a workspace this node joined before. The hook read
+  // the flag only when its namespace changed, so it never saw this mark, never
+  // cleared it, and the invitation dialog sat on "Syncing…" until its ceiling.
+  it("hears a mark on the namespace it already shows", () => {
+    render(<Probe namespaceId={NS} settled={true} />);
+    expect(state()).toBe("idle");
+
+    act(() => {
+      markNamespaceJustJoined(NS);
+    });
+
+    expect(isNamespaceJustJoined(NS)).toBe(false);
+    expect(state()).toBe("idle");
+  });
+
+  // Something marks the namespace again in the same batch as the hook's clear
+  // (an app's own mark, then the redemption's). The hook's clear effect was
+  // keyed on values that had not changed, so it never ran again and the flag
+  // stayed set.
+  it("clears a mark that lands in the same batch as its clear", () => {
+    let remarks = 1;
+    const unsubscribe = subscribeJustJoined(() => {
+      if (isNamespaceJustJoined(NS) || remarks === 0) return;
+      remarks -= 1;
+      markNamespaceJustJoined(NS);
+    });
+    markNamespaceJustJoined(NS);
+    render(<Probe namespaceId={NS} settled={true} />);
+    unsubscribe();
+
+    expect(remarks).toBe(0);
+    expect(isNamespaceJustJoined(NS)).toBe(false);
+    expect(state()).toBe("idle");
+  });
+
+  // A second join of the same namespace in one session gets a full window, not
+  // what was left of the first one.
+  it("starts the window over for a namespace joined again", () => {
+    markNamespaceJustJoined(NS);
+    const { rerender } = render(<Probe namespaceId={NS} settled={false} />);
+    act(() => {
+      rerender(<Probe namespaceId={NS} settled={true} />);
+    });
+    expect(isNamespaceJustJoined(NS)).toBe(false);
+
+    act(() => {
+      vi.advanceTimersByTime(JOIN_SYNC_MAX_MS);
+      rerender(<Probe namespaceId={NS} settled={false} />);
+    });
+    act(() => {
+      markNamespaceJustJoined(NS);
+    });
+    expect(state()).toBe("syncing");
+    act(() => {
+      vi.advanceTimersByTime(JOIN_SYNC_WATCHDOG_MS - 1_000);
+    });
+    expect(state()).toBe("syncing");
   });
 
   // An empty read is a settled answer. Waiting for a non-empty one would gate
