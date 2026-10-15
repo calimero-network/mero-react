@@ -1,3 +1,15 @@
+## [9.14.0](https://github.com/calimero-network/mero-react/compare/mero-react-v9.13.2...mero-react-v9.14.0) (2026-10-15)
+
+### Features
+
+* **invitations:** an app's own redeem flow, and its words in the dialog ([63e06e8](https://github.com/calimero-network/mero-react/commit/63e06e8a9eee9d88d9df4ea7981dadabc589ce8a))
+* **invitations:** one invitation dialog, and the link capture apps share ([cd44ffd](https://github.com/calimero-network/mero-react/commit/cd44ffd6b879d846e1119ea6680bd66979429bb6))
+
+### Bug Fixes
+
+* **invitations:** the dialog sits above the app's own overlays ([bdcf221](https://github.com/calimero-network/mero-react/commit/bdcf22180db1c91ec3a7529ad17d7ce10060264d))
+* **invitations:** Try again joins; it does not ask a second time ([d638d25](https://github.com/calimero-network/mero-react/commit/d638d25c11450f4101cd33927ace38b01d5adce2))
+
 ## [9.13.2](https://github.com/calimero-network/mero-react/compare/mero-react-v9.13.1...mero-react-v9.13.2) (2026-10-14)
 
 ### Bug Fixes
