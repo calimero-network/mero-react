@@ -150,10 +150,92 @@ describe('InvitationDialog', () => {
     expect(isNamespaceJustJoined(NS)).toBe(false);
   });
 
-  it('can be sent to the background while syncing, leaving the flag for the page', () => {
+  it('is not closed by a stray click on the backdrop or Escape while syncing', () => {
     markNamespaceJustJoined(NS);
     const r = redemption({ stage: 'joined', namespaceId: NS });
     render(<InvitationDialog redemption={r} />);
+    expect(stage()).toBe('syncing');
+    fireEvent.keyDown(screen.getByTestId('invite-prompt'), { key: 'Escape' });
+    fireEvent.mouseDown(screen.getByTestId('invite-prompt').parentElement!);
+    expect(r.dismiss).not.toHaveBeenCalled();
+    expect(r.decline).not.toHaveBeenCalled();
+    expect(stage()).toBe('syncing');
+  });
+
+  it('keeps focus in the dialog when the backdrop is pressed', () => {
+    const r = redemption({ stage: 'joining' });
+    render(<InvitationDialog redemption={r} />);
+    const overlay = screen.getByTestId('invite-prompt').parentElement!;
+    // A mousedown the dialog lets through moves focus to <body>, and from
+    // there Tab walks the page behind the dialog.
+    expect(fireEvent.mouseDown(overlay)).toBe(false);
+  });
+
+  it('makes the page behind it inert while it is up, and gives it back after', async () => {
+    const page = document.createElement('div');
+    page.appendChild(document.createElement('button'));
+    document.body.appendChild(page);
+    const alreadyInert = document.createElement('div');
+    alreadyInert.setAttribute('inert', '');
+    document.body.appendChild(alreadyInert);
+    const late = document.createElement('div');
+    try {
+      markNamespaceJustJoined(NS);
+      const { rerender } = render(
+        <InvitationDialog redemption={redemption({ stage: 'joined', namespaceId: NS })} />,
+      );
+      const overlay = screen.getByTestId('invite-prompt').parentElement!;
+      expect(overlay.hasAttribute('inert')).toBe(false);
+      expect(page.hasAttribute('inert')).toBe(true);
+      // Whatever the app mounts next to it while the dialog is up.
+      document.body.appendChild(late);
+      await Promise.resolve();
+      expect(late.hasAttribute('inert')).toBe(true);
+
+      rerender(<InvitationDialog redemption={redemption({ stage: 'idle' })} />);
+      expect(page.hasAttribute('inert')).toBe(false);
+      expect(late.hasAttribute('inert')).toBe(false);
+      // Not the dialog's to give back.
+      expect(alreadyInert.hasAttribute('inert')).toBe(true);
+    } finally {
+      page.remove();
+      alreadyInert.remove();
+      late.remove();
+    }
+  });
+
+  it('offers to continue in the background only once the sync is slow', () => {
+    vi.useFakeTimers();
+    markNamespaceJustJoined(NS);
+    const r = redemption({ stage: 'joined', namespaceId: NS });
+    render(<InvitationDialog redemption={r} />);
+    expect(screen.queryByTestId('invite-continue')).toBeNull();
+    act(() => vi.advanceTimersByTime(JOIN_SYNC_WATCHDOG_MS));
+    expect(screen.getByTestId('invite-continue')).toBeTruthy();
+  });
+
+  it('still lets go of the flag at the ceiling after being sent to the background', () => {
+    vi.useFakeTimers();
+    markNamespaceJustJoined(NS);
+    const r = redemption({ stage: 'joined', namespaceId: NS });
+    const { rerender } = render(<InvitationDialog redemption={r} />);
+    act(() => vi.advanceTimersByTime(JOIN_SYNC_WATCHDOG_MS));
+    fireEvent.click(screen.getByTestId('invite-continue'));
+    // The app's redemption goes idle on dismiss; the page that would clear
+    // the flag may never mount (or the person navigates away from it).
+    rerender(<InvitationDialog redemption={redemption({ stage: 'idle' })} />);
+    expect(screen.queryByTestId('invite-prompt')).toBeNull();
+    expect(isNamespaceJustJoined(NS)).toBe(true);
+    act(() => vi.advanceTimersByTime(JOIN_SYNC_MAX_MS - JOIN_SYNC_WATCHDOG_MS));
+    expect(isNamespaceJustJoined(NS)).toBe(false);
+  });
+
+  it('can be sent to the background while syncing, leaving the flag for the page', () => {
+    vi.useFakeTimers();
+    markNamespaceJustJoined(NS);
+    const r = redemption({ stage: 'joined', namespaceId: NS });
+    render(<InvitationDialog redemption={r} />);
+    act(() => vi.advanceTimersByTime(JOIN_SYNC_WATCHDOG_MS));
     fireEvent.click(screen.getByTestId('invite-continue'));
     expect(r.dismiss).toHaveBeenCalledTimes(1);
     expect(isNamespaceJustJoined(NS)).toBe(true);

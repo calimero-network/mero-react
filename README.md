@@ -296,7 +296,7 @@ const link = buildInviteLink('com.example.my-app', token);
 
 An app whose join does more than join the namespace (entering a context, choosing where to land) passes `redeem: (parsed) => Promise<RedeemOutcome>` instead of `redeemer`; `parse` may return extra fields, which reach `redeem` and come back as `parsed`. The dialog takes `detail` (the app's own words under the question) and `status` (the step a slow join is on).
 
-`InvitationDialog` walks through every stage in one modal: **ask** (Join / Not now) → **joining** (cannot be closed) → **syncing** → **ready** (closes by itself), or **already a member**, or **failed** (the reason in plain words, with Try again when a retry can help).
+`InvitationDialog` walks through every stage in one modal: **ask** (Join / Not now) → **joining** → **syncing** → **ready** (closes by itself), or **already a member**, or **failed** (the reason in plain words, with Try again when a retry can help).
 
 **Syncing** lasts until the joined namespace's data has arrived. Redemption marks the namespace just-joined, and the page that reads its data clears that mark:
 
@@ -306,7 +306,9 @@ An app whose join does more than join the namespace (entering a context, choosin
 const { isSyncing, dismiss } = useJoinSync({ namespaceId, settled: !loading });
 ```
 
-An app whose root already knows can pass `synced` to the dialog instead. A sync that never settles says so after `JOIN_SYNC_WATCHDOG_MS` and lets go at `JOIN_SYNC_MAX_MS`. `JoinSyncBanner` is the matching in-page strip.
+An app whose root already knows can pass `synced` to the dialog instead. A sync that never settles says so after `JOIN_SYNC_WATCHDOG_MS`, offering **Continue in background**, and lets go at `JOIN_SYNC_MAX_MS`. `JoinSyncBanner` is the matching in-page strip: a page that can be reached while its namespace is still syncing shows it rather than its empty state.
+
+Joining and syncing cannot be closed by a click on the backdrop or by Escape, and while the dialog is up the rest of the page is `inert`. After **Continue in background** the dialog keeps the flag's `JOIN_SYNC_MAX_MS` ceiling running, so a person who navigates away from the page that would clear it is not left with a namespace flagged for the rest of the session.
 
 The dialog is styled with the same `--mero-*` variables as `<ConnectButton>` and `<LoginModal>` (see [Theming](#theming)). Its test ids are `invite-prompt` (with `data-stage`), `invite-accept`, `invite-decline`, `invite-continue`, `invite-done`, `invite-retry` and `invite-error`.
 
