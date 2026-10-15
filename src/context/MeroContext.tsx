@@ -41,7 +41,9 @@ import type { MeroContextValue, MeroProviderConfig } from '../types';
 
 import {
   buildDelegatedClient,
+  deviceIsActive,
   forgetAccount,
+  readDelegatedCredential,
   readDelegatedSession,
   listDelegatedContexts,
   readPinnedRelayNodeKey,
@@ -58,6 +60,7 @@ const MeroContext = createContext<MeroContextValue | null>(null);
 const DEFAULT_REGISTRY_URL = 'https://apps.calimero.network';
 /** Where earlier releases kept the device secret as hex; deleted on sight. */
 const LEGACY_DEVICE_KEY = 'calimero.device';
+const RESTORE_TIMEOUT_MS = 3000; // longest a stored delegated session may hold back startup
 
 const isBrowser = typeof window !== 'undefined';
 
@@ -273,14 +276,17 @@ export function MeroProvider({
    * record is persisted first so a reload finds it.
    */
   const connectWithAccount = useCallback((session: DelegatedSession) => {
-    delegatedEpoch.current += 1;
-    void saveDelegatedSession(session);
-    setDelegated(session);
+    const epoch = ++delegatedEpoch.current;
+    // Dropped when a logout ran meanwhile or the device is no longer this browser's.
+    void deviceIsActive(session.signer.publicKey).then((active) => {
+      if (!active || delegatedEpoch.current !== epoch) return;
+      void saveDelegatedSession(session);
+      setDelegated(session);
+    });
   }, []);
 
   const logout = useCallback(async () => {
     delegatedEpoch.current += 1;
-    const account = delegated?.account;
     if (meroRef.current) {
       meroRef.current.clearToken();
       meroRef.current.close();
@@ -304,7 +310,8 @@ export function MeroProvider({
     } catch {
       /* no storage, nothing left behind */
     }
-    await forgetAccount(account ?? '');
+    const account = delegated?.account ?? (await readDelegatedCredential())?.account ?? '';
+    await forgetAccount(account);
   }, [tokenStore, delegated]);
 
   // Restore a delegated session after a reload.
@@ -315,7 +322,9 @@ export function MeroProvider({
       /* no storage, nothing left behind */
     }
     const epoch = delegatedEpoch.current;
-    readDelegatedSession()
+    // A device store that never answers must not hold node-login apps on loading.
+    const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), RESTORE_TIMEOUT_MS));
+    Promise.race([readDelegatedSession(), timeout])
       .then((session) => {
         if (session && delegatedEpoch.current === epoch) setDelegated(session);
       })
@@ -774,6 +783,7 @@ export function MeroProvider({
       connectToNode,
       connectWithAccount,
       isDelegated: delegated !== null,
+      delegatedSession: delegated,
       admin,
       can: delegated !== null
         // An account founds a namespace through its relay and gives it this

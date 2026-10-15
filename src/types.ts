@@ -147,6 +147,8 @@ export interface MeroContextValue {
    * and events only for contexts it is a member of.
    */
   isDelegated: boolean;
+  /** This tab's delegated session: the account and its device signer, or null on a node login. */
+  delegatedSession: DelegatedSession | null;
   /**
    * What this connection may do, so an app asks WHAT IS ALLOWED instead of
    * which transport it runs on. A node login can do everything; an account on

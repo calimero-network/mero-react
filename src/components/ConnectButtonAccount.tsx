@@ -188,7 +188,7 @@ export function ConnectButtonAccount({
               className="mero-dropdown-item"
               onClick={() => {
                 setIsDropdownOpen(false);
-                logout();
+                logout().catch((e) => console.error('[mero-react] logout could not delete the device key', e));
               }}
             >
               Log out

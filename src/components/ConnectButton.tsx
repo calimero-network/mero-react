@@ -13,7 +13,6 @@ import { useMero } from '../context';
 import { LoginModal } from './LoginModal';
 import { isDesktopWindow } from '../utils/desktop';
 import { useAccountEnrolment } from '../delegated/useAccountEnrolment';
-import { readDelegatedSession } from '@calimero-network/mero-js';
 import { CalimeroLogo } from './CalimeroLogo';
 import type { ConnectionType, CustomConnectionConfig } from '../types';
 import { ConnectionType as ConnectionTypeEnum } from '../types';
@@ -85,7 +84,7 @@ export function ConnectButton({
   accountDefaults,
 }: ConnectButtonProps) {
   const cloud = cloudProp ?? !isDesktopWindow();
-  const { isAuthenticated, connectToNode, logout, nodeUrl, isOnline, isDelegated } = useMero();
+  const { isAuthenticated, connectToNode, logout, nodeUrl, isOnline, isDelegated, delegatedSession } = useMero();
   const enrolment = useAccountEnrolment({
     walletUrl: accountDefaults?.walletUrl,
     enabled: cloud,
@@ -97,17 +96,8 @@ export function ConnectButton({
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // The account an account session belongs to, for the dropdown. Read from the
-  // stored session (the context exposes `isDelegated`, not the account).
-  const [account, setAccount] = useState<string | null>(null);
-  useEffect(() => {
-    if (!isAuthenticated || !isDelegated) return setAccount(null);
-    let live = true;
-    void readDelegatedSession().then((s) => live && setAccount(s?.account ?? null));
-    return () => {
-      live = false;
-    };
-  }, [isAuthenticated, isDelegated]);
+  // The account an account session belongs to, for the dropdown.
+  const account = isAuthenticated ? delegatedSession?.account ?? null : null;
 
   // Resolve once. Inline CSS variables are only emitted when a theme prop is
   // provided — otherwise we leave the cascade alone so global `:root { --mero-* }`
@@ -243,7 +233,7 @@ export function ConnectButton({
               className="mero-dropdown-item"
               onClick={() => {
                 setIsDropdownOpen(false);
-                logout();
+                logout().catch((e) => console.error('[mero-react] logout could not delete the device key', e));
               }}
             >
               Log out

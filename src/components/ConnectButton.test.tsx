@@ -39,10 +39,11 @@ function ctx(over: Partial<MeroContextValue> = {}): MeroContextValue {
     connectToNode: vi.fn(),
     connectWithAccount: vi.fn(),
     isDelegated: false,
+    delegatedSession: null,
     admin: null,
     can: { createNamespace: true, createContext: true, invite: true, upgrade: true },
     app: {},
-    logout: vi.fn(),
+    logout: vi.fn(async () => {}),
     ...over,
   };
 }
@@ -160,8 +161,8 @@ describe('ConnectButton — connected', () => {
 
   it('an account session shows the short account, no Dashboard, and Log out', async () => {
     const device = await enrolledDevice();
-    await saveDelegatedSession({ ...device, relayUrl: null });
-    const value = renderButton({}, ctx({ isAuthenticated: true, isDelegated: true, nodeUrl: null }));
+    const delegatedSession = { ...device, relayUrl: null };
+    const value = renderButton({}, ctx({ isAuthenticated: true, isDelegated: true, nodeUrl: null, delegatedSession }));
     fireEvent.click(screen.getByRole('button', { name: 'Connected' }));
     expect((await screen.findByTestId('connected-account')).textContent).toBe(
       `Account ${device.account.slice(0, 6)}…${device.account.slice(-6)}`,
@@ -170,5 +171,22 @@ describe('ConnectButton — connected', () => {
     expect(screen.queryByText('Dashboard')).toBeNull();
     fireEvent.click(screen.getByText('Log out'));
     expect(value.logout).toHaveBeenCalledTimes(1);
+  });
+
+  it("names this tab's account even after another tab enrols a different one", async () => {
+    const a = await enrolledDevice('11'.repeat(32));
+    await saveDelegatedSession({ ...(await enrolledDevice('22'.repeat(32))), relayUrl: null });
+    renderButton({}, ctx({ isAuthenticated: true, isDelegated: true, delegatedSession: { ...a, relayUrl: null } }));
+    fireEvent.click(screen.getByRole('button', { name: 'Connected' }));
+    expect((await screen.findByTestId('connected-account')).textContent).toContain(a.account.slice(0, 6));
+  });
+
+  it('reports a logout that could not delete the device key', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const failure = new Error('idb broke');
+    renderButton({}, ctx({ isAuthenticated: true, nodeUrl: 'http://localhost:2428', logout: vi.fn(async () => { throw failure; }) }));
+    fireEvent.click(screen.getByRole('button', { name: 'Connected' }));
+    fireEvent.click(screen.getByText('Log out'));
+    await vi.waitFor(() => expect(error).toHaveBeenCalledWith(expect.stringContaining('logout'), failure));
   });
 });

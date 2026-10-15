@@ -3,7 +3,7 @@ import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { renderHook } from '@testing-library/react';
+import { renderHook, waitFor } from '@testing-library/react';
 
 const { mockBootstrap } = vi.hoisted(() => ({
   mockBootstrap: vi.fn(async () => ({ ok: false, step: 'admitters-lookup', reason: 'stub' })),
@@ -33,6 +33,7 @@ describe('useDelegatedBootstrap cloud', () => {
   it('asks the cloud the provider names', async () => {
     await enrolledDevice();
     const { result } = renderHook(() => useDelegatedBootstrap(), { wrapper: wrapper('http://127.0.0.1:4499') });
+    await waitFor(() => expect(result.current.credential).not.toBeNull());
     await result.current.bootstrap({ namespaceId: 'ns', invitation: {} as never });
     expect(mockBootstrap).toHaveBeenCalledWith(expect.objectContaining({ cloudBaseUrl: 'http://127.0.0.1:4499' }));
   });

@@ -18,7 +18,7 @@ import { MeroProvider, useMero } from './MeroContext';
 import { AppMode } from '../types';
 import { useAccountEnrolment } from '../delegated/useAccountEnrolment';
 import { deviceRecords, enrolledDevice, walletAnswer } from '../test-utils/enrolledDevice';
-import { saveDelegatedSession } from '@calimero-network/mero-js';
+import { beginDeviceEnrolment, saveDelegatedSession } from '@calimero-network/mero-js';
 
 const { readDelegatedSession: realReadSession } =
   await vi.importActual<typeof import('@calimero-network/mero-js')>('@calimero-network/mero-js');
@@ -131,7 +131,42 @@ describe('account device key', () => {
     await waitFor(() => expect(screen.getByTestId('loading').textContent).toBe('false'));
 
     expect(screen.getByTestId('delegated').textContent).toBe('false');
-    expect(await deviceRecords()).toEqual([]);
+    await waitFor(async () => expect(await deviceRecords()).toEqual([]));
+  });
+
+  it('stays signed out when an enrolment finishes connecting after logout', async () => {
+    let relays!: (rows: unknown[]) => void;
+    getAccountRelays.mockReturnValueOnce(new Promise((resolve) => (relays = resolve)));
+    const asked = await beginDeviceEnrolment();
+    window.location.hash = '#' + new URLSearchParams({ ...(await walletAnswer(asked)) }).toString();
+
+    render(<MeroProvider mode={AppMode.MultiContext}><Probe /></MeroProvider>);
+    await waitFor(() => expect(getAccountRelays).toHaveBeenCalled());
+    await act(async () => screen.getByText('logout').click());
+    await waitFor(async () => expect(await deviceRecords()).toEqual([]));
+    await act(async () => relays([]));
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(screen.getByTestId('delegated').textContent).toBe('false');
+  });
+
+  it('forgets the stored account on a logout that lands before the restore', async () => {
+    const device = await enrolledDevice();
+    await saveDelegatedSession({ ...device, relayUrl: null });
+    localStorage.setItem(`calimero.delegated.relays.${device.account}`, '{}');
+    readSession.mockImplementationOnce(() => new Promise(() => {}));
+
+    render(<MeroProvider mode={AppMode.MultiContext}><Probe /></MeroProvider>);
+    await act(async () => screen.getByText('logout').click());
+
+    await waitFor(() => expect(localStorage.getItem(`calimero.delegated.relays.${device.account}`)).toBeNull());
+  });
+
+  it('stops waiting for a device store that never answers', async () => {
+    readSession.mockImplementationOnce(() => new Promise(() => {}));
+
+    render(<MeroProvider mode={AppMode.MultiContext}><Probe /></MeroProvider>);
+    await waitFor(() => expect(screen.getByTestId('loading').textContent).toBe('false'), { timeout: 5000 });
   });
 
   it('drops the legacy hex device record on load, signed in or not', async () => {

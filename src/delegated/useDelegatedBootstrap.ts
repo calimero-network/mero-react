@@ -22,7 +22,6 @@ import {
 import {
   carryExecutorAccount,
   readDelegatedCredential,
-  readDelegatedSession,
   rememberRelay,
   type DelegatedCredential,
 } from '@calimero-network/mero-js';
@@ -74,26 +73,22 @@ export interface UseDelegatedBootstrapResult {
 export function useDelegatedBootstrap(
   options: UseDelegatedBootstrapOptions = {},
 ): UseDelegatedBootstrapResult {
-  const { connectWithAccount, cloudBaseUrl: providerCloud, isAuthenticated, isDelegated, nodeUrl } = useMero();
+  const { connectWithAccount, cloudBaseUrl: providerCloud, delegatedSession } = useMero();
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<BootstrapResult | null>(null);
 
-  // Re-read whenever the connection changes: the record is written by the
-  // enrolment return in the same tab, and the device key is only reachable
-  // asynchronously.
-  const [credential, setCredential] = useState<DelegatedCredential | null>(null);
-  const [relayUrl, setRelayUrl] = useState<string | null>(null);
+  // A credential enrolled with no session yet (its relay lookup failed) is read
+  // from the device store; a connected tab's own session always wins.
+  const [stored, setStored] = useState<DelegatedCredential | null>(null);
   useEffect(() => {
     let live = true;
-    void Promise.all([readDelegatedCredential(), readDelegatedSession()]).then(([held, session]) => {
-      if (!live) return;
-      setCredential(held);
-      setRelayUrl(session?.relayUrl ?? null);
-    });
+    if (!delegatedSession) void readDelegatedCredential().then((held) => live && setStored(held));
     return () => {
       live = false;
     };
-  }, [isAuthenticated, isDelegated, nodeUrl]);
+  }, [delegatedSession]);
+  const credential = delegatedSession ?? stored;
+  const relayUrl = delegatedSession?.relayUrl ?? null;
 
   const cloudBaseUrl = options.cloudBaseUrl ?? providerCloud;
   const bootstrap = useCallback(
@@ -103,7 +98,7 @@ export function useDelegatedBootstrap(
       nodeUrl?: string;
       contextId?: string;
     }): Promise<BootstrapResult> => {
-      const held = await readDelegatedCredential();
+      const held = credential;
       if (!held) {
         const failure: BootstrapResult = {
           ok: false,
@@ -137,14 +132,14 @@ export function useDelegatedBootstrap(
               contextId: input.contextId,
             });
           }
-          connectWithAccount(carryExecutorAccount(await readDelegatedSession(), outcome.session));
+          connectWithAccount(carryExecutorAccount(delegatedSession, outcome.session));
         }
         return outcome;
       } finally {
         setRunning(false);
       }
     },
-    [cloudBaseUrl, connectWithAccount],
+    [cloudBaseUrl, connectWithAccount, credential, delegatedSession],
   );
 
   return {
