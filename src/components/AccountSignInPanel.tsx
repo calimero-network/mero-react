@@ -80,25 +80,35 @@ export function AccountSignInPanel({
   }, [theme]);
 
   return (
-    <div style={styles.root} data-testid="account-sign-in-panel">
+    <div
+      className="mero-login-account"
+      style={styles.root}
+      data-testid="account-sign-in-panel"
+    >
       {note && (
-        <p style={styles.note} role="status" data-testid="account-note">
+        <p
+          className="mero-login-note"
+          style={styles.note}
+          role="status"
+          data-testid="account-note"
+        >
           {note}
         </p>
       )}
-      <p style={styles.info}>
+      <p className="mero-login-info" style={styles.info}>
         You will approve a device key on the wallet&apos;s own page, then come
         back here. The relay never sees your account root — only the
         certificate it signed.
       </p>
-      <p style={styles.info}>
+      <p className="mero-login-info" style={styles.info}>
         That one certificate is all of it: finding the relay that serves your
         account, writing through it, reading your own contexts and namespaces,
         and live events. Nothing to paste in.
       </p>
-      <div style={styles.buttonGroup}>
+      <div className="mero-login-actions" style={styles.buttonGroup}>
         <button
           type="button"
+          className="mero-login-button mero-login-primary"
           style={styles.button}
           onClick={onEnrol}
           data-testid="enrol-button"
@@ -109,7 +119,7 @@ export function AccountSignInPanel({
       {customWallet && walletUrl && (
         /* Shown only when an app overrode it, so a local rig can see at a
            glance that it is not enrolling against the hosted wallet. */
-        <p style={styles.hint}>
+        <p className="mero-login-hint" style={styles.hint}>
           Enrolling at <code>{walletUrl}</code>, not the hosted wallet.
         </p>
       )}

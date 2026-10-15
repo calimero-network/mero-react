@@ -353,6 +353,28 @@ The same theme is forwarded to the embedded `LoginModal` and is also exposed as 
 }
 ```
 
+The connect dialog also carries stable class names, for what the tokens do not cover. Its inline styles still win over a class, so a class rule can add what the dialog leaves unset (its font is inherited from the page, for one) but not replace an inline value; the dialog's shadow, the one look that is neither a token nor inherited, reads `--mero-login-shadow` and keeps its default when that is unset.
+
+| Class | Element |
+| --- | --- |
+| `mero-login-overlay` | the full-screen backdrop, a direct child of `body` |
+| `mero-login-dialog` | the dialog surface |
+| `mero-login-close`, `mero-login-header`, `mero-login-logo`, `mero-login-title` | close button, header, emblem, "Connect to Calimero" |
+| `mero-login-tabs`, `mero-login-tab` (+ `mero-login-tab-active`), `mero-login-panel` | Node / Cloud tabs and their panels |
+| `mero-login-info`, `mero-login-error`, `mero-login-note`, `mero-login-hint` | body copy, the connection error, the Cloud tab's note and wallet hint |
+| `mero-login-options`, `mero-login-option` (+ `mero-login-option-active`), `mero-login-option-indicator`, `mero-login-option-dot`, `mero-login-option-meta` | discovered-node radio list |
+| `mero-login-input`, `mero-login-toolbar`, `mero-login-rescan` | manual URL field, rescan link |
+| `mero-login-actions`, `mero-login-button mero-login-primary` | Connect / Enrol buttons |
+| `mero-login-discovering`, `mero-login-loading`, `mero-login-spinner`, `mero-login-account` | progress states, the Cloud tab's body |
+
+```css
+/* `body >` outranks mero-react's own single-class rules, injected after yours. */
+body > .mero-login-overlay {
+  --mero-login-shadow: 0 30px 60px -30px rgba(20, 26, 60, 0.45);
+  font-family: 'Figtree', sans-serif;
+}
+```
+
 `MeroTheme` keys (all optional): `primary`, `primaryHover`, `primaryText`, `background`, `backgroundSecondary`, `backgroundTertiary`, `border`, `text`, `textSecondary`, `error`, `overlay`, `radius`. Defaults: `#a5ff11` / `#8ed40d` / `#0d1117` / `#161b22` / `#1c2128` / `#30363d` / `#e6edf3` / `#8b949e` / `#ff6b6b` / `rgba(0,0,0,0.75)` / `8px`.
 
 Helpers: `defaultMeroTheme` (the full default palette), `resolveMeroTheme(partial?)` (merges a partial with defaults), and `themeToCssVars(resolved)` (returns a `CSSProperties` map of `--mero-*` variables for applying to your own container) are exported for advanced use.
