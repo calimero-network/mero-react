@@ -233,6 +233,25 @@ describe("useInviteRedemption", () => {
     await waitFor(() => expect(result.current.state.stage).toBe("joined"));
     expect(join).toHaveBeenCalledTimes(2);
   });
+  it("retries a confirmed invitation straight away, without asking again", async () => {
+    openWith("TOK");
+    const join = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("could not reach any member"))
+      .mockResolvedValue(undefined);
+    const memberships = vi.fn().mockResolvedValueOnce([]).mockResolvedValue([NS]);
+    const { result } = renderHook(() =>
+      useInviteRedemption({ parse, redeemer: { join, memberships } }),
+    );
+
+    await waitFor(() => expect(result.current.state.stage).toBe("awaiting-confirmation"));
+    act(() => result.current.accept());
+    await waitFor(() => expect(result.current.state.stage).toBe("failed"));
+    act(() => result.current.retry());
+    await waitFor(() => expect(result.current.state.stage).toBe("joined"));
+    expect(join).toHaveBeenCalledTimes(2);
+  });
+
   // Not a stylistic choice: joining puts you in someone else's namespace and
   // gives them a peer that syncs their data. mero-pass, mero-sign, mero-forum,
   // mero-sheets and mero-stream all require a click, and must keep doing so.

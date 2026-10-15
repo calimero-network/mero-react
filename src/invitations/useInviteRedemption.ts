@@ -268,8 +268,12 @@ export function useInviteRedemption<P extends ParsedInvitation = ParsedInvitatio
     const captured = pending.current;
     if (!captured) return;
     attempted.current.add(captured.token);
-    begin(captured);
-  }, [begin]);
+    // The person already said yes to this invitation: "Try again" joins, it
+    // does not ask a second time. Only an invitation never read is begun anew.
+    const invitation = parsedRef.current;
+    if (invitation) void perform(captured, invitation);
+    else begin(captured);
+  }, [begin, perform]);
 
   const dismiss = useCallback(() => setState({ stage: "idle" }), []);
 
