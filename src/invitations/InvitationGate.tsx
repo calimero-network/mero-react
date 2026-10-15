@@ -17,7 +17,8 @@
  * `peekInvitation`), so the app's `useInviteRedemption` still receives it after
  * login. "Not now" acks it, exactly as the dialog's does.
  *
- * Two ways to mount it, both inside `MeroProvider`:
+ * Two ways to mount it, both inside `MeroProvider` (outside one it shows
+ * nothing, since there is no session to ask about):
  *
  *   - beside the app's `InvitationDialog`, with no children: the screen covers
  *     whatever page is underneath (a full-page layer, opaque). One line in the
@@ -29,6 +30,7 @@
  * `invalid`), `invite-landing-login`, `invite-landing-decline`.
  */
 import {
+  useContext,
   useEffect,
   useId,
   useMemo,
@@ -40,7 +42,7 @@ import {
 import { createPortal } from 'react-dom';
 
 import { ConnectButton, type ConnectButtonProps } from '../components/ConnectButton';
-import { useMero } from '../context';
+import { MeroContext } from '../context';
 import { peekInvitation, subscribeInvitation, type CapturedInvitation } from './capture';
 import type { ParsedInvitation } from './useInviteRedemption';
 
@@ -81,7 +83,10 @@ export function InvitationGate({
   detail,
   connectButtonProps,
 }: InvitationGateProps) {
-  const { isAuthenticated, isLoading } = useMero();
+  // Read directly rather than through `useMero`, which throws: with no
+  // provider there is no session to ask about, so the gate stays out of the
+  // way (as it does in an app's unit tests that stub `useMero` itself).
+  const session = useContext(MeroContext);
   const pending = usePendingInvitation();
 
   // `undefined`: not readable at all. `null`: no codec given, so no name.
@@ -96,9 +101,9 @@ export function InvitationGate({
   }, [pending, parse]);
 
   const state: GateState | null =
-    !pending || isAuthenticated
+    !pending || !session || session.isAuthenticated
       ? null
-      : isLoading
+      : session.isLoading
         ? 'checking'
         : parsed === undefined
           ? 'invalid'

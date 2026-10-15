@@ -201,6 +201,17 @@ describe('InvitationGate', () => {
     expect(peekInvitation()).toBeNull();
   });
 
+  it('outside a MeroProvider, stays out of the way instead of throwing', () => {
+    openInviteLink();
+    render(
+      <InvitationGate parse={parse}>
+        <main data-testid="marketing">Landing</main>
+      </InvitationGate>,
+    );
+    expect(screen.getByTestId('marketing')).toBeTruthy();
+    expect(screen.queryByTestId('invite-landing')).toBeNull();
+  });
+
   it('puts focus on the login, and keeps Tab inside the screen', () => {
     openInviteLink();
     render(<Gate value={session()} />);
