@@ -5,11 +5,11 @@
  * Cloud tab and `ConnectButtonAccount` share one copy of it: the device keys,
  * the redirect to the wallet, and the completion when the tab comes back.
  *
- * - `goToWallet` generates (or reuses) this tab's device keys, remembers a state
- *   parameter, and leaves for the wallet.
- * - On the way back, the callback is read ONCE during render, the state is
- *   checked against the one sent, the certificate is completed and saved, the
- *   account's relays are looked up, and `connectWithAccount` connects.
+ * - `goToWallet` has mero-js generate a fresh, unexportable device key pair
+ *   under a new state, and leaves for the wallet.
+ * - On the way back, the callback is read ONCE during render, mero-js completes
+ *   it against the key pair its state names, the account's relays are looked
+ *   up, and `connectWithAccount` connects.
  * - `note` is what the person should be told about that — an error, or a
  *   connection with nowhere to write yet.
  * - `returning` is true when this page load carries an enrolment callback,
@@ -18,6 +18,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  beginDeviceEnrolment,
   CloudClient,
   completeDeviceEnrolment,
   deviceEnrolmentUrl,
@@ -26,12 +27,6 @@ import {
   type DeviceEnrolmentCallback,
 } from '@calimero-network/mero-js';
 import { useMero } from '../context';
-import { saveDelegatedCredential } from '@calimero-network/mero-js';
-
-/** Where this tab's device keypair lives. */
-const DEVICE_KEY = 'calimero.device';
-/** The state parameter this tab sent to the wallet, to check what comes back. */
-const STATE_KEY = 'calimero.enrol.state';
 
 /**
  * The hosted wallet, which is a property of the platform rather than of any app.
@@ -42,9 +37,6 @@ const STATE_KEY = 'calimero.enrol.state';
  * to the wrong origin.
  */
 const HOSTED_WALLET = 'https://wallet.cloud.calimero.network/account-enroll';
-
-const hex = (b: ArrayBuffer | Uint8Array): string =>
-  [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, '0')).join('');
 
 /**
  * The relay's own account, as the cloud names it beside the relay — the
@@ -138,77 +130,6 @@ function chooseRelay(relays: readonly CloudAccountRelay[]): {
   };
 }
 
-interface DeviceKeys {
-  /** Ed25519 public key — what the certificate names, and what signs. */
-  signPk: string;
-  /** Ed25519 secret, hex seed. Signs warrants and the login statement. */
-  signSk: string;
-  /** X25519 public key — where wrapped scope keys are delivered. */
-  kemPk: string;
-  /** X25519 secret. Without it, anything delivered to `kemPk` is unreadable. */
-  kemSk: string;
-}
-
-/**
- * This tab's device keys, generated once.
- *
- * TWO keypairs, for two jobs the `DeviceCert` names separately: an Ed25519 pair
- * that signs, and an X25519 pair that receives. Both halves of both are kept —
- * a public key certified without its private half is a key nothing can ever use.
- *
- * In `localStorage`, not session: they have to survive the redirect to the
- * wallet and back. A key regenerated on the way home would not match the
- * certificate the wallet just minted, and `completeDeviceEnrolment` would
- * rightly refuse it.
- */
-async function deviceKeys(): Promise<DeviceKeys> {
-  const had = localStorage.getItem(DEVICE_KEY);
-  if (had) {
-    const parsed = JSON.parse(had) as Partial<DeviceKeys>;
-    // Keys minted before the agreement pair was real carry 32 random bytes as
-    // `kemPk` and no `kemSk`. They cannot receive a wrapped scope key, ever, so
-    // they are discarded rather than carried forward — the cost is re-enrolling
-    // this device, which is cheap; the cost of keeping them is a delivery that
-    // silently cannot be decrypted.
-    if (parsed.kemSk && parsed.signSk && parsed.signPk && parsed.kemPk) {
-      return parsed as DeviceKeys;
-    }
-    localStorage.removeItem(DEVICE_KEY);
-  }
-
-  const sign = (await crypto.subtle.generateKey({ name: 'Ed25519' }, true, [
-    'sign',
-    'verify',
-  ])) as CryptoKeyPair;
-
-  let agree: CryptoKeyPair;
-  try {
-    agree = (await crypto.subtle.generateKey({ name: 'X25519' }, true, [
-      'deriveBits',
-    ])) as CryptoKeyPair;
-  } catch {
-    // Better to refuse than to certify a delivery key with no private half:
-    // enrolment would appear to succeed and the failure would surface much
-    // later, as an undecryptable scope key.
-    throw new Error(
-      'this browser cannot generate an X25519 key, so it cannot receive wrapped ' +
-        'scope keys. Chrome 133+ and Safari 17+ support it; enrolling without one ' +
-        'would certify a delivery key nothing holds the secret for.',
-    );
-  }
-
-  // pkcs8 wraps the 32-byte seed behind a 16-byte header, for both curves.
-  const keys: DeviceKeys = {
-    signPk: hex(await crypto.subtle.exportKey('raw', sign.publicKey)),
-    signSk: hex((await crypto.subtle.exportKey('pkcs8', sign.privateKey)).slice(16)),
-    kemPk: hex(await crypto.subtle.exportKey('raw', agree.publicKey)),
-    kemSk: hex((await crypto.subtle.exportKey('pkcs8', agree.privateKey)).slice(16)),
-  };
-  localStorage.setItem(DEVICE_KEY, JSON.stringify(keys));
-  return keys;
-}
-
-
 /**
  * Whether this page load is the one coming back from the wallet — a completed
  * enrolment or a declined one — WITHOUT consuming it.
@@ -254,7 +175,7 @@ export interface UseAccountEnrolmentOptions {
 }
 
 export interface AccountEnrolment {
-  /** Leave for the wallet to enrol this tab's device key. */
+  /** Leave for the wallet to enrol a new device key for this browser. */
   goToWallet: () => Promise<void>;
   /** What to tell the person about the last enrolment, or null. */
   note: string | null;
@@ -329,45 +250,9 @@ export function useAccountEnrolment({
 
     (async () => {
       try {
-        const keys = await deviceKeys();
-
-        // Nothing is carried across the redirect any more beyond the device keys
-        // themselves. There used to be a `sessionStorage` record holding the
-        // typed relay and context; both are now answered by the credential this
-        // returns, so the record held nothing and the "they were lost, try
-        // again" failure it guarded cannot happen.
-        // The state we sent, not the one that came back. `expectState: back.state`
-        // compared the returned value against itself and therefore always passed,
-        // which left the parameter as decoration: any page able to drive this
-        // origin's callback could have had a credential adopted here.
-        const sent = (() => {
-          try {
-            return sessionStorage.getItem(STATE_KEY);
-          } catch {
-            return null;
-          }
-        })();
-        try {
-          sessionStorage.removeItem(STATE_KEY);
-        } catch {
-          /* single-use where storage allows it; the comparison below is the gate */
-        }
-        if (!sent) {
-          // No record of having started this. Refused rather than adopted: this is
-          // either a callback we did not initiate, or storage that lost the value
-          // mid-flow, and neither justifies accepting a certificate.
-          setNote(
-            'This enrolment could not be verified as one this tab started, so it was not ' +
-              'accepted. Start again from "Enrol with your account".',
-          );
-          return;
-        }
-        const enrolled = await completeDeviceEnrolment({
-          ...back,
-          devicePublicKey: keys.signPk,
-          kemPublicKey: keys.kemPk,
-          expectState: sent,
-        });
+        // Refused unless the state names a key pair this browser generated,
+        // which also covers a callback this tab never started.
+        const enrolled = await completeDeviceEnrolment(back);
 
         /*
          * Where to write: asked, not typed.
@@ -382,26 +267,11 @@ export function useAccountEnrolment({
          * (`manager.cloud.calimero.network`), which is the right default for a
          * hosted account and the only deployment that answers this route today.
          */
-        // Saved BEFORE the relay lookup, and kept whatever that lookup answers.
-        //
-        // A first-time account is a member of nothing, so `getAccountRelays`
-        // correctly answers `[]` and no connection is made below. That is not a
-        // failed enrolment: the certificate is real, and it is the input that
-        // resolves a relay from an INVITATION instead
-        // (`useDelegatedBootstrap`). Discarding it here would make "no relay
-        // yet" mean "enrol again", which mints a second device for an account
-        // whose first one was fine.
-        saveDelegatedCredential({
-          account: enrolled.account,
-          credential: enrolled.credential,
-          deviceSecret: keys.signSk,
-        });
-
         const cloud = new CloudClient({
           cloudBaseUrl,
           routingCredential: {
             credential: enrolled.credential,
-            deviceSecret: keys.signSk,
+            signer: enrolled.signer,
           },
         });
         const chosen = chooseRelay(await cloud.getAccountRelays(enrolled.account));
@@ -430,7 +300,7 @@ export function useAccountEnrolment({
           relayUrl: chosen.relayUrl,
           account: enrolled.account,
           credential: enrolled.credential,
-          deviceSecret: keys.signSk,
+          signer: enrolled.signer,
           ...(chosen.executorAccount ? { executorAccount: chosen.executorAccount } : {}),
         });
       } catch (e) {
@@ -444,34 +314,20 @@ export function useAccountEnrolment({
   }, [connectWithAccount, cloudBaseUrl]);
 
   const goToWallet = useCallback(async () => {
-    // No inputs to validate: there is nothing left to ask for. A device key this
-    // browser cannot make (no X25519, blocked storage) is reported in the note,
-    // where the person is looking, rather than lost as an unhandled rejection.
-    let keys: DeviceKeys;
+    // A device key this browser cannot make (no X25519, blocked storage) is
+    // reported in the note, where the person is looking.
+    let begun;
     try {
-      keys = await deviceKeys();
+      begun = await beginDeviceEnrolment();
     } catch (e) {
       setNote(e instanceof Error ? e.message : String(e));
       return;
     }
-    // Remembered before leaving, so what comes back can be checked against what
-    // we sent. Without this the state parameter is decoration: comparing the
-    // returned value to itself always passes, which is what it did here.
-    const state = hex(crypto.getRandomValues(new Uint8Array(16)));
-    try {
-      sessionStorage.setItem(STATE_KEY, state);
-    } catch {
-      // Storage unavailable (private mode, blocked site data). The redirect
-      // still works and the check below reports it as unverifiable rather than
-      // silently passing.
-    }
     window.location.assign(
       deviceEnrolmentUrl({
         walletUrl,
-        devicePublicKey: keys.signPk,
-        kemPublicKey: keys.kemPk,
         returnTo: window.location.origin + window.location.pathname,
-        state,
+        ...begun,
       }),
     );
   }, [walletUrl]);

@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 
+import 'fake-indexeddb/auto';
+import { IDBFactory } from 'fake-indexeddb';
 import React from 'react';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -21,6 +23,7 @@ vi.mock('../delegated/useAccountEnrolment', () => ({
 import { MeroContext } from '../context';
 import type { MeroContextValue } from '../types';
 import { saveDelegatedSession } from '@calimero-network/mero-js';
+import { enrolledDevice } from '../test-utils/enrolledDevice';
 import { ConnectButton } from './ConnectButton';
 
 function ctx(over: Partial<MeroContextValue> = {}): MeroContextValue {
@@ -57,6 +60,7 @@ function renderButton(
 }
 
 beforeEach(() => {
+  globalThis.indexedDB = new IDBFactory();
   localStorage.clear();
   sessionStorage.clear();
   enrolment.note = null;
@@ -154,12 +158,14 @@ describe('ConnectButton — connected', () => {
     expect(screen.getByText('Log out')).toBeTruthy();
   });
 
-  it('an account session shows the short account, no Dashboard, and Log out', () => {
-    const account = 'ab'.repeat(32);
-    saveDelegatedSession({ account, credential: 'cc', deviceSecret: '11'.repeat(32), relayUrl: null });
+  it('an account session shows the short account, no Dashboard, and Log out', async () => {
+    const device = await enrolledDevice();
+    await saveDelegatedSession({ ...device, relayUrl: null });
     const value = renderButton({}, ctx({ isAuthenticated: true, isDelegated: true, nodeUrl: null }));
     fireEvent.click(screen.getByRole('button', { name: 'Connected' }));
-    expect(screen.getByTestId('connected-account').textContent).toBe('Account ababab…ababab');
+    expect((await screen.findByTestId('connected-account')).textContent).toBe(
+      `Account ${device.account.slice(0, 6)}…${device.account.slice(-6)}`,
+    );
     expect(screen.getByText('no relay yet')).toBeTruthy();
     expect(screen.queryByText('Dashboard')).toBeNull();
     fireEvent.click(screen.getByText('Log out'));

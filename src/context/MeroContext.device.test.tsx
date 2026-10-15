@@ -1,0 +1,144 @@
+// @vitest-environment jsdom
+/**
+ * The account device key as a person meets it: enrol, use, sign out, and the
+ * next person in the same browser profile enrolling.
+ */
+import 'fake-indexeddb/auto';
+import { IDBFactory } from 'fake-indexeddb';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+
+const { getAccountRelays, readSession } = vi.hoisted(() => ({ getAccountRelays: vi.fn(), readSession: vi.fn() }));
+vi.mock('@calimero-network/mero-js', async (importActual) => {
+  const actual = await importActual<typeof import('@calimero-network/mero-js')>();
+  return { ...actual, CloudClient: vi.fn(() => ({ getAccountRelays })), readDelegatedSession: readSession };
+});
+
+import { MeroProvider, useMero } from './MeroContext';
+import { AppMode } from '../types';
+import { useAccountEnrolment } from '../delegated/useAccountEnrolment';
+import { deviceRecords, enrolledDevice, walletAnswer } from '../test-utils/enrolledDevice';
+import { saveDelegatedSession } from '@calimero-network/mero-js';
+
+const { readDelegatedSession: realReadSession } =
+  await vi.importActual<typeof import('@calimero-network/mero-js')>('@calimero-network/mero-js');
+
+function Probe() {
+  const m = useMero();
+  const { goToWallet } = useAccountEnrolment();
+  return (
+    <div>
+      <span data-testid="loading">{String(m.isLoading)}</span>
+      <span data-testid="delegated">{String(m.isDelegated)}</span>
+      <button onClick={() => void goToWallet()}>enrol</button>
+      <button onClick={() => void m.logout()}>logout</button>
+    </div>
+  );
+}
+
+const assign = vi.fn();
+const realLocation = window.location;
+
+/** The wallet URL `goToWallet` left for, parsed. */
+function lastWalletRequest() {
+  const url = new URL(String(assign.mock.calls[assign.mock.calls.length - 1][0]));
+  return {
+    devicePublicKey: url.searchParams.get('enrol-device')!,
+    kemPublicKey: url.searchParams.get('enrol-kem')!,
+    state: url.searchParams.get('state')!,
+  };
+}
+
+/** Every 64-hex string anything on this origin can read out of web storage. */
+function hexInWebStorage(): string[] {
+  const values = [localStorage, sessionStorage].flatMap((s) =>
+    Object.keys(s).flatMap((k) => [k, s.getItem(k) ?? '']),
+  );
+  return values.flatMap((v) => v.match(/[0-9a-f]{64}/g) ?? []);
+}
+
+beforeEach(() => {
+  globalThis.indexedDB = new IDBFactory();
+  localStorage.clear();
+  sessionStorage.clear();
+  getAccountRelays.mockReset().mockResolvedValue([]);
+  readSession.mockReset().mockImplementation(realReadSession);
+  assign.mockReset();
+  Object.defineProperty(window, 'location', {
+    configurable: true,
+    value: { ...realLocation, assign, origin: 'https://app.example', pathname: '/', search: '', hash: '' },
+  });
+  vi.spyOn(console, 'warn').mockImplementation(() => {});
+});
+afterEach(() => {
+  cleanup();
+  Object.defineProperty(window, 'location', { configurable: true, value: realLocation });
+  vi.restoreAllMocks();
+});
+
+describe('account device key', () => {
+  it('keeps no secret readable, is gone after logout, and is never offered to the next account', async () => {
+    // What an earlier release left behind: the device secret as hex.
+    localStorage.setItem('calimero.device', JSON.stringify({ signSk: '0f'.repeat(32), kemSk: '0e'.repeat(32) }));
+
+    const first = render(<MeroProvider mode={AppMode.MultiContext}><Probe /></MeroProvider>);
+    await waitFor(() => expect(screen.getByTestId('loading').textContent).toBe('false'));
+    await act(async () => screen.getByText('enrol').click());
+    await waitFor(() => expect(assign).toHaveBeenCalledTimes(1));
+    const asked = lastWalletRequest();
+    first.unmount();
+
+    // Back from the wallet with a certificate over the key this browser asked about.
+    const answer = await walletAnswer(asked);
+    window.location.hash = '#' + new URLSearchParams({ ...answer }).toString();
+    render(<MeroProvider mode={AppMode.MultiContext}><Probe /></MeroProvider>);
+    await waitFor(() => expect(screen.getByTestId('delegated').textContent).toBe('true'));
+
+    const publicValues = new Set([answer.account, answer.device, asked.devicePublicKey, asked.kemPublicKey]);
+    expect(hexInWebStorage().filter((h) => !publicValues.has(h))).toEqual([]);
+
+    await act(async () => screen.getByText('logout').click());
+    await waitFor(() => expect(screen.getByTestId('delegated').textContent).toBe('false'));
+    await waitFor(async () => expect(await deviceRecords()).toEqual([]));
+    expect(localStorage.getItem('calimero.device')).toBeNull();
+
+    // The next person in this browser profile enrols: a new key, never the last one.
+    await act(async () => screen.getByText('enrol').click());
+    await waitFor(() => expect(assign).toHaveBeenCalledTimes(2));
+    expect(lastWalletRequest().devicePublicKey).not.toBe(asked.devicePublicKey);
+  });
+
+  it('restores a session on reload, loading until the device is read', async () => {
+    const device = await enrolledDevice();
+    await saveDelegatedSession({ ...device, relayUrl: null });
+
+    render(<MeroProvider mode={AppMode.MultiContext}><Probe /></MeroProvider>);
+    expect(screen.getByTestId('loading').textContent).toBe('true');
+    await waitFor(() => expect(screen.getByTestId('delegated').textContent).toBe('true'));
+  });
+
+  it('stays signed out when logout lands before the session is restored', async () => {
+    const device = await enrolledDevice();
+    await saveDelegatedSession({ ...device, relayUrl: null });
+
+    // The restore read answers only after the logout has run.
+    let answer!: () => void;
+    readSession.mockImplementationOnce(() => new Promise((resolve) => (answer = () => resolve({ ...device, relayUrl: null }))));
+
+    render(<MeroProvider mode={AppMode.MultiContext}><Probe /></MeroProvider>);
+    await act(async () => screen.getByText('logout').click());
+    await act(async () => answer());
+    await waitFor(() => expect(screen.getByTestId('loading').textContent).toBe('false'));
+
+    expect(screen.getByTestId('delegated').textContent).toBe('false');
+    expect(await deviceRecords()).toEqual([]);
+  });
+
+  it('drops the legacy hex device record on load, signed in or not', async () => {
+    localStorage.setItem('calimero.device', JSON.stringify({ signSk: '0f'.repeat(32) }));
+
+    render(<MeroProvider mode={AppMode.MultiContext}><Probe /></MeroProvider>);
+    await waitFor(() => expect(screen.getByTestId('loading').textContent).toBe('false'));
+    expect(localStorage.getItem('calimero.device')).toBeNull();
+  });
+});

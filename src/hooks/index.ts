@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { classifyError, compareSemver, memberJoinedOpenOp, signerFromSecret } from '@calimero-network/mero-js';
+import { classifyError, compareSemver, memberJoinedOpenOp } from '@calimero-network/mero-js';
 import { useMero } from '../context';
 import { base58ToHex } from '../utils/base58';
 import { listDelegatedContexts, listDelegatedNamespaces, readDelegatedSession } from '@calimero-network/mero-js';
@@ -825,7 +825,7 @@ export function useContexts(applicationId?: string | null) {
           if (isDelegated) {
             // Across every relay this account uses: its namespaces may each be
             // served by a different one, and each relay lists only its own.
-            const session = readDelegatedSession();
+            const session = await readDelegatedSession();
             const listed = session ? await listDelegatedContexts(session) : [];
             const own = listed.filter(
               (c) => !applicationId || c.applicationId === applicationId,
@@ -1126,7 +1126,7 @@ export function useCreateContext() {
       if (isDelegated) {
         // An account creates a context through the relay serving the namespace,
         // under a creation warrant (mero-js createDelegatedContext).
-        const session = readDelegatedSession();
+        const session = await readDelegatedSession();
         if (!session || !request.groupId) return null;
         return run(() =>
           createDelegatedContext(session, {
@@ -1173,7 +1173,7 @@ export function useCreatePrivateContext() {
   const createPrivateContext = useCallback(
     async (request: CreatePrivateContextRequest): Promise<{ contextId: string } | null> => {
       if (isDelegated) {
-        const session = readDelegatedSession();
+        const session = await readDelegatedSession();
         if (!session) return null;
         return run(() => createDelegatedPrivateContext(session, request));
       }
@@ -1242,14 +1242,13 @@ export function useJoinSubgroupInheritance() {
   const joinSubgroupInheritance = useCallback(
     async (groupId: string) => {
       if (isDelegated) {
-        const session = readDelegatedSession();
+        const session = await readDelegatedSession();
         if (!session) return null;
         // Joining an open subgroup yourself: a root op carrying your own credential.
         return run(async () => {
           await governRoot(session, groupId, memberJoinedOpenOp({ member: session.account, groupId, credential: session.credential }));
           // An account's identity in the subgroup is its device key: what its ops are signed with.
-          const { publicKey } = await signerFromSecret(session.deviceSecret);
-          return { groupId, memberPublicKey: publicKey, wasInherited: false };
+          return { groupId, memberPublicKey: session.signer.publicKey, wasInherited: false };
         });
       }
       if (!admin) return null;
@@ -1416,7 +1415,7 @@ export function useNamespacesForApplication(applicationId?: string | null) {
         ? async () => {
             // The per-application listing is node-wide, so a relay refuses it to
             // an account; list its own namespaces on every relay and filter.
-            const session = readDelegatedSession();
+            const session = await readDelegatedSession();
             const listed = session ? await listDelegatedNamespaces(session) : [];
             return listed.filter((ns) => ns.targetApplicationId === applicationId);
           }

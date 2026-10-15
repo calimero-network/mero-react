@@ -28,7 +28,7 @@ export function meroContextValue(mero: MeroJs): MeroContextValue {
     isDelegated: false,
     can: { createNamespace: true, createContext: true, invite: true, upgrade: true },
     app: { packageName: undefined, packageVersion: undefined, registryUrl: undefined },
-    logout: () => {},
+    logout: async () => {},
     isLoading: false,
   };
 }

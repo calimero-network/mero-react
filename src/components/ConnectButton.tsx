@@ -99,10 +99,15 @@ export function ConnectButton({
 
   // The account an account session belongs to, for the dropdown. Read from the
   // stored session (the context exposes `isDelegated`, not the account).
-  const account = useMemo(
-    () => (isAuthenticated && isDelegated ? readDelegatedSession()?.account ?? null : null),
-    [isAuthenticated, isDelegated],
-  );
+  const [account, setAccount] = useState<string | null>(null);
+  useEffect(() => {
+    if (!isAuthenticated || !isDelegated) return setAccount(null);
+    let live = true;
+    void readDelegatedSession().then((s) => live && setAccount(s?.account ?? null));
+    return () => {
+      live = false;
+    };
+  }, [isAuthenticated, isDelegated]);
 
   // Resolve once. Inline CSS variables are only emitted when a theme prop is
   // provided — otherwise we leave the cascade alone so global `:root { --mero-* }`
