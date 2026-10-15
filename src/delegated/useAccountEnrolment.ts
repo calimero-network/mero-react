@@ -274,7 +274,13 @@ export function useAccountEnrolment({
             signer: enrolled.signer,
           },
         });
-        const chosen = chooseRelay(await cloud.getAccountRelays(enrolled.account));
+        // A lookup that fails still connects: the device is certified either way,
+        // and with no relay the session is signed in with nowhere to write.
+        const chosen = await cloud.getAccountRelays(enrolled.account).then(chooseRelay, (e: unknown) => ({
+          relayUrl: null,
+          executorAccount: null,
+          note: `Signed in, but the cloud could not say which relay serves this account: ${e instanceof Error ? e.message : String(e)}`,
+        }));
         // Connected either way — see `chooseRelay`. A null relay is an
         // authenticated account with nowhere to write yet, and the note says
         // what changes that.

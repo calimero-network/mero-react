@@ -12,7 +12,7 @@
  * connection mechanism — the only difference is how the relay was found.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import type { SignedGroupOpenInvitation } from '@calimero-network/mero-js';
 import { useMero } from '../context';
 import {
@@ -21,7 +21,6 @@ import {
 } from '@calimero-network/mero-js';
 import {
   carryExecutorAccount,
-  readDelegatedCredential,
   rememberRelay,
   type DelegatedCredential,
 } from '@calimero-network/mero-js';
@@ -77,17 +76,8 @@ export function useDelegatedBootstrap(
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<BootstrapResult | null>(null);
 
-  // A credential enrolled with no session yet (its relay lookup failed) is read
-  // from the device store; a connected tab's own session always wins.
-  const [stored, setStored] = useState<DelegatedCredential | null>(null);
-  useEffect(() => {
-    let live = true;
-    if (!delegatedSession) void readDelegatedCredential().then((held) => live && setStored(held));
-    return () => {
-      live = false;
-    };
-  }, [delegatedSession]);
-  const credential = delegatedSession ?? stored;
+  // Enrolment always connects, so the tab's session is the credential.
+  const credential: DelegatedCredential | null = delegatedSession;
   const relayUrl = delegatedSession?.relayUrl ?? null;
 
   const cloudBaseUrl = options.cloudBaseUrl ?? providerCloud;

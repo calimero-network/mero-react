@@ -43,7 +43,6 @@ import {
   buildDelegatedClient,
   deviceIsActive,
   forgetAccount,
-  readDelegatedCredential,
   readDelegatedSession,
   listDelegatedContexts,
   readPinnedRelayNodeKey,
@@ -278,7 +277,7 @@ export function MeroProvider({
   const connectWithAccount = useCallback((session: DelegatedSession) => {
     const epoch = ++delegatedEpoch.current;
     // Dropped when a logout ran meanwhile or the device is no longer this browser's.
-    void deviceIsActive(session.signer.publicKey).then((active) => {
+    void deviceIsActive(session.account, session.signer.publicKey).then((active) => {
       if (!active || delegatedEpoch.current !== epoch) return;
       void saveDelegatedSession(session);
       setDelegated(session);
@@ -310,8 +309,12 @@ export function MeroProvider({
     } catch {
       /* no storage, nothing left behind */
     }
-    const account = delegated?.account ?? (await readDelegatedCredential())?.account ?? '';
-    await forgetAccount(account);
+    // forgetAccount also clears every account the device store names.
+    const account = delegated?.account;
+    await forgetAccount(account ?? '').catch((e: unknown) => {
+      // A node login that never held a device has nothing left behind to report.
+      if (account) throw e;
+    });
   }, [tokenStore, delegated]);
 
   // Restore a delegated session after a reload.
@@ -322,13 +325,17 @@ export function MeroProvider({
       /* no storage, nothing left behind */
     }
     const epoch = delegatedEpoch.current;
-    // A device store that never answers must not hold node-login apps on loading.
-    const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), RESTORE_TIMEOUT_MS));
-    Promise.race([readDelegatedSession(), timeout])
+    // A slow device store releases the node-login path; its answer still applies when it lands.
+    const timer = setTimeout(() => setDelegatedRead(true), RESTORE_TIMEOUT_MS);
+    readDelegatedSession()
       .then((session) => {
         if (session && delegatedEpoch.current === epoch) setDelegated(session);
       })
-      .finally(() => setDelegatedRead(true));
+      .finally(() => {
+        clearTimeout(timer);
+        setDelegatedRead(true);
+      });
+    return () => clearTimeout(timer);
   }, []);
 
   /**

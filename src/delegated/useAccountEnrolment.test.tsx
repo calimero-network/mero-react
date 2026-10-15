@@ -145,6 +145,16 @@ describe('useAccountEnrolment', () => {
     expect(result.current.note).toMatch(/nowhere to write yet/);
   });
 
+  it('a relay lookup that fails still connects, with nowhere to write and the reason', async () => {
+    readEnrolmentCallback.mockReturnValue({ state: 's' });
+    completeDeviceEnrolment.mockResolvedValue({ account: 'ee'.repeat(32), credential: 'cred', signer: SIGNER });
+    getAccountRelays.mockRejectedValue(new Error('cloud unreachable'));
+    const { result } = renderHook(() => useAccountEnrolment(), { wrapper });
+
+    await waitFor(() => expect(connectWithAccount).toHaveBeenCalledWith(expect.objectContaining({ relayUrl: null })));
+    expect(result.current.note).toMatch(/cloud unreachable/);
+  });
+
   it('goToWallet remembers a state and leaves for the wallet', async () => {
     readEnrolmentCallback.mockReturnValue(null);
     const assign = vi.fn();

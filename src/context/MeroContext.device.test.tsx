@@ -169,6 +169,32 @@ describe('account device key', () => {
     await waitFor(() => expect(screen.getByTestId('loading').textContent).toBe('false'), { timeout: 5000 });
   });
 
+  it('restores a session whose read is slow, after letting the app stop loading', async () => {
+    const device = await enrolledDevice();
+    readSession.mockImplementationOnce(
+      () => new Promise((resolve) => setTimeout(() => resolve({ ...device, relayUrl: null }), 3500)),
+    );
+
+    render(<MeroProvider mode={AppMode.MultiContext}><Probe /></MeroProvider>);
+    await waitFor(() => expect(screen.getByTestId('loading').textContent).toBe('false'), { timeout: 3400 });
+    await waitFor(() => expect(screen.getByTestId('delegated').textContent).toBe('true'), { timeout: 2000 });
+  }, 10_000);
+
+  it('logs out of a node login even when the device store cannot be opened', async () => {
+    let result = '';
+    function Logout() {
+      const { logout } = useMero();
+      return <button onClick={() => logout().then(() => (result = 'resolved'), () => (result = 'rejected'))}>node logout</button>;
+    }
+    render(<MeroProvider mode={AppMode.MultiContext}><Logout /></MeroProvider>);
+    vi.spyOn(indexedDB, 'open').mockImplementation(() => {
+      throw new DOMException('blocked', 'SecurityError');
+    });
+    await act(async () => screen.getByText('node logout').click());
+
+    await waitFor(() => expect(result).toBe('resolved'));
+  });
+
   it('drops the legacy hex device record on load, signed in or not', async () => {
     localStorage.setItem('calimero.device', JSON.stringify({ signSk: '0f'.repeat(32) }));
 
