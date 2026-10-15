@@ -218,7 +218,14 @@ describe('MeroProvider — SSO callback must not clobber a rotated token bundle'
   // whole family — every holder is hard-logged-out.
 
   const NODE = 'https://node-a.example.com';
-  const secs = (offset: number) => Math.floor(Date.now() / 1000) + offset;
+  // One clock read per test: a token minted with `secs(n)` and the expectation
+  // built from `secs(n)` must agree, and two reads straddling a second boundary
+  // made them differ by one (a flake in CI).
+  let nowSecs = 0;
+  beforeEach(() => {
+    nowSecs = Math.floor(Date.now() / 1000);
+  });
+  const secs = (offset: number) => nowSecs + offset;
 
   function jwt(claims: { iat?: number; exp?: number }): string {
     const b64 = (o: unknown) =>
