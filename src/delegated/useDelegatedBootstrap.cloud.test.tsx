@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
+import 'fake-indexeddb/auto';
+import { IDBFactory } from 'fake-indexeddb';
 import React from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderHook } from '@testing-library/react';
 
 const { mockBootstrap } = vi.hoisted(() => ({
@@ -12,7 +14,7 @@ vi.mock('@calimero-network/mero-js', async (importActual) => ({
 }));
 
 import { MeroContext } from '../context';
-import { saveDelegatedCredential } from '@calimero-network/mero-js';
+import { enrolledDevice } from '../test-utils/enrolledDevice';
 import { useDelegatedBootstrap } from './useDelegatedBootstrap';
 
 function wrapper(cloudBaseUrl?: string) {
@@ -23,10 +25,13 @@ function wrapper(cloudBaseUrl?: string) {
 }
 
 describe('useDelegatedBootstrap cloud', () => {
+  beforeEach(() => {
+    globalThis.indexedDB = new IDBFactory();
+  });
   afterEach(() => sessionStorage.clear());
 
   it('asks the cloud the provider names', async () => {
-    saveDelegatedCredential({ account: 'aa'.repeat(32), credential: 'cc', deviceSecret: '11'.repeat(32) });
+    await enrolledDevice();
     const { result } = renderHook(() => useDelegatedBootstrap(), { wrapper: wrapper('http://127.0.0.1:4499') });
     await result.current.bootstrap({ namespaceId: 'ns', invitation: {} as never });
     expect(mockBootstrap).toHaveBeenCalledWith(expect.objectContaining({ cloudBaseUrl: 'http://127.0.0.1:4499' }));

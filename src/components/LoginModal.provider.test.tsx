@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import 'fake-indexeddb/auto';
+import { IDBFactory } from 'fake-indexeddb';
 
 /**
  * `LoginModal` with the REAL `useAccountEnrolment`, not the mock the main suite
@@ -35,6 +37,7 @@ function ctx(): MeroContextValue {
 }
 
 beforeEach(() => {
+  globalThis.indexedDB = new IDBFactory();
   localStorage.clear();
   sessionStorage.clear();
   // Discovery finds nothing: every probe rejects like a closed port.

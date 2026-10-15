@@ -52,7 +52,7 @@ export function MockMeroProvider({
     admin: null,
     can: { createNamespace: true, createContext: true, invite: true, upgrade: true },
     app: {},
-    logout: () => {
+    logout: async () => {
       console.info('[MockMeroProvider] logout');
     },
   };

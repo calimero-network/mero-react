@@ -169,8 +169,8 @@ export interface MeroContextValue {
   app: { packageName?: string; packageVersion?: string; registryUrl?: string };
   /** The cloud an account asks for routing; the hosted one when unset. */
   cloudBaseUrl?: string;
-  /** Logout and clear tokens */
-  logout: () => void;
+  /** Log out: clears tokens, and resolves once the account's device key is deleted. */
+  logout: () => Promise<void>;
   /** Loading state */
   isLoading: boolean;
 }

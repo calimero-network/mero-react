@@ -170,7 +170,7 @@ export function useJoinInvitation(): {
     const ids = (list: ReadonlyArray<{ namespaceId?: string; groupId?: string; id?: string }>) =>
       list.map((n) => n.namespaceId ?? n.groupId ?? n.id ?? '').filter(Boolean);
     if (asAccount) {
-      const session = readDelegatedSession();
+      const session = await readDelegatedSession();
       return session ? ids(await listDelegatedNamespaces(session)) : [];
     }
     if (!mero) return [];
