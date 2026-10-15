@@ -186,7 +186,11 @@
 .mero-invite-overlay {
   position: fixed;
   inset: 0;
-  z-index: 10000;
+  /* Above anything an app stacks itself: the question comes first, and apps
+     use full-screen overlays as high as 99999 (mero-chat's pickers), which at
+     10000 swallowed the Join click. One below the 32-bit maximum, so an app
+     that truly must cover it still can. */
+  z-index: 2147483646;
   display: flex;
   align-items: center;
   justify-content: center;
