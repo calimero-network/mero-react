@@ -480,8 +480,8 @@ export function MeroProvider({
     return () => {
       active = false;
       stop.abort();
-      // `close` is a node-client concern; a relay client has nothing to tear
-      // down, so do not reach for it.
+      // Ends the relay client's event stream, which would otherwise outlive a logout.
+      client?.close();
     };
   }, [delegated, contextId, packageName, registryUrl]);
 

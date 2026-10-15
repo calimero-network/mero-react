@@ -8,10 +8,14 @@ import { IDBFactory } from 'fake-indexeddb';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 
-const { getAccountRelays, readSession } = vi.hoisted(() => ({ getAccountRelays: vi.fn(), readSession: vi.fn() }));
+const { getAccountRelays, readSession, closed } = vi.hoisted(() => ({ getAccountRelays: vi.fn(), readSession: vi.fn(), closed: vi.fn() }));
 vi.mock('@calimero-network/mero-js', async (importActual) => {
   const actual = await importActual<typeof import('@calimero-network/mero-js')>();
-  return { ...actual, CloudClient: vi.fn(() => ({ getAccountRelays })), readDelegatedSession: readSession };
+  const buildDelegatedClient: typeof actual.buildDelegatedClient = (...args) => {
+    const client = actual.buildDelegatedClient(...args);
+    return client && new Proxy(client, { get: (t, p) => (p === 'close' ? () => (closed(), t.close()) : Reflect.get(t, p, t)) });
+  };
+  return { ...actual, CloudClient: vi.fn(() => ({ getAccountRelays })), readDelegatedSession: readSession, buildDelegatedClient };
 });
 
 import { MeroProvider, useMero } from './MeroContext';
@@ -63,6 +67,7 @@ beforeEach(() => {
   sessionStorage.clear();
   getAccountRelays.mockReset().mockResolvedValue([]);
   readSession.mockReset().mockImplementation(realReadSession);
+  closed.mockReset();
   assign.mockReset();
   Object.defineProperty(window, 'location', {
     configurable: true,
@@ -193,6 +198,17 @@ describe('account device key', () => {
     await act(async () => screen.getByText('node logout').click());
 
     await waitFor(() => expect(result).toBe('resolved'));
+  });
+
+  it('closes the relay client, and with it its event stream, on logout', async () => {
+    const device = await enrolledDevice();
+    await saveDelegatedSession({ ...device, relayUrl: 'http://127.0.0.1:4480' });
+
+    render(<MeroProvider mode={AppMode.MultiContext}><Probe /></MeroProvider>);
+    await waitFor(() => expect(screen.getByTestId('delegated').textContent).toBe('true'));
+    await act(async () => screen.getByText('logout').click());
+
+    await waitFor(() => expect(closed).toHaveBeenCalled());
   });
 
   it('drops the legacy hex device record on load, signed in or not', async () => {
