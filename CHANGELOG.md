@@ -1,3 +1,9 @@
+## [9.14.1](https://github.com/calimero-network/mero-react/compare/mero-react-v9.14.0...mero-react-v9.14.1) (2026-10-15)
+
+### Bug Fixes
+
+* **invitations:** useJoinSync hears every mark of the namespace it shows ([5b56450](https://github.com/calimero-network/mero-react/commit/5b56450f59b136a009b05d55cedeb3938a2a5159))
+
 ## [9.14.0](https://github.com/calimero-network/mero-react/compare/mero-react-v9.13.2...mero-react-v9.14.0) (2026-10-15)
 
 ### Features
