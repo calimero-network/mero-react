@@ -16,7 +16,7 @@ import type { InviteRedeemer, SignedGroupOpenInvitation } from '@calimero-networ
 import { useMero } from '../context';
 import { useDelegatedBootstrap } from '../delegated/useDelegatedBootstrap';
 import type { BootstrapFailure } from '@calimero-network/mero-js';
-import { listDelegatedNamespaces, readDelegatedSession } from '@calimero-network/mero-js';
+import { listDelegatedNamespaces } from '@calimero-network/mero-js';
 
 /** The HTTP status an error carries, read the way mero-js's classifier reads it. */
 function statusOf(err: unknown): number | undefined {
@@ -112,7 +112,7 @@ export function useJoinInvitation(): {
    */
   invitationRedeemer: (input: JoinInvitationInput) => InviteRedeemer;
 } {
-  const { mero, isDelegated } = useMero();
+  const { mero, isDelegated, delegatedSession } = useMero();
   const { credential, bootstrap } = useDelegatedBootstrap();
   const [joining, setJoining] = useState(false);
 
@@ -170,12 +170,11 @@ export function useJoinInvitation(): {
     const ids = (list: ReadonlyArray<{ namespaceId?: string; groupId?: string; id?: string }>) =>
       list.map((n) => n.namespaceId ?? n.groupId ?? n.id ?? '').filter(Boolean);
     if (asAccount) {
-      const session = readDelegatedSession();
-      return session ? ids(await listDelegatedNamespaces(session)) : [];
+      return delegatedSession ? ids(await listDelegatedNamespaces(delegatedSession)) : [];
     }
     if (!mero) return [];
     return ids((await mero.admin.listNamespaces()) as Array<{ namespaceId?: string; groupId?: string; id?: string }>);
-  }, [mero, isDelegated, credential]);
+  }, [mero, isDelegated, credential, delegatedSession]);
 
   const invitationRedeemer = useCallback(
     (input: JoinInvitationInput): InviteRedeemer => ({

@@ -147,6 +147,8 @@ export interface MeroContextValue {
    * and events only for contexts it is a member of.
    */
   isDelegated: boolean;
+  /** This tab's delegated session: the account and its device signer, or null on a node login. */
+  delegatedSession: DelegatedSession | null;
   /**
    * What this connection may do, so an app asks WHAT IS ALLOWED instead of
    * which transport it runs on. A node login can do everything; an account on
@@ -169,8 +171,8 @@ export interface MeroContextValue {
   app: { packageName?: string; packageVersion?: string; registryUrl?: string };
   /** The cloud an account asks for routing; the hosted one when unset. */
   cloudBaseUrl?: string;
-  /** Logout and clear tokens */
-  logout: () => void;
+  /** Log out: clears tokens, and resolves once the account's device key is deleted. */
+  logout: () => Promise<void>;
   /** Loading state */
   isLoading: boolean;
 }

@@ -41,14 +41,13 @@ import type { MeroContextValue, MeroProviderConfig } from '../types';
 
 import {
   buildDelegatedClient,
-  clearDelegatedCredential,
-  clearDelegatedSession,
+  deviceIsActive,
+  forgetAccount,
   readDelegatedSession,
   listDelegatedContexts,
   readPinnedRelayNodeKey,
   learnRelayNodeKey,
   relayForContext,
-  saveDelegatedCredential,
   saveDelegatedSession,
   type DelegatedAccountSession as DelegatedSession,
 } from '@calimero-network/mero-js';
@@ -58,6 +57,9 @@ const MeroContext = createContext<MeroContextValue | null>(null);
 
 /** The registry an app's package is looked up in when none is configured; the account admin's default too. */
 const DEFAULT_REGISTRY_URL = 'https://apps.calimero.network';
+/** Where earlier releases kept the device secret as hex; deleted on sight. */
+const LEGACY_DEVICE_KEY = 'calimero.device';
+const RESTORE_TIMEOUT_MS = 3000; // longest a stored delegated session may hold back startup
 
 const isBrowser = typeof window !== 'undefined';
 
@@ -145,16 +147,15 @@ export function MeroProvider({
     [tokenStoreProp],
   );
   const [mero, setMero] = useState<MeroJs | MeroClient | null>(null);
+  /** The delegated record, or null for the node-login path. */
+  const [delegated, setDelegated] = useState<DelegatedSession | null>(null);
   /**
-   * The delegated record, or null for the node-login path.
-   *
-   * Read from storage in the initializer rather than an effect: a reload of a
-   * delegated tab should render connected, not flash the connect button and
-   * then replace it.
+   * Whether the stored delegated record has been read. The device key lives in
+   * IndexedDB, so the read is async; `isLoading` stays true until it lands.
    */
-  const [delegated, setDelegated] = useState<DelegatedSession | null>(() =>
-    readDelegatedSession(),
-  );
+  const [delegatedRead, setDelegatedRead] = useState(false);
+  /** Bumped by connect and logout, so a restore that lands after either is dropped. */
+  const delegatedEpoch = useRef(0);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
@@ -274,17 +275,17 @@ export function MeroProvider({
    * record is persisted first so a reload finds it.
    */
   const connectWithAccount = useCallback((session: DelegatedSession) => {
-    saveDelegatedSession(session);
-    // Kept as a credential too, so the identity outlives the connection. A relay
-    // can be lost without the certificate being lost — the fleet row goes stale,
-    // or the record is cleared — and re-enrolling to recover a key this tab still
-    // holds would be a new device for no reason.
-    const { account, credential, deviceSecret } = session;
-    saveDelegatedCredential({ account, credential, deviceSecret });
-    setDelegated(session);
+    const epoch = ++delegatedEpoch.current;
+    // Dropped when a logout ran meanwhile or the device is no longer this browser's.
+    void deviceIsActive(session.account, session.signer.publicKey).then((active) => {
+      if (!active || delegatedEpoch.current !== epoch) return;
+      void saveDelegatedSession(session);
+      setDelegated(session);
+    });
   }, []);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    delegatedEpoch.current += 1;
     if (meroRef.current) {
       meroRef.current.clearToken();
       meroRef.current.close();
@@ -293,11 +294,6 @@ export function MeroProvider({
     // otherwise the access/refresh tokens persist in storage after logout.
     tokenStore.clear();
     clearAllStorage();
-    clearDelegatedSession();
-    // The certificate goes too. Logging out of an account and leaving its device
-    // key in storage would leave the next visitor able to bootstrap as it from
-    // any invitation they hold.
-    clearDelegatedCredential();
     setDelegated(null);
     setMero(null);
     setIsAuthenticated(false);
@@ -306,7 +302,41 @@ export function MeroProvider({
     setContextIdState(null);
     setContextIdentityState(null);
     meroRef.current = null;
-  }, [tokenStore]);
+    // The device key goes with the account: left behind, it would let the next
+    // person in this browser act as the account.
+    try {
+      localStorage.removeItem(LEGACY_DEVICE_KEY);
+    } catch {
+      /* no storage, nothing left behind */
+    }
+    // forgetAccount also clears every account the device store names.
+    const account = delegated?.account;
+    await forgetAccount(account ?? '').catch((e: unknown) => {
+      // A node login that never held a device has nothing left behind to report.
+      if (account) throw e;
+    });
+  }, [tokenStore, delegated]);
+
+  // Restore a delegated session after a reload.
+  useEffect(() => {
+    try {
+      localStorage.removeItem(LEGACY_DEVICE_KEY);
+    } catch {
+      /* no storage, nothing left behind */
+    }
+    const epoch = delegatedEpoch.current;
+    // A slow device store releases the node-login path; its answer still applies when it lands.
+    const timer = setTimeout(() => setDelegatedRead(true), RESTORE_TIMEOUT_MS);
+    readDelegatedSession()
+      .then((session) => {
+        if (session && delegatedEpoch.current === epoch) setDelegated(session);
+      })
+      .finally(() => {
+        clearTimeout(timer);
+        setDelegatedRead(true);
+      });
+    return () => clearTimeout(timer);
+  }, []);
 
   /**
    * Install the relay client for a delegated record.
@@ -450,8 +480,8 @@ export function MeroProvider({
     return () => {
       active = false;
       stop.abort();
-      // `close` is a node-client concern; a relay client has nothing to tear
-      // down, so do not reach for it.
+      // Ends the relay client's event stream, which would otherwise outlive a logout.
+      client?.close();
     };
   }, [delegated, contextId, packageName, registryUrl]);
 
@@ -460,7 +490,7 @@ export function MeroProvider({
     // A delegated tab is already connected by the effect above. This whole
     // path — callback parsing, token adoption, node-URL trust, /auth/validate —
     // describes a session the delegated client does not have.
-    if (delegated) return;
+    if (!delegatedRead || delegated) return;
 
     let active = true;
 
@@ -586,7 +616,7 @@ export function MeroProvider({
     return () => {
       active = false;
     };
-  }, [createMeroInstance, checkAuth, allowedNodeUrls, delegated]);
+  }, [createMeroInstance, checkAuth, allowedNodeUrls, delegated, delegatedRead]);
 
   // SSE connection for online/offline detection — no polling.
   useEffect(() => {
@@ -734,7 +764,7 @@ export function MeroProvider({
         routing: (namespaceId: string) =>
           new CloudClient({
             cloudBaseUrl,
-            routingCredential: { credential: delegated.credential, deviceSecret: delegated.deviceSecret },
+            routingCredential: { credential: delegated.credential, signer: delegated.signer },
           }).getNamespaceRouting(namespaceId),
       };
       if (delegated.relayUrl === null) return createAccountAdmin({ session: delegated, read: null, app }, deps);
@@ -760,6 +790,7 @@ export function MeroProvider({
       connectToNode,
       connectWithAccount,
       isDelegated: delegated !== null,
+      delegatedSession: delegated,
       admin,
       can: delegated !== null
         // An account founds a namespace through its relay and gives it this

@@ -26,8 +26,7 @@ export type { ConnectButtonAccountProps } from './components';
 export type { DelegatedAccountSession as DelegatedSession, DelegatedCredential } from '@calimero-network/mero-js';
 export {
   readDelegatedCredential,
-  saveDelegatedCredential,
-  clearDelegatedCredential,
+  forgetAccount,
   pinRelayNodeKey,
   readPinnedRelayNodeKey,
   listDelegatedContexts,

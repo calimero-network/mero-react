@@ -5,30 +5,23 @@
  * hook's invitationRedeemer. The only fake is the production cloud's admitter
  * lookup, which cannot know the rig's relays; it answers with relay A.
  */
+import 'fake-indexeddb/auto';
+import { IDBFactory } from 'fake-indexeddb';
 import React from 'react';
 import { readFileSync } from 'node:fs';
 import { renderHook, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import * as mero from '@calimero-network/mero-js';
 import { MeroProvider, AppMode, useJoinInvitation } from '../../src';
-import { saveDelegatedCredential } from '@calimero-network/mero-js';
+import { enrolledDevice } from '../../src/test-utils/enrolledDevice';
 
 const RIG = process.env.RIG_DIR;
 const run = RIG ? describe : describe.skip;
-const hex = (b: ArrayBuffer | Uint8Array) => Array.from(new Uint8Array(b), (x) => x.toString(16).padStart(2, '0')).join('');
 
 async function enrol(): Promise<string> {
   // A fresh account, enrolled (credential only: no relay yet), as after the wallet.
   const root = await mero.generateAccountRoot();
-  const sign = (await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify'])) as CryptoKeyPair;
-  const agree = (await crypto.subtle.generateKey({ name: 'X25519' }, true, ['deriveBits'])) as CryptoKeyPair;
-  const device = await mero.mintDeviceId(root.accountId, crypto.getRandomValues(new Uint8Array(16)));
-  const credential = await mero.signDeviceCert({ rootSecret: root.secret, device, deviceEpoch: 1,
-    signPublicKey: hex(await crypto.subtle.exportKey('raw', sign.publicKey)),
-    kemPublicKey: hex(await crypto.subtle.exportKey('raw', agree.publicKey)) });
-  saveDelegatedCredential({ account: root.accountId, credential,
-    deviceSecret: hex((await crypto.subtle.exportKey('pkcs8', sign.privateKey)).slice(16)) });
-  return root.accountId;
+  return (await enrolledDevice(root.secret)).account;
 }
 
 run('useJoinInvitation on the rig (account, through a relay)', () => {
@@ -54,6 +47,7 @@ run('useJoinInvitation on the rig (account, through a relay)', () => {
       return real(input, rest);
     }) as typeof fetch;
 
+    globalThis.indexedDB = new IDBFactory();
     await enrol();
 
     const wrapper = ({ children }: { children: React.ReactNode }) => (
@@ -77,6 +71,7 @@ run('useJoinInvitation on the rig (account, through a relay)', () => {
     // Switching accounts the way logout does: both records go.
     unmount();
     sessionStorage.clear();
+    globalThis.indexedDB = new IDBFactory();
     await enrol();
     expect(await renderHook(() => useJoinInvitation(), { wrapper }).result.current.memberships()).toEqual([]);
     const second = renderHook(() => useJoinInvitation(), { wrapper });

@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 
+import 'fake-indexeddb/auto';
+import { IDBFactory } from 'fake-indexeddb';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, act, cleanup } from '@testing-library/react';
 
 const NODE_KEY = 'cd'.repeat(32);
-const RELAY = 'https://relay.example.com';
+const RELAY = 'http://127.0.0.1:4480';
 
 /** What learning the relay's key does on each attempt; the last one repeats. */
 let attest: Array<'down' | 'up'> = ['up'];
@@ -47,6 +49,7 @@ import { MeroProvider, useMero } from './MeroContext';
 import { AppMode } from '../types';
 import type { MeroContextValue } from '../types';
 import { saveDelegatedSession, readPinnedRelayNodeKey } from '@calimero-network/mero-js';
+import { enrolledDevice } from '../test-utils/enrolledDevice';
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -79,7 +82,8 @@ function Capture() {
 
 const adminReads = () => requests.filter((r) => /\/admin-api\/(contexts|namespaces)/.test(r.url));
 
-beforeEach(() => {
+beforeEach(async () => {
+  globalThis.indexedDB = new IDBFactory();
   localStorage.clear();
   sessionStorage.clear();
   seen = null;
@@ -88,10 +92,10 @@ beforeEach(() => {
   attestHits = 0;
   quoteVerifies = true;
   stubNetwork();
-  vi.useFakeTimers();
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] });
   vi.spyOn(console, 'warn').mockImplementation(() => {});
   vi.spyOn(console, 'error').mockImplementation(() => {});
-  saveDelegatedSession({ account: 'aa'.repeat(32), credential: 'cc', deviceSecret: '11'.repeat(32), relayUrl: RELAY });
+  await saveDelegatedSession({ ...(await enrolledDevice()), relayUrl: RELAY });
 });
 afterEach(() => {
   cleanup();
@@ -100,7 +104,15 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const flush = (ms = 0) => act(() => vi.advanceTimersByTimeAsync(ms));
+// The device store settles on real macrotasks, which fake timers leave alone.
+const idbTurns = async () => {
+  for (let i = 0; i < 50; i++) await new Promise<void>((resolve) => setImmediate(resolve));
+};
+const flush = (ms = 0) =>
+  act(async () => {
+    await idbTurns();
+    await vi.advanceTimersByTimeAsync(ms);
+  });
 
 describe('MeroProvider — a relay node key learned late still signs the session', () => {
   it('keeps awaiting the key through a failed attempt, then hands out a client that signs its reads', async () => {

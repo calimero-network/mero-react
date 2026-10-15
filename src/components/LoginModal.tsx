@@ -67,7 +67,7 @@ export interface LoginModalProps {
   localNodePorts?: readonly number[];
   /**
    * The second way in: a **Cloud** tab, signing in with a Calimero account by
-   * enrolling this tab's device key at the wallet.
+   * enrolling this browser's device key at the wallet.
    *
    * - **Omitted** (the default): the tab is shown, sourced from
    *   `useAccountEnrolment()` inside the modal — enrolment starts from the tab,
