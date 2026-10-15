@@ -30,5 +30,13 @@ export default defineConfig({
     hookTimeout: 60000,
     // Shared node fixtures — run serially to avoid cross-test interference.
     fileParallelism: false,
+    server: {
+      deps: {
+        // mero-platform 0.1.0 ships extensionless directory imports that Vite
+        // resolves but Node's ESM loader rejects; the source entry imports it
+        // (the build bundles it, see tsup.config.ts), so transform it here.
+        inline: [/@calimero-network\/mero-platform/],
+      },
+    },
   },
 });

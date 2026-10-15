@@ -71,6 +71,11 @@ export { createAccountAdmin, InvitationNotClaimableError, NoRelayError, NotForAc
 export { createNodeAdmin } from '@calimero-network/mero-js';
 export type { AccountAdminDeps } from '@calimero-network/mero-js';
 
+// Invitations by link: capture (cold open, desktop deep link, PWA launch),
+// redemption, the one prompt every app shows, and the wait for a just-joined
+// namespace's data.
+export * from './invitations';
+
 // One call to join from an invitation, whatever the connection.
 export { useJoinInvitation, isFinalInvitationError } from './join/useJoinInvitation';
 export type {

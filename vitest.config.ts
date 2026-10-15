@@ -4,6 +4,14 @@ import { defineConfig } from 'vitest/config';
 // (vitest.e2e.config.ts) and is excluded here so `pnpm test` needs no node.
 export default defineConfig({
   test: {
+    server: {
+      deps: {
+        // mero-platform 0.1.0 ships extensionless directory imports that Vite
+        // resolves but Node's ESM loader rejects; transform it through Vite.
+        // (The build bundles it for the same reason; see tsup.config.ts.)
+        inline: [/@calimero-network\/mero-platform/],
+      },
+    },
     exclude: [
       '**/node_modules/**',
       '**/dist/**',
