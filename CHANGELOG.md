@@ -1,3 +1,9 @@
+## [9.15.0](https://github.com/calimero-network/mero-react/compare/mero-react-v9.14.1...mero-react-v9.15.0) (2026-10-16)
+
+### Features
+
+* **login:** stable mero-login-* classes and --mero-login-shadow on the connect dialog ([3fce5c0](https://github.com/calimero-network/mero-react/commit/3fce5c097b042b97a1c5f5964837a2f279400c72))
+
 ## [9.14.1](https://github.com/calimero-network/mero-react/compare/mero-react-v9.14.0...mero-react-v9.14.1) (2026-10-15)
 
 ### Bug Fixes
