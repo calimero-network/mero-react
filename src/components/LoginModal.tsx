@@ -19,6 +19,14 @@
  *
  * Because of that the modal reads `useMero()` and must sit inside a
  * `MeroProvider`, as every app's does.
+ *
+ * Styling: colors and radius are `--mero-*` tokens (a `theme` prop, or global
+ * variables). Every part also carries a stable `mero-login-*` class, as
+ * `InvitationDialog` does with `mero-invite-*`, so an app can restyle what the
+ * tokens do not reach. Inline styles outrank classes, so the look that is not a
+ * token stays out of them where it can: the font is inherited (set it on
+ * `.mero-login-overlay`), and the dialog's shadow reads `--mero-login-shadow`
+ * with today's shadow as the fallback.
  */
 
 import { useMemo, useState, useEffect, useCallback, useRef } from 'react';
@@ -220,7 +228,10 @@ function buildStyles(t: ResolvedMeroTheme) {
       width: '100%',
       position: 'relative' as const,
       border: `1px solid ${border}`,
-      boxShadow: `0 25px 50px -12px rgba(0, 0, 0, 0.6), 0 0 0 1px ${accentGlow}`,
+      // Not a theme token, so an app could not reach it past the inline style:
+      // `--mero-login-shadow` replaces it whole. Unset, it is the shadow and
+      // accent ring the dialog always had.
+      boxShadow: `var(--mero-login-shadow, 0 25px 50px -12px rgba(0, 0, 0, 0.6), 0 0 0 1px ${accentGlow})`,
       animation: 'meroSlideIn 0.25s ease-out',
       color: text,
     },
@@ -606,6 +617,9 @@ export function LoginModal({
       // input. A label `onClick` here would double-fire `setSelected`.
       <label
         key={value}
+        className={
+          active ? 'mero-login-option mero-login-option-active' : 'mero-login-option'
+        }
         data-testid={`node-option-${value === CUSTOM_SELECTION ? 'custom' : displayNodeUrl(value)}`}
         style={{
           ...styles.radioItem,
@@ -621,15 +635,22 @@ export function LoginModal({
           style={{ position: 'absolute', opacity: 0 }}
         />
         <span
+          className="mero-login-option-indicator"
           style={{
             ...styles.radioIndicator,
             ...(active ? styles.radioIndicatorActive : {}),
           }}
         >
-          {active && <span style={styles.radioDot} />}
+          {active && (
+            <span className="mero-login-option-dot" style={styles.radioDot} />
+          )}
         </span>
         {label}
-        {meta && <span style={styles.nodeMeta}>{meta}</span>}
+        {meta && (
+          <span className="mero-login-option-meta" style={styles.nodeMeta}>
+            {meta}
+          </span>
+        )}
       </label>
     );
   };
@@ -637,8 +658,12 @@ export function LoginModal({
   const renderNodeSection = () => {
     if (discovering) {
       return (
-        <div style={styles.discovering} data-testid="node-discovering">
-          <div style={styles.spinnerSmall} />
+        <div
+          className="mero-login-discovering"
+          style={styles.discovering}
+          data-testid="node-discovering"
+        >
+          <div className="mero-login-spinner" style={styles.spinnerSmall} />
           <p>Searching for local nodes...</p>
         </div>
       );
@@ -646,7 +671,7 @@ export function LoginModal({
 
     return (
       <>
-        <p style={styles.info}>
+        <p className="mero-login-info" style={styles.info}>
           {hasDiscovered
             ? 'Select your Calimero node to continue.'
             : 'No local node found. Enter a node URL to continue.'}
@@ -654,6 +679,7 @@ export function LoginModal({
 
         {hasDiscovered && (
           <div
+            className="mero-login-options"
             style={styles.radioList}
             role="radiogroup"
             aria-label="Available nodes"
@@ -672,6 +698,7 @@ export function LoginModal({
             value={customUrl}
             onChange={(e) => setCustomUrl(e.target.value)}
             placeholder="https://your-node-url.calimero.network"
+            className="mero-login-input"
             style={styles.input}
             data-testid="node-url-input"
             autoFocus={!hasDiscovered}
@@ -683,9 +710,10 @@ export function LoginModal({
           />
         )}
 
-        <div style={styles.toolbar}>
+        <div className="mero-login-toolbar" style={styles.toolbar}>
           <button
             type="button"
+            className="mero-login-rescan"
             style={styles.rescan}
             onClick={() => setScanNonce((n) => n + 1)}
             data-testid="rescan-button"
@@ -702,18 +730,23 @@ export function LoginModal({
   // modal body, with no wrapper, so a direct LoginModal user sees no change.
   const renderNodeBody = () => {
     const body = loading ? (
-      <div style={styles.loading}>
+      <div className="mero-login-loading" style={styles.loading}>
         <p>Connecting to node...</p>
-        <div style={styles.spinner} />
+        <div className="mero-login-spinner" style={styles.spinner} />
       </div>
     ) : (
       <>
-        {error && <p style={styles.error}>{error}</p>}
+        {error && (
+          <p className="mero-login-error" style={styles.error}>
+            {error}
+          </p>
+        )}
 
         {renderNodeSection()}
 
-        <div style={styles.buttonGroup}>
+        <div className="mero-login-actions" style={styles.buttonGroup}>
           <button
+            className="mero-login-button mero-login-primary"
             onClick={handleConnect}
             disabled={!canConnect}
             style={{
@@ -730,6 +763,7 @@ export function LoginModal({
     if (!cloudTab) return body;
     return (
       <div
+        className="mero-login-panel"
         role="tabpanel"
         id="mero-login-panel-node"
         aria-labelledby="mero-login-tab-node"
@@ -757,7 +791,12 @@ export function LoginModal({
     selectTab(TABS[next].id);
   };
   const renderTabs = () => (
-    <div role="tablist" aria-label="How to connect" style={styles.tabList}>
+    <div
+      className="mero-login-tabs"
+      role="tablist"
+      aria-label="How to connect"
+      style={styles.tabList}
+    >
       {TABS.map((t) => {
         const selected = activeTab === t.id;
         return (
@@ -767,6 +806,9 @@ export function LoginModal({
               tabRefs.current[t.id] = el;
             }}
             type="button"
+            className={
+              selected ? 'mero-login-tab mero-login-tab-active' : 'mero-login-tab'
+            }
             role="tab"
             id={`mero-login-tab-${t.id}`}
             aria-selected={selected}
@@ -791,21 +833,41 @@ export function LoginModal({
         @keyframes meroFadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes meroSlideIn { from { transform: translateY(-12px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
       `}</style>
-      <div style={{ ...themeVars, ...styles.overlay }} onClick={onClose}>
-        <div style={styles.content} onClick={(e) => e.stopPropagation()}>
-          <button style={styles.closeButton} onClick={onClose} aria-label="Close">
+      <div
+        className="mero-login-overlay"
+        style={{ ...themeVars, ...styles.overlay }}
+        onClick={onClose}
+      >
+        <div
+          className="mero-login-dialog"
+          style={styles.content}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            className="mero-login-close"
+            style={styles.closeButton}
+            onClick={onClose}
+            aria-label="Close"
+          >
             &times;
           </button>
 
-          <div style={styles.header}>
-            <CalimeroLogo size={44} color={cssVar(resolved, 'primary')} />
-            <h1 style={styles.title}>Connect to Calimero</h1>
+          <div className="mero-login-header" style={styles.header}>
+            <CalimeroLogo
+              size={44}
+              color={cssVar(resolved, 'primary')}
+              className="mero-login-logo"
+            />
+            <h1 className="mero-login-title" style={styles.title}>
+              Connect to Calimero
+            </h1>
           </div>
 
           {cloudTab && renderTabs()}
 
           {activeTab === 'cloud' && cloudTab ? (
             <div
+              className="mero-login-panel"
               role="tabpanel"
               id="mero-login-panel-cloud"
               aria-labelledby="mero-login-tab-cloud"
