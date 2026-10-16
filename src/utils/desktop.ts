@@ -7,8 +7,8 @@
  * navigate the app window off to another origin.
  *
  * Two signals, either is enough:
- * - `__TAURI_INTERNALS__`, which Tauri injects natively into every webview it
- *   creates, remote URLs included — what mero-js's own Tauri check reads;
+ * - `__TAURI_INTERNALS__` with a callable `invoke`, which Tauri injects natively
+ *   into every webview it creates, remote URLs included;
  * - `__TAURI_FETCH_PROXY_INJECTED__`, the marker the desktop's app-window
  *   init script sets, in case a future Tauri stops exposing the former there.
  *
@@ -17,5 +17,12 @@
 export function isDesktopWindow(): boolean {
   if (typeof window === 'undefined') return false;
   const w = window as unknown as Record<string, unknown>;
-  return '__TAURI_INTERNALS__' in w || w.__TAURI_FETCH_PROXY_INJECTED__ === true;
+  // A real object with a callable `invoke`: an element with this id also shows up as the global.
+  const internals = w.__TAURI_INTERNALS__ as { invoke?: unknown } | null | undefined;
+  const tauri =
+    typeof internals === 'object' &&
+    internals !== null &&
+    !(typeof Node !== 'undefined' && internals instanceof Node) &&
+    typeof internals.invoke === 'function';
+  return tauri || w.__TAURI_FETCH_PROXY_INJECTED__ === true;
 }

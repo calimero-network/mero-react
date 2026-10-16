@@ -87,19 +87,20 @@ describe('useAccountEnrolment', () => {
     expect(result.current.returning).toBe(true);
   });
 
-  it('a callback this tab did not start is refused', async () => {
+  it('a callback the SDK did not start is refused, with its reason as the note', async () => {
     localStorage.setItem('calimero.device', JSON.stringify(KEYS));
     readEnrolmentCallback.mockReturnValue({ state: 'x', cert: 'c' });
+    completeDeviceEnrolment.mockRejectedValue(
+      new Error('this enrolment answers a request this app did not make'),
+    );
     const { result } = renderHook(() => useAccountEnrolment(), { wrapper });
     expect(result.current.returning).toBe(true);
-    await waitFor(() => expect(result.current.note).toMatch(/could not be verified/));
-    expect(completeDeviceEnrolment).not.toHaveBeenCalled();
+    await waitFor(() => expect(result.current.note).toMatch(/did not make/));
     expect(connectWithAccount).not.toHaveBeenCalled();
   });
 
-  it('a callback it started completes and connects', async () => {
+  it('a callback completes and connects, in whichever tab the wallet returns to', async () => {
     localStorage.setItem('calimero.device', JSON.stringify(KEYS));
-    sessionStorage.setItem('calimero.enrol.state', 'sent-state');
     readEnrolmentCallback.mockReturnValue({ state: 'sent-state', cert: 'c' });
     completeDeviceEnrolment.mockResolvedValue({ account: 'ee'.repeat(32), credential: 'cred' });
     getAccountRelays.mockResolvedValue([{ relayUrl: 'https://relay.example', fresh: true }]);
@@ -107,7 +108,7 @@ describe('useAccountEnrolment', () => {
 
     await waitFor(() => expect(connectWithAccount).toHaveBeenCalledTimes(1));
     expect(completeDeviceEnrolment).toHaveBeenCalledWith(
-      expect.objectContaining({ expectState: 'sent-state', devicePublicKey: KEYS.signPk, kemPublicKey: KEYS.kemPk }),
+      expect.objectContaining({ state: 'sent-state', devicePublicKey: KEYS.signPk, kemPublicKey: KEYS.kemPk }),
     );
     expect(connectWithAccount).toHaveBeenCalledWith({
       relayUrl: 'https://relay.example',
@@ -116,12 +117,10 @@ describe('useAccountEnrolment', () => {
       deviceSecret: KEYS.signSk,
     });
     expect(result.current.note).toBeNull();
-    expect(sessionStorage.getItem('calimero.enrol.state')).toBeNull();
   });
 
   it('an account with no relays connects with a note', async () => {
     localStorage.setItem('calimero.device', JSON.stringify(KEYS));
-    sessionStorage.setItem('calimero.enrol.state', 's');
     readEnrolmentCallback.mockReturnValue({ state: 's' });
     completeDeviceEnrolment.mockResolvedValue({ account: 'ee'.repeat(32), credential: 'cred' });
     getAccountRelays.mockResolvedValue([]);
@@ -131,7 +130,7 @@ describe('useAccountEnrolment', () => {
     expect(result.current.note).toMatch(/nowhere to write yet/);
   });
 
-  it('goToWallet remembers a state and leaves for the wallet', async () => {
+  it('goToWallet leaves for the wallet with the state the SDK minted', async () => {
     localStorage.setItem('calimero.device', JSON.stringify(KEYS));
     readEnrolmentCallback.mockReturnValue(null);
     const assign = vi.fn();
@@ -140,10 +139,11 @@ describe('useAccountEnrolment', () => {
     try {
       const { result } = renderHook(() => useAccountEnrolment({ walletUrl: 'https://wallet.test/enrol' }), { wrapper });
       await result.current.goToWallet();
-      const state = sessionStorage.getItem('calimero.enrol.state');
-      expect(state).toMatch(/^[0-9a-f]{32}$/);
       expect(assign).toHaveBeenCalledTimes(1);
-      expect(String(assign.mock.calls[0][0])).toContain('https://wallet.test/enrol');
+      const url = new URL(String(assign.mock.calls[0][0]));
+      expect(url.origin + url.pathname).toBe('https://wallet.test/enrol');
+      expect(url.searchParams.get('state')).toBeTruthy();
+      expect(sessionStorage.length).toBe(0);
     } finally {
       Object.defineProperty(window, 'location', { configurable: true, value: original });
     }
@@ -169,8 +169,7 @@ describe('useAccountEnrolment', () => {
     /** Enrol with `rows` as the cloud's relay answer; resolve with the session connected. */
     async function enrol(rows: unknown[]): Promise<DelegatedSession> {
       localStorage.setItem('calimero.device', JSON.stringify(KEYS));
-      sessionStorage.setItem('calimero.enrol.state', 's');
-      readEnrolmentCallback.mockReturnValue({ state: 's' });
+        readEnrolmentCallback.mockReturnValue({ state: 's' });
       completeDeviceEnrolment.mockResolvedValue({ account: ACCOUNT, credential: 'cred' });
       getAccountRelays.mockResolvedValue(rows);
       renderHook(() => useAccountEnrolment(), { wrapper });
