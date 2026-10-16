@@ -484,3 +484,74 @@ describe('LoginModal — tabs', () => {
     expect(screen.getByRole('tab', { name: 'Node' }).getAttribute('aria-selected')).toBe('true');
   });
 });
+
+describe('LoginModal — styling hooks', () => {
+  it('names its parts with stable `mero-login-*` classes', async () => {
+    vi.stubGlobal('fetch', mockFetch([NODE_A]));
+    renderModal();
+    await screen.findByTestId('node-option-localhost:2428');
+
+    // Portalled to body, as `body > .mero-login-overlay` rules expect.
+    const overlay = document.querySelector('body > .mero-login-overlay');
+    expect(overlay).not.toBeNull();
+    const dialog = overlay!.querySelector(':scope > .mero-login-dialog');
+    expect(dialog).not.toBeNull();
+    expect(dialog!.querySelector('.mero-login-title')!.textContent).toBe(
+      'Connect to Calimero',
+    );
+    expect(screen.getByRole('button', { name: 'Close' }).className).toBe(
+      'mero-login-close',
+    );
+    expect(dialog!.querySelector('.mero-login-logo')).not.toBeNull();
+
+    expect(screen.getByRole('tablist').className).toBe('mero-login-tabs');
+    expect(screen.getByRole('tab', { name: 'Node' }).className).toBe(
+      'mero-login-tab mero-login-tab-active',
+    );
+    expect(screen.getByRole('tab', { name: 'Cloud' }).className).toBe(
+      'mero-login-tab',
+    );
+    expect(screen.getByRole('tabpanel').className).toBe('mero-login-panel');
+
+    expect(screen.getByRole('radiogroup').className).toBe('mero-login-options');
+    expect(screen.getByTestId('node-option-localhost:2428').className).toBe(
+      'mero-login-option mero-login-option-active',
+    );
+    expect(screen.getByTestId('node-option-custom').className).toBe(
+      'mero-login-option',
+    );
+    expect(dialog!.querySelectorAll('.mero-login-option-dot')).toHaveLength(1);
+    expect(screen.getByTestId('connect-button').className).toBe(
+      'mero-login-button mero-login-primary',
+    );
+    expect(screen.getByTestId('rescan-button').className).toBe(
+      'mero-login-rescan',
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Cloud' }));
+    expect(screen.getByTestId('enrol-button').className).toBe(
+      'mero-login-button mero-login-primary',
+    );
+    expect(screen.getByTestId('account-sign-in-panel').className).toBe(
+      'mero-login-account',
+    );
+  });
+
+  it('reads its shadow from `--mero-login-shadow`, defaulting to the old one', () => {
+    vi.stubGlobal('fetch', mockFetch([]));
+    renderModal();
+    const dialog = document.querySelector<HTMLElement>('.mero-login-dialog')!;
+    const shadow = dialog.getAttribute('style') ?? '';
+    // The fallback is exactly the shadow the dialog had before it was a
+    // variable, accent ring included, so an app that sets nothing sees no change.
+    expect(shadow).toContain(
+      'box-shadow: var(--mero-login-shadow, 0 25px 50px -12px rgba(0, 0, 0, 0.6), 0 0 0 1px color-mix(in srgb, var(--mero-accent, #a5ff11) 15%, transparent))',
+    );
+    // No inline font: it is inherited, so `.mero-login-overlay` can set it.
+    expect(dialog.style.fontFamily).toBe('');
+    expect(
+      document.querySelector<HTMLElement>('.mero-login-overlay')!.style
+        .fontFamily,
+    ).toBe('');
+  });
+});

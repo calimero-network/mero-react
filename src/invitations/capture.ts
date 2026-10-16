@@ -82,6 +82,12 @@ export interface CapturedInvitation {
 
 type Listener = (invitation: CapturedInvitation) => void;
 
+/** Told whenever `peekInvitation()` would answer differently. */
+const watchers = new Set<() => void>();
+function notifyWatchers(): void {
+  for (const watcher of watchers) watcher();
+}
+
 /**
  * How many loads may auto-join one invitation before it needs a human.
  *
@@ -213,6 +219,7 @@ export function urlWithoutInvitation(href: string): string {
 
 function deliver(invitation: CapturedInvitation): void {
   current = invitation;
+  notifyWatchers();
   if (listeners.size === 0) {
     buffered = invitation;
     return;
@@ -284,8 +291,15 @@ function ensureController(): void {
       params: { ...intent.params, [INVITATION_PARAM]: token },
       resolve: () => {
         forgetAttempts(token);
-        if (current?.token === token) current = null;
+        // Acked before any listener took it (declined on the logged-out
+        // invitation screen): it must not be replayed to the redemption
+        // hook that subscribes once the person logs in.
+        if (buffered?.token === token) buffered = null;
         intent.resolve();
+        if (current?.token === token) {
+          current = null;
+          notifyWatchers();
+        }
       },
       autoJoin: spendAttempt(token),
     });
@@ -344,6 +358,22 @@ export function peekInvitation(): CapturedInvitation | null {
   return current;
 }
 
+/**
+ * Be told when the captured invitation changes: one arrives, or it is acked.
+ *
+ * Unlike `onInvitation` this takes nothing: the invitation stays buffered for
+ * whoever redeems it. It is for UI that only needs to know one is pending — the
+ * logged-out invitation screen — and pairs with `peekInvitation` as a
+ * `useSyncExternalStore` source.
+ */
+export function subscribeInvitation(watcher: () => void): () => void {
+  ensureController();
+  watchers.add(watcher);
+  return () => {
+    watchers.delete(watcher);
+  };
+}
+
 /** Test seam: drop the controller and any buffered intent. */
 export function resetInvitationCaptureForTests(): void {
   controller?.dispose();
@@ -353,4 +383,7 @@ export function resetInvitationCaptureForTests(): void {
   current = null;
   attemptsKey = "calimero:invitation-attempts";
   ownSlugs = new Set();
+  // Watchers outlive a reset (a mounted component keeps its subscription);
+  // they hear that the answer changed.
+  notifyWatchers();
 }

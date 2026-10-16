@@ -1,3 +1,19 @@
+## [9.16.0](https://github.com/calimero-network/mero-react/compare/mero-react-v9.15.0...mero-react-v9.16.0) (2026-10-16)
+
+### Features
+
+* **invitations:** a "You're invited" screen for a link opened logged out ([ff6f82c](https://github.com/calimero-network/mero-react/commit/ff6f82c949e724960dda0521b7091249b6f42c96))
+
+### Bug Fixes
+
+* **invitations:** InvitationGate stays out of the way outside a MeroProvider ([4ab0136](https://github.com/calimero-network/mero-react/commit/4ab0136a4cdb2f8716d6a57aabbe3b80815ddaf0))
+
+## [9.15.0](https://github.com/calimero-network/mero-react/compare/mero-react-v9.14.1...mero-react-v9.15.0) (2026-10-16)
+
+### Features
+
+* **login:** stable mero-login-* classes and --mero-login-shadow on the connect dialog ([3fce5c0](https://github.com/calimero-network/mero-react/commit/3fce5c097b042b97a1c5f5964837a2f279400c72))
+
 ## [9.14.1](https://github.com/calimero-network/mero-react/compare/mero-react-v9.14.0...mero-react-v9.14.1) (2026-10-15)
 
 ### Bug Fixes

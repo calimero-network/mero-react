@@ -343,6 +343,43 @@
   background: var(--mero-bg-tertiary);
 }
 
+/* Invitation screen (InvitationGate): the page an invite link lands on while
+   logged out. A full page, opaque, so the landing page underneath never shows
+   through. Below LoginModal (z-index 10000), which its login button opens. */
+.mero-invite-landing {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  overflow-y: auto;
+  background: var(--mero-bg);
+  color: var(--mero-text);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    Oxygen, Ubuntu, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.mero-invite-landing-card {
+  width: min(460px, 100%);
+}
+
+.mero-invite-landing-card .mero-invite-title {
+  font-size: 22px;
+}
+
+.mero-invite-landing-login {
+  display: inline-flex;
+}
+
+.mero-invite-landing-login .mero-connect-button {
+  min-width: 0;
+  padding: 9px 16px;
+  line-height: 1.2;
+}
+
 @keyframes mero-invite-spin {
   to {
     transform: rotate(360deg);
