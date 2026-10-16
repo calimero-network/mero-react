@@ -1,3 +1,9 @@
+## [9.16.1](https://github.com/calimero-network/mero-react/compare/mero-react-v9.16.0...mero-react-v9.16.1) (2026-10-16)
+
+### Bug Fixes
+
+* **invitations:** a stray click no longer leaves the syncing dialog ([c549bb0](https://github.com/calimero-network/mero-react/commit/c549bb0c26a3434d85d3a2f94a29414e7971f598))
+
 ## [9.16.0](https://github.com/calimero-network/mero-react/compare/mero-react-v9.15.0...mero-react-v9.16.0) (2026-10-16)
 
 ### Features
