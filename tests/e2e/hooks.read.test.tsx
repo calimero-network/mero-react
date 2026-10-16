@@ -15,7 +15,7 @@ import {
   useNamespaces,
   useNamespacesForApplication,
   useNamespace,
-  useNamespaceIdentity,
+  useNodeIdentity,
   useNamespaceGroups,
   useGroupInfo,
   useGroupMembers,
@@ -84,8 +84,8 @@ describe('Phase 1 — read hooks vs live node', () => {
     expect(r.namespace).toBeTruthy();
   });
 
-  it('useNamespaceIdentity(namespaceId)', async () => {
-    const r = await settle(() => renderHookWithMero(fx.mero, () => useNamespaceIdentity(fx.namespaceId)));
+  it('useNodeIdentity()', async () => {
+    const r = await settle(() => renderHookWithMero(fx.mero, () => useNodeIdentity()));
     expect(r.error).toBeNull();
     expect(r.identity).toBeTruthy();
   });

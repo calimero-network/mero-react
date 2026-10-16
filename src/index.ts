@@ -156,7 +156,6 @@ export {
   useNamespace,
   useNamespaceGroups,
   useMigrationEvents,
-  useNamespaceIdentity,
   useNodeIdentity,
   useNamespaces,
   useNamespacesForApplication,

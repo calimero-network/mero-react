@@ -25,7 +25,6 @@ import type {
   JoinNamespaceRequest,
   ListGroupMembersResponseData,
   Namespace,
-  NamespaceIdentity,
   NodeIdentity,
   ReparentGroupRequest,
   AddGroupMembersRequest,
@@ -1387,23 +1386,6 @@ export function useNodeIdentity() {
     admin ? () => admin.getNodeIdentity() : null,
     null,
     [admin],
-  );
-  return { identity: data, loading, error, refetch };
-}
-
-/**
- * @deprecated Use {@link useNodeIdentity}. Identity is per-node, not
- * per-namespace, and this no longer gates on participation: it answers for a
- * namespace this node never joined, so `identity != null` is not "am I a
- * member?" — ask `useNamespaces` for that. Its `publicKey` is the signing key,
- * NOT the account member-addressing wants.
- */
-export function useNamespaceIdentity(namespaceId?: string | null) {
-  const { admin } = useMero();
-  const { data, loading, error, refetch } = useAsyncResource<NamespaceIdentity | null>(
-    admin && namespaceId ? () => admin.getNamespaceIdentity(namespaceId) : null,
-    null,
-    [admin, namespaceId],
   );
   return { identity: data, loading, error, refetch };
 }

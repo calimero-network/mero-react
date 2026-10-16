@@ -505,7 +505,7 @@ useGroupMetadata, useMemberMetadata, useUpdateMemberRole
 useSetDefaultCapabilities, useDefaultCapabilities
 useSetSubgroupVisibility, useSubgroupVisibility, useSetTeeAdmissionPolicy
 useDetachContextFromGroup
-useNamespaces, useNamespace, useNamespaceGroups, useNamespaceIdentity
+useNamespaces, useNamespace, useNamespaceGroups, useNodeIdentity
 useNamespacesForApplication, useCreateNamespace, useDeleteNamespace
 useJoinNamespace, useRedeemInvitation, useCreateNamespaceInvitation, useCreateGroupInNamespace
 useBlobInfo, useBlobUrl, useUploadBlob
