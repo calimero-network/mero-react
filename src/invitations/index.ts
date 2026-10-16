@@ -2,6 +2,7 @@ export {
   primeInvitationCapture,
   onInvitation,
   peekInvitation,
+  subscribeInvitation,
   resetInvitationCaptureForTests,
   invitationFromRaw,
   buildInviteLink,
@@ -40,3 +41,6 @@ export {
 export type { JoinSyncOptions, JoinSyncState } from './useJoinSync';
 export { JoinSyncBanner } from './JoinSyncBanner';
 export type { JoinSyncBannerProps } from './JoinSyncBanner';
+
+export { InvitationGate, usePendingInvitation } from './InvitationGate';
+export type { InvitationGateProps } from './InvitationGate';

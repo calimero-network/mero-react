@@ -6,7 +6,9 @@ import {
   MAX_AUTO_JOIN_ATTEMPTS,
   buildInviteLink,
   onInvitation,
+  peekInvitation,
   primeInvitationCapture,
+  subscribeInvitation,
   resetInvitationCaptureForTests,
   type CapturedInvitation,
 } from "./capture";
@@ -180,6 +182,39 @@ describe("invitation capture", () => {
       onInvitation((i) => seen.push(i.token));
       expect(seen).toEqual([]);
     });
+  });
+
+  it("tells a watcher an invitation is pending without taking it from the redeemer", () => {
+    primeInvitationCapture("app");
+    let changes = 0;
+    const off = subscribeInvitation(() => changes++);
+    expect(peekInvitation()).toBeNull();
+
+    resetInvitationCaptureForTests();
+    openAt("/?invitation=WATCHED");
+    primeInvitationCapture("app");
+    expect(changes).toBeGreaterThan(0);
+    expect(peekInvitation()?.token).toBe("WATCHED");
+
+    // Watching consumed nothing: the redeemer still gets it.
+    const seen: string[] = [];
+    onInvitation((i) => seen.push(i.token));
+    expect(seen).toEqual(["WATCHED"]);
+
+    const before = changes;
+    peekInvitation()!.resolve();
+    expect(changes).toBe(before + 1);
+    expect(peekInvitation()).toBeNull();
+    off();
+  });
+
+  it("does not replay an invitation acked before anyone subscribed", () => {
+    openAt("/?invitation=DECLINED");
+    primeInvitationCapture("app");
+    peekInvitation()!.resolve(); // "Not now" on the logged-out screen
+    const seen: string[] = [];
+    onInvitation((i) => seen.push(i.token));
+    expect(seen).toEqual([]);
   });
 
   it("builds the one shareable link shape, carrying extra parameters beside the token", () => {
