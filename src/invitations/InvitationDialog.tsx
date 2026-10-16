@@ -7,7 +7,8 @@
  *
  *   awaiting-confirmation  "Join “Design team”?"           Join / Not now
  *   joining                "Joining “Design team”…"        (cannot be closed)
- *   syncing                "Syncing “Design team”…"        Continue in background
+ *   syncing                "Syncing “Design team”…"        (cannot be closed; once
+ *                                                           slow: Continue in background)
  *   ready                  "You're in “Design team”"       closes by itself
  *   already-member         "You're already in …"           Done
  *   failed                 the reason, in plain words      Try again / Close
@@ -19,6 +20,13 @@
  * reads the data clears it (`useJoinSync` with `settled`), when the app says so
  * here (`synced`), or at the watchdog's hard ceiling. So the app root needs no
  * page state threaded up to it: the page that knows says so through the flag.
+ *
+ * Joining and syncing are not closed by a stray click or Escape: leaving
+ * mid-sync lands on a page whose data has not arrived. While the dialog is up
+ * the rest of the page is `inert`, so nothing behind it takes a click or focus.
+ * A sync slow enough to trip the watchdog offers "Continue in background"; the
+ * dialog then keeps the flag's ceiling running, so a page that never mounts
+ * cannot leave the namespace flagged.
  *
  * Test ids are the contract the apps' two-node journeys drive: `invite-prompt`
  * (with `data-stage`), `invite-accept`, `invite-decline`, `invite-retry`,
@@ -97,31 +105,44 @@ export function InvitationDialog({
 }: InvitationDialogProps) {
   const { state, accept, decline, retry, dismiss } = redemption;
   const joinedId = state.stage === 'joined' ? state.namespaceId : null;
-  const stillSyncing = useJustJoined(joinedId);
+  // The namespace still being waited on, kept after "Continue in background"
+  // takes the redemption back to idle: the wait goes on without the dialog.
+  const [backgroundId, setBackgroundId] = useState<string | null>(null);
+  useEffect(() => {
+    if (joinedId) setBackgroundId(joinedId);
+  }, [joinedId]);
+  const waitingId = joinedId ?? backgroundId;
+  const flagged = useJustJoined(waitingId);
+  const stillSyncing = joinedId !== null && flagged;
+  useEffect(() => {
+    if (!joinedId && backgroundId && !flagged) setBackgroundId(null);
+  }, [joinedId, backgroundId, flagged]);
 
   // The app's own word that the data is here ends the wait just as the page's
   // `useJoinSync` would.
   useEffect(() => {
-    if (joinedId && stillSyncing && synced) clearNamespaceJustJoined(joinedId);
-  }, [joinedId, stillSyncing, synced]);
+    if (waitingId && flagged && synced) clearNamespaceJustJoined(waitingId);
+  }, [waitingId, flagged, synced]);
 
   // A sync that never settles must not pin the dialog: past the watchdog it
   // says so, and at the hard ceiling it lets go (the flag too, so the page's
   // own banner does not outlive it).
   const [slow, setSlow] = useState(false);
+  // Keyed on the namespace, not on whether the dialog shows it, so sending it
+  // to the background neither restarts nor drops the ceiling.
   useEffect(() => {
     setSlow(false);
-    if (!joinedId || !stillSyncing) return;
+    if (!waitingId || !flagged) return;
     const slowTimer = setTimeout(() => setSlow(true), JOIN_SYNC_WATCHDOG_MS);
     const ceiling = setTimeout(
-      () => clearNamespaceJustJoined(joinedId),
+      () => clearNamespaceJustJoined(waitingId),
       JOIN_SYNC_MAX_MS,
     );
     return () => {
       clearTimeout(slowTimer);
       clearTimeout(ceiling);
     };
-  }, [joinedId, stillSyncing]);
+  }, [waitingId, flagged]);
 
   const stage: InvitationDialogStage | null =
     state.stage === 'idle'
@@ -141,8 +162,33 @@ export function InvitationDialog({
 
   const titleId = useId();
   const bodyId = useId();
+  const overlayRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const primaryRef = useRef<HTMLButtonElement>(null);
+
+  // Modal for real: the page behind takes no click, focus or screen-reader
+  // visit while the dialog is up, including what the app mounts meanwhile.
+  const open = stage !== null;
+  useEffect(() => {
+    const overlay = overlayRef.current;
+    if (!open || !overlay || typeof MutationObserver === 'undefined') return;
+    const made = new Set<Element>();
+    const shut = (el: Element) => {
+      if (el === overlay || el.hasAttribute('inert')) return;
+      if (el.tagName === 'SCRIPT' || el.tagName === 'STYLE') return;
+      el.setAttribute('inert', '');
+      made.add(el);
+    };
+    Array.from(document.body.children).forEach(shut);
+    const observer = new MutationObserver((records) => {
+      for (const record of records) record.addedNodes.forEach((n) => n instanceof Element && shut(n));
+    });
+    observer.observe(document.body, { childList: true });
+    return () => {
+      observer.disconnect();
+      made.forEach((el) => el.removeAttribute('inert'));
+    };
+  }, [open]);
 
   // Focus follows the stage, so a keyboard user lands on what to do next.
   useEffect(() => {
@@ -150,10 +196,14 @@ export function InvitationDialog({
     (primaryRef.current ?? dialogRef.current)?.focus();
   }, [stage]);
 
-  /** Closing means what the stage says it means; mid-join it means nothing. */
+  /**
+   * Closing means what the stage says it means. Mid-join and mid-sync it means
+   * nothing: a stray click must not drop the person on a page whose data has
+   * not arrived. A slow sync has its own, deliberate, button.
+   */
   const close = useCallback(() => {
     if (stage === 'awaiting-confirmation') decline();
-    else if (stage && stage !== 'joining') dismiss();
+    else if (stage && stage !== 'joining' && stage !== 'syncing') dismiss();
   }, [stage, decline, dismiss]);
 
   const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -224,9 +274,14 @@ export function InvitationDialog({
 
   return createPortal(
     <div
+      ref={overlayRef}
       className="mero-invite-overlay"
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget) close();
+        if (event.target !== event.currentTarget) return;
+        // Keep focus in the dialog: a press on the backdrop would otherwise
+        // move it to <body>, and Tab from there walks the page behind.
+        event.preventDefault();
+        close();
       }}
     >
       <div
@@ -291,7 +346,7 @@ export function InvitationDialog({
               </button>
             </>
           ) : null}
-          {stage === 'syncing' ? (
+          {stage === 'syncing' && slow ? (
             <button
               ref={primaryRef}
               type="button"
