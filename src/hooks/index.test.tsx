@@ -31,9 +31,9 @@ import {
   useMemberMetadata,
   useNamespace,
   useNamespaceGroups,
-  useNamespaceIdentity,
   useNamespaces,
   useNamespacesForApplication,
+  useNodeIdentity,
   useReparentGroup,
   useRetryGroupUpgrade,
   useSetContextMetadata,
@@ -180,7 +180,6 @@ function createMero(
         contextCount: 0,
         subgroupCount: 0,
       }),
-      getNamespaceIdentity: vi.fn().mockResolvedValue({ namespaceId: 'ns-1', publicKey: 'pk-1' }),
       listNamespacesForApplication: vi.fn().mockResolvedValue([]),
       createNamespace: vi.fn().mockResolvedValue({ namespaceId: 'ns-1' }),
       deleteNamespace: vi.fn().mockResolvedValue({ isDeleted: true }),
@@ -781,18 +780,18 @@ describe('group and context hooks', () => {
     });
   });
 
-  it('useNamespaceIdentity loads namespace identity', async () => {
-    const getNamespaceIdentity = vi.fn().mockResolvedValue({ namespaceId: 'ns-1', publicKey: 'pk-abc' });
-    const mero = createMero({ getNamespaceIdentity });
+  it('useNodeIdentity loads the node identity', async () => {
+    const getNodeIdentity = vi.fn().mockResolvedValue({ accountId: 'ac-1', deviceId: 'dv-1', publicKey: 'pk-abc' });
+    const mero = createMero({ getNodeIdentity });
     mockUseMero.mockReturnValue({ mero, admin: mero.admin } as never);
 
-    const { result } = renderHook(() => useNamespaceIdentity('ns-1'));
+    const { result } = renderHook(() => useNodeIdentity());
 
     await waitFor(() => {
-      expect(result.current.identity?.publicKey).toBe('pk-abc');
+      expect(result.current.identity?.accountId).toBe('ac-1');
     });
 
-    expect(getNamespaceIdentity).toHaveBeenCalledWith('ns-1');
+    expect(getNodeIdentity).toHaveBeenCalledTimes(1);
   });
 
   it('useNamespacesForApplication loads namespaces for an app', async () => {
