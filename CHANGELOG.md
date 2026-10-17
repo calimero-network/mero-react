@@ -1,3 +1,16 @@
+## [10.0.0](https://github.com/calimero-network/mero-react/compare/mero-react-v9.16.1...mero-react-v10.0.0) (2026-10-17)
+
+### ⚠ BREAKING CHANGES
+
+* **hooks:** removed export useNamespaceIdentity (use useNodeIdentity).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_011N9xBKtiynqSSMfXjJo7Q2
+
+### Code Refactoring
+
+* **hooks:** remove useNamespaceIdentity ([5493cad](https://github.com/calimero-network/mero-react/commit/5493cad170d36b8ebd3b114f53718d6a3c385030))
+
 ## [9.16.1](https://github.com/calimero-network/mero-react/compare/mero-react-v9.16.0...mero-react-v9.16.1) (2026-10-16)
 
 ### Bug Fixes
