@@ -1,3 +1,9 @@
+## [10.1.0](https://github.com/calimero-network/mero-react/compare/mero-react-v10.0.1...mero-react-v10.1.0) (2026-10-18)
+
+### Features
+
+* **invitations:** say when a link was already used, or the person was removed ([#113](https://github.com/calimero-network/mero-react/issues/113)) ([1444f7c](https://github.com/calimero-network/mero-react/commit/1444f7c0b2cb98fa4162b94fd6e46fa51bd5c2ee))
+
 ## [10.0.1](https://github.com/calimero-network/mero-react/compare/mero-react-v10.0.0...mero-react-v10.0.1) (2026-10-18)
 
 ### Bug Fixes
