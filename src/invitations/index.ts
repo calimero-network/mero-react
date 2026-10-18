@@ -13,7 +13,7 @@ export {
 } from './capture';
 export type { CapturedInvitation } from './capture';
 
-export { describeInviteFailure } from './describeInviteFailure';
+export { describeInviteFailure, type JoinFailureReason } from './describeInviteFailure';
 
 export { useInviteRedemption } from './useInviteRedemption';
 export type {
