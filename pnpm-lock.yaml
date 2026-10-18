@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@calimero-network/mero-js':
-        specifier: ^26.0.1
-        version: 26.0.1
+        specifier: ^26.1.0
+        version: 26.1.0
     devDependencies:
       '@calimero-network/mero-platform':
         specifier: ^0.1.0
@@ -223,8 +223,8 @@ packages:
     resolution: {integrity: sha512-ctxtJ/eA+t+6q2++vj5j7FYX3nRu311q1wfYH3xjlLOsczhlhxAg2FWNUXhpGvAw3BWo1xBcvOV6/YLc2r5FJw==}
     hasBin: true
 
-  '@calimero-network/mero-js@26.0.1':
-    resolution: {integrity: sha512-t1qfpX3T1U/qk9bVSWx0oU35elQhupziVsoXd7UnOOq9Ckwui6K+D5GyueNMqVwC3ItAs3+H5CLdYXpivlmbng==}
+  '@calimero-network/mero-js@26.1.0':
+    resolution: {integrity: sha512-1Ju9Px01HgJ16wBehGmvmD5YuP2CEUW8Vf4EbL1bPRmKzW25P+B5gKWQbgO8J2dJv9UoJCGxFQWyNkuRpPt9GQ==}
     engines: {node: '>=18.0.0'}
 
   '@calimero-network/mero-platform@0.1.0':
@@ -3945,7 +3945,7 @@ snapshots:
     dependencies:
       css-tree: 3.2.1
 
-  '@calimero-network/mero-js@26.0.1':
+  '@calimero-network/mero-js@26.1.0':
     dependencies:
       '@phala/dcap-qvl': 0.5.3
     transitivePeerDependencies:
