@@ -4,7 +4,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, waitFor, cleanup } from '@testing-library/react';
 
 const NODE_KEY = 'cd'.repeat(32);
-const RELAY = 'https://relay.example.com';
+// Loopback: mero-js seals a hosted relay's traffic to its attested TD, which is
+// mero-js's to test; a loopback relay keeps the plain fetch stubbed here.
+const RELAY = 'http://127.0.0.1:2528';
 const REGISTRY = 'https://apps.calimero.network';
 const KV_SIGNER = 'did:key:z6MkoWkrrFjwC4FXQfyGwwcgTPvRoJZenMEVm9Z332bdkz6B';
 const KV_ID = 'e810e86f443e8c1feb98bb83a266246478a34c75397a66a78bd5a790c6d72d0d';
