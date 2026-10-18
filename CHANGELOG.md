@@ -1,3 +1,9 @@
+## [10.1.1](https://github.com/calimero-network/mero-react/compare/mero-react-v10.1.0...mero-react-v10.1.1) (2026-10-18)
+
+### Bug Fixes
+
+* **deps:** require mero-js 26.1.0 so a used link and a removal get their own message ([#115](https://github.com/calimero-network/mero-react/issues/115)) ([069a314](https://github.com/calimero-network/mero-react/commit/069a314eee7efeb75a6a5b8bcae6b00d0b3f82fc))
+
 ## [10.1.0](https://github.com/calimero-network/mero-react/compare/mero-react-v10.0.1...mero-react-v10.1.0) (2026-10-18)
 
 ### Features
