@@ -1,3 +1,9 @@
+## [10.1.2](https://github.com/calimero-network/mero-react/compare/mero-react-v10.1.1...mero-react-v10.1.2) (2026-10-19)
+
+### Bug Fixes
+
+* **auth:** sign in an app Calimero Desktop opens, under mero-js 26 ([#116](https://github.com/calimero-network/mero-react/issues/116)) ([f6256a2](https://github.com/calimero-network/mero-react/commit/f6256a203eea631df25c0ffe1a9a8bc221820edc))
+
 ## [10.1.1](https://github.com/calimero-network/mero-react/compare/mero-react-v10.1.0...mero-react-v10.1.1) (2026-10-18)
 
 ### Bug Fixes
