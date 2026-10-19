@@ -28,6 +28,7 @@ import {
   type DeviceEnrolmentCallback,
 } from '@calimero-network/mero-js';
 import { useMero } from '../context';
+import { isDesktopWindow } from '../utils/desktop';
 import { saveDelegatedCredential } from '@calimero-network/mero-js';
 
 /** Where this tab's device keypair lives. */
@@ -248,7 +249,9 @@ export interface UseAccountEnrolmentOptions {
   /**
    * When false, the hook reads no callback and completes nothing, so a
    * component that has the account path switched off leaves the fragment for
-   * whichever component does handle it. Default true.
+   * whichever component does handle it. Default true, except inside a
+   * Calimero Desktop window (see `isDesktopWindow`), whose app is already
+   * bound to the desktop's node and has no wallet callback to complete.
    */
   enabled?: boolean;
 }
@@ -268,7 +271,7 @@ export interface AccountEnrolment {
 
 export function useAccountEnrolment({
   walletUrl: walletOverride,
-  enabled = true,
+  enabled = !isDesktopWindow(),
 }: UseAccountEnrolmentOptions = {}): AccountEnrolment {
   const { connectWithAccount, cloudBaseUrl } = useMero();
   const [note, setNote] = useState<string | null>(null);

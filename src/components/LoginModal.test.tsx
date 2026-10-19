@@ -318,9 +318,35 @@ describe('LoginModal — Cloud tab by default', () => {
       );
     });
 
-    it('an explicit `cloud` object still shows the Cloud tab', async () => {
+    it("ignores the caller's `cloud` object: no Cloud tab, even coming back from the wallet", async () => {
       vi.stubGlobal('fetch', mockFetch([]));
-      renderModal({ cloud: { onEnrol: vi.fn(), note: null, walletUrl: 'w', customWallet: false } });
+      renderModal({
+        cloud: { onEnrol: vi.fn(), note: null, walletUrl: 'w', customWallet: false },
+        initialTab: 'cloud',
+      });
+
+      await screen.findByTestId('node-url-input');
+      expect(screen.queryByRole('tab')).toBeNull();
+      expect(screen.queryByRole('tabpanel')).toBeNull();
+    });
+
+    it('`cloudOnDesktop` brings back the default Cloud tab', async () => {
+      vi.stubGlobal('fetch', mockFetch([]));
+      renderModal({ cloudOnDesktop: true });
+
+      const tabs = await screen.findAllByRole('tab');
+      expect(tabs.map((t) => t.textContent)).toEqual(['Node', 'Cloud']);
+      expect(useAccountEnrolmentMock).toHaveBeenCalledWith(
+        expect.objectContaining({ enabled: true }),
+      );
+    });
+
+    it("`cloudOnDesktop` brings back the caller's `cloud` object", async () => {
+      vi.stubGlobal('fetch', mockFetch([]));
+      renderModal({
+        cloud: { onEnrol: vi.fn(), note: null, walletUrl: 'w', customWallet: false },
+        cloudOnDesktop: true,
+      });
 
       const tabs = await screen.findAllByRole('tab');
       expect(tabs.map((t) => t.textContent)).toEqual(['Node', 'Cloud']);
