@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 
+import 'fake-indexeddb/auto';
+import { IDBFactory } from 'fake-indexeddb';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, act, cleanup } from '@testing-library/react';
 
@@ -56,6 +58,7 @@ import {
 } from '@calimero-network/mero-js';
 import type { TokenData, TokenStore } from '@calimero-network/mero-js';
 import { pinRelayNodeKey, readDelegatedSession, saveDelegatedSession } from '@calimero-network/mero-js';
+import { enrolledDevice } from '../test-utils/enrolledDevice';
 
 const meroMock = vi.mocked(MeroJs);
 const mockParseAuthCallback = vi.mocked(parseAuthCallback);
@@ -92,6 +95,7 @@ const settled = () =>
   waitFor(() => expect(screen.getByTestId('loading').textContent).toBe('false'));
 
 beforeEach(() => {
+  globalThis.indexedDB = new IDBFactory();
   localStorage.clear();
   meroMock.mockClear();
   mockParseAuthCallback.mockReset();
@@ -919,8 +923,9 @@ describe('MeroProvider — admin and can, per session', () => {
   });
 
   it('an account session gets the account admin, may invite and may not upgrade', async () => {
-    const account = 'aa'.repeat(32);
-    saveDelegatedSession({ account, credential: 'cc', deviceSecret: '11'.repeat(32), relayUrl: 'https://relay.example.com' });
+    const device = await enrolledDevice();
+    const { account } = device;
+    await saveDelegatedSession({ ...device, relayUrl: 'https://relay.example.com' });
     // A relay whose node key is already known. One that is not is awaited until
     // its key is learned (MeroContext.relay-key.test.tsx), and jsdom cannot
     // reach this one to learn it.
@@ -944,8 +949,9 @@ describe('MeroProvider — admin and can, per session', () => {
   });
 
   it('an account with no relay yet still gets an admin: a member of nothing', async () => {
-    const account = 'aa'.repeat(32);
-    saveDelegatedSession({ account, credential: 'cc', deviceSecret: '11'.repeat(32), relayUrl: null });
+    const device = await enrolledDevice();
+    const { account } = device;
+    await saveDelegatedSession({ ...device, relayUrl: null });
 
     render(
       <MeroProvider mode={AppMode.MultiContext} packageName="com.calimero.chat">
@@ -961,7 +967,7 @@ describe('MeroProvider — admin and can, per session', () => {
 
   it("connecting an account keeps the relay's executor on the session, through a reload", async () => {
     sessionStorage.clear();
-    const account = 'aa'.repeat(32);
+    const device = await enrolledDevice();
     const executorAccount = '6a'.repeat(32);
     render(
       <MeroProvider mode={AppMode.MultiContext} packageName="com.calimero.chat">
@@ -972,16 +978,14 @@ describe('MeroProvider — admin and can, per session', () => {
 
     act(() => {
       seen!.connectWithAccount({
-        account,
-        credential: 'cc',
-        deviceSecret: '11'.repeat(32),
+        ...device,
         relayUrl: 'https://relay.example.com',
         executorAccount,
       });
     });
     await waitFor(() => expect(seen?.isDelegated).toBe(true));
 
-    expect(readDelegatedSession()).toMatchObject({ relayUrl: 'https://relay.example.com', executorAccount });
+    expect(await readDelegatedSession()).toMatchObject({ relayUrl: 'https://relay.example.com', executorAccount });
   });
 });
 

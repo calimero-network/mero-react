@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
+import 'fake-indexeddb/auto';
+import { IDBFactory } from 'fake-indexeddb';
 import React from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderHook } from '@testing-library/react';
 
 const { mockBootstrap } = vi.hoisted(() => ({
@@ -12,22 +14,25 @@ vi.mock('@calimero-network/mero-js', async (importActual) => ({
 }));
 
 import { MeroContext } from '../context';
-import { saveDelegatedCredential } from '@calimero-network/mero-js';
+import { enrolledDevice } from '../test-utils/enrolledDevice';
 import { useDelegatedBootstrap } from './useDelegatedBootstrap';
 
-function wrapper(cloudBaseUrl?: string) {
-  const value = { connectWithAccount: () => {}, cloudBaseUrl } as unknown as React.ContextType<typeof MeroContext>;
+function wrapper(cloudBaseUrl: string | undefined, delegatedSession: unknown) {
+  const value = { connectWithAccount: () => {}, cloudBaseUrl, delegatedSession } as unknown as React.ContextType<typeof MeroContext>;
   return ({ children }: { children: React.ReactNode }) => (
     <MeroContext.Provider value={value}>{children}</MeroContext.Provider>
   );
 }
 
 describe('useDelegatedBootstrap cloud', () => {
+  beforeEach(() => {
+    globalThis.indexedDB = new IDBFactory();
+  });
   afterEach(() => sessionStorage.clear());
 
   it('asks the cloud the provider names', async () => {
-    saveDelegatedCredential({ account: 'aa'.repeat(32), credential: 'cc', deviceSecret: '11'.repeat(32) });
-    const { result } = renderHook(() => useDelegatedBootstrap(), { wrapper: wrapper('http://127.0.0.1:4499') });
+    const session = { ...(await enrolledDevice()), relayUrl: null };
+    const { result } = renderHook(() => useDelegatedBootstrap(), { wrapper: wrapper('http://127.0.0.1:4499', session) });
     await result.current.bootstrap({ namespaceId: 'ns', invitation: {} as never });
     expect(mockBootstrap).toHaveBeenCalledWith(expect.objectContaining({ cloudBaseUrl: 'http://127.0.0.1:4499' }));
   });

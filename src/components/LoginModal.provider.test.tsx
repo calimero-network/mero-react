@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import 'fake-indexeddb/auto';
+import { IDBFactory } from 'fake-indexeddb';
 
 /**
  * `LoginModal` with the REAL `useAccountEnrolment`, not the mock the main suite
@@ -27,6 +29,7 @@ function ctx(): MeroContextValue {
     connectToNode: vi.fn(),
     connectWithAccount: vi.fn(),
     isDelegated: false,
+    delegatedSession: null,
     admin: null,
     can: { createNamespace: true, createContext: true, invite: true, upgrade: true },
     app: {},
@@ -35,6 +38,7 @@ function ctx(): MeroContextValue {
 }
 
 beforeEach(() => {
+  globalThis.indexedDB = new IDBFactory();
   localStorage.clear();
   sessionStorage.clear();
   // Discovery finds nothing: every probe rejects like a closed port.

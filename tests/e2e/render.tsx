@@ -26,9 +26,10 @@ export function meroContextValue(mero: MeroJs): MeroContextValue {
     connectWithAccount: () => {},
     admin: mero.admin,
     isDelegated: false,
+    delegatedSession: null,
     can: { createNamespace: true, createContext: true, invite: true, upgrade: true },
     app: { packageName: undefined, packageVersion: undefined, registryUrl: undefined },
-    logout: () => {},
+    logout: async () => {},
     isLoading: false,
   };
 }

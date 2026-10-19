@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import 'fake-indexeddb/auto';
+import { IDBFactory } from 'fake-indexeddb';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
@@ -22,7 +24,8 @@ import { RelayClient } from '@calimero-network/mero-js';
 import { MeroContext } from '../context';
 import { isReturningFromWallet, useAccountEnrolment } from './useAccountEnrolment';
 import { foundDelegatedNamespace } from '@calimero-network/mero-js';
-import { attestKeyBinding, readDelegatedSession, saveDelegatedSession, type DelegatedAccountSession as DelegatedSession } from '@calimero-network/mero-js';
+import { attestKeyBinding, readDelegatedSession, saveDelegatedSession, signerFromSecret, type DelegatedAccountSession as DelegatedSession } from '@calimero-network/mero-js';
+import { enrolledDevice } from '../test-utils/enrolledDevice';
 
 const connectWithAccount = vi.fn();
 function wrapper({ children }: { children: React.ReactNode }) {
@@ -30,9 +33,10 @@ function wrapper({ children }: { children: React.ReactNode }) {
   return <MeroContext.Provider value={value}>{children}</MeroContext.Provider>;
 }
 
-const KEYS = { signPk: 'aa'.repeat(32), signSk: 'bb'.repeat(32), kemPk: 'cc'.repeat(32), kemSk: 'dd'.repeat(32) };
+const SIGNER = await signerFromSecret('bb'.repeat(32));
 
 beforeEach(() => {
+  globalThis.indexedDB = new IDBFactory();
   localStorage.clear();
   sessionStorage.clear();
   readEnrolmentCallback.mockReset();
@@ -53,7 +57,6 @@ describe('useAccountEnrolment', () => {
     expect(result.current.customWallet).toBe(false);
     expect(completeDeviceEnrolment).not.toHaveBeenCalled();
     expect(connectWithAccount).not.toHaveBeenCalled();
-    expect(localStorage.getItem('calimero.device')).toBeNull();
   });
 
   it('reads the callback once, however many renders', () => {
@@ -88,43 +91,36 @@ describe('useAccountEnrolment', () => {
   });
 
   it('a callback this tab did not start is refused', async () => {
-    localStorage.setItem('calimero.device', JSON.stringify(KEYS));
+    const refusal = 'this enrolment was not started here, or was already completed - start it again';
     readEnrolmentCallback.mockReturnValue({ state: 'x', cert: 'c' });
-    // mero-js matches the state to a request this browser began, and throws.
-    completeDeviceEnrolment.mockRejectedValue(
-      new Error('this enrolment answers a request this app did not make - start the enrolment again from here'),
-    );
+    completeDeviceEnrolment.mockRejectedValue(new Error(refusal));
     const { result } = renderHook(() => useAccountEnrolment(), { wrapper });
     expect(result.current.returning).toBe(true);
-    await waitFor(() => expect(result.current.note).toMatch(/did not make/));
-    expect(completeDeviceEnrolment).toHaveBeenCalledWith(expect.objectContaining({ state: 'x' }));
+    await waitFor(() => expect(result.current.note).toBe(refusal));
     expect(connectWithAccount).not.toHaveBeenCalled();
   });
 
   it('a callback it started completes and connects', async () => {
-    localStorage.setItem('calimero.device', JSON.stringify(KEYS));
-    readEnrolmentCallback.mockReturnValue({ state: 'sent-state', cert: 'c' });
-    completeDeviceEnrolment.mockResolvedValue({ account: 'ee'.repeat(32), credential: 'cred' });
+    const callback = { state: 'sent-state', cert: 'c' };
+    readEnrolmentCallback.mockReturnValue(callback);
+    completeDeviceEnrolment.mockResolvedValue({ account: 'ee'.repeat(32), credential: 'cred', signer: SIGNER });
     getAccountRelays.mockResolvedValue([{ relayUrl: 'https://relay.example', fresh: true }]);
     const { result } = renderHook(() => useAccountEnrolment(), { wrapper });
 
     await waitFor(() => expect(connectWithAccount).toHaveBeenCalledTimes(1));
-    expect(completeDeviceEnrolment).toHaveBeenCalledWith(
-      expect.objectContaining({ state: 'sent-state', devicePublicKey: KEYS.signPk, kemPublicKey: KEYS.kemPk }),
-    );
+    expect(completeDeviceEnrolment).toHaveBeenCalledWith(callback);
     expect(connectWithAccount).toHaveBeenCalledWith({
       relayUrl: 'https://relay.example',
       account: 'ee'.repeat(32),
       credential: 'cred',
-      deviceSecret: KEYS.signSk,
+      signer: SIGNER,
     });
     expect(result.current.note).toBeNull();
   });
 
   it('an account with no relays connects with a note', async () => {
-    localStorage.setItem('calimero.device', JSON.stringify(KEYS));
     readEnrolmentCallback.mockReturnValue({ state: 's' });
-    completeDeviceEnrolment.mockResolvedValue({ account: 'ee'.repeat(32), credential: 'cred' });
+    completeDeviceEnrolment.mockResolvedValue({ account: 'ee'.repeat(32), credential: 'cred', signer: SIGNER });
     getAccountRelays.mockResolvedValue([]);
     const { result } = renderHook(() => useAccountEnrolment(), { wrapper });
 
@@ -132,8 +128,17 @@ describe('useAccountEnrolment', () => {
     expect(result.current.note).toMatch(/nowhere to write yet/);
   });
 
+  it('a relay lookup that fails still connects, with nowhere to write and the reason', async () => {
+    readEnrolmentCallback.mockReturnValue({ state: 's' });
+    completeDeviceEnrolment.mockResolvedValue({ account: 'ee'.repeat(32), credential: 'cred', signer: SIGNER });
+    getAccountRelays.mockRejectedValue(new Error('cloud unreachable'));
+    const { result } = renderHook(() => useAccountEnrolment(), { wrapper });
+
+    await waitFor(() => expect(connectWithAccount).toHaveBeenCalledWith(expect.objectContaining({ relayUrl: null })));
+    expect(result.current.note).toMatch(/cloud unreachable/);
+  });
+
   it('goToWallet remembers a state and leaves for the wallet', async () => {
-    localStorage.setItem('calimero.device', JSON.stringify(KEYS));
     readEnrolmentCallback.mockReturnValue(null);
     const assign = vi.fn();
     const original = window.location;
@@ -144,8 +149,7 @@ describe('useAccountEnrolment', () => {
       expect(assign).toHaveBeenCalledTimes(1);
       const url = new URL(String(assign.mock.calls[0][0]));
       expect(url.origin + url.pathname).toBe('https://wallet.test/enrol');
-      // The state is mero-js's: `deviceEnrolmentUrl` mints and remembers it.
-      expect(url.searchParams.get('state')).toMatch(/^[0-9a-f]{32}$/);
+      for (const key of ['state', 'enrol-device', 'enrol-kem']) expect(url.searchParams.get(key)).toBeTruthy();
     } finally {
       Object.defineProperty(window, 'location', { configurable: true, value: original });
     }
@@ -166,13 +170,12 @@ describe('useAccountEnrolment', () => {
   describe('a relay the cloud assigned', () => {
     const ACCOUNT = 'ee'.repeat(32);
     const EXECUTOR = '6a'.repeat(32);
-    const RELAY = 'https://relay.example';
+    const RELAY = 'http://127.0.0.1:4480';
 
     /** Enrol with `rows` as the cloud's relay answer; resolve with the session connected. */
-    async function enrol(rows: unknown[]): Promise<DelegatedSession> {
-      localStorage.setItem('calimero.device', JSON.stringify(KEYS));
-        readEnrolmentCallback.mockReturnValue({ state: 's' });
-      completeDeviceEnrolment.mockResolvedValue({ account: ACCOUNT, credential: 'cred' });
+    async function enrol(rows: unknown[], enrolled: object = { account: ACCOUNT, credential: 'cred', signer: SIGNER }): Promise<DelegatedSession> {
+      readEnrolmentCallback.mockReturnValue({ state: 's' });
+      completeDeviceEnrolment.mockResolvedValue(enrolled);
       getAccountRelays.mockResolvedValue(rows);
       renderHook(() => useAccountEnrolment(), { wrapper });
       await waitFor(() => expect(connectWithAccount).toHaveBeenCalledTimes(1));
@@ -188,7 +191,7 @@ describe('useAccountEnrolment', () => {
         executorAccount: EXECUTOR,
         account: ACCOUNT,
         credential: 'cred',
-        deviceSecret: KEYS.signSk,
+        signer: SIGNER,
       });
     });
 
@@ -210,10 +213,9 @@ describe('useAccountEnrolment', () => {
     it('founds a namespace on it straight away, with no namespace joined first', async () => {
       // Founding attests the relay afresh; a pinned key no longer stands in for
       // that. A loopback relay answers with a mock quote binding its node key.
-      const LOCAL = 'http://127.0.0.1:2528';
       const NODE_KEY = 'ef'.repeat(32);
       const attest = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
-        expect(String(input)).toBe(`${LOCAL}/admin-api/tee/attest`);
+        expect(String(input)).toBe(`${RELAY}/admin-api/tee/attest`);
         const { nonce } = JSON.parse(String(init?.body)) as { nonce: string };
         const bytes = (h: string) => Uint8Array.from(h.match(/../g)!, (b) => parseInt(b, 16));
         const binding = await attestKeyBinding(bytes(NODE_KEY));
@@ -229,15 +231,20 @@ describe('useAccountEnrolment', () => {
       const describeGovernance = vi.spyOn(RelayClient.prototype, 'describeGovernance');
       const enableHa = vi.spyOn(RealCloudClient.prototype, 'enableHaAsAccount').mockResolvedValue({ status: 'enabled' } as never);
       try {
-        const session = await enrol([
-          { peerId: 'p', relayUrl: LOCAL, fresh: true, executorAccount: EXECUTOR, assigned: true },
-        ]);
+        completeDeviceEnrolment.mockImplementation(
+          (await vi.importActual<typeof import('@calimero-network/mero-js')>('@calimero-network/mero-js')).completeDeviceEnrolment,
+        );
+        const device = await enrolledDevice();
+        const session = await enrol(
+          [{ peerId: 'p', relayUrl: RELAY, fresh: true, executorAccount: EXECUTOR, assigned: true }],
+          { ...device, device: 'dd'.repeat(32) },
+        );
         // Through storage, as `connectWithAccount` persists it and a reload restores it.
-        saveDelegatedSession(session);
-        const restored = readDelegatedSession()!;
+        await saveDelegatedSession(session);
+        const restored = (await readDelegatedSession())!;
         expect(restored.executorAccount).toBe(EXECUTOR);
         // Nothing joined: the account's relay map is empty.
-        expect(localStorage.getItem(`calimero.delegated.relays.${ACCOUNT}`)).toBeNull();
+        expect(localStorage.getItem(`calimero.delegated.relays.${device.account}`)).toBeNull();
 
         await expect(foundDelegatedNamespace(restored)).resolves.toMatchObject({
           namespaceId: 'ab'.repeat(32),
@@ -262,7 +269,7 @@ describe('useAccountEnrolment', () => {
       ['sends something that is not an account', { executorAccount: 'NOT-HEX' }],
     ])('an old-server row that %s connects as before', async (_label, extra) => {
       const session = await enrol([{ peerId: 'p', relayUrl: RELAY, fresh: true, ...extra }]);
-      expect(session).toEqual({ relayUrl: RELAY, account: ACCOUNT, credential: 'cred', deviceSecret: KEYS.signSk });
+      expect(session).toEqual({ relayUrl: RELAY, account: ACCOUNT, credential: 'cred', signer: SIGNER });
       await expect(foundDelegatedNamespace(session)).rejects.toThrow(/executor account/);
     });
   });

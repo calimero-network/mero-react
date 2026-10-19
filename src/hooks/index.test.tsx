@@ -60,7 +60,9 @@ import {
 } from './index';
 import { HTTPError, RelayClient, type SignedGroupOpenInvitation } from '@calimero-network/mero-js';
 import { useMero } from '../context';
-import { clearDelegatedSession, saveDelegatedSession } from '@calimero-network/mero-js';
+import { enrolledDevice } from '../test-utils/enrolledDevice';
+import 'fake-indexeddb/auto';
+import { IDBFactory } from 'fake-indexeddb';
 
 vi.mock('../context', () => ({
   useMero: vi.fn(),
@@ -2079,10 +2081,10 @@ describe('hooks under an account session write through the context admin', () =>
     cleanup();
   });
 
-  function delegated() {
+  function delegated(delegatedSession: unknown = null) {
     const mero = createMero();
     const admin = createMero().admin;
-    mockUseMero.mockReturnValue({ mero, admin, isDelegated: true } as never);
+    mockUseMero.mockReturnValue({ mero, admin, isDelegated: true, delegatedSession } as never);
     return { mero, admin };
   }
 
@@ -2167,12 +2169,12 @@ describe('hooks under an account session write through the context admin', () =>
   it('useCreateContext names the bundle service in the creation warrant', async () => {
     // The delegated branch builds the relay call itself: every field of the
     // request with a warrant equivalent must reach it, serviceName first of all.
-    saveDelegatedSession({ account: 'aa'.repeat(32), credential: 'cc', deviceSecret: '11'.repeat(32), relayUrl: 'https://relay.example' } as never);
+    const session = { ...(await enrolledDevice()), relayUrl: 'https://relay.example' };
     const created = vi
       .spyOn(RelayClient.prototype, 'createContext')
       .mockResolvedValue({ contextId: 'cd'.repeat(32), groupId: 'ab'.repeat(32), memberPublicKey: 'ee'.repeat(32) } as never);
     try {
-      const { mero, admin } = delegated();
+      const { mero, admin } = delegated(session);
       const { result } = renderHook(() => useCreateContext());
       let response: unknown;
       await act(async () => {
@@ -2193,7 +2195,7 @@ describe('hooks under an account session write through the context admin', () =>
       expect(admin.createContext).not.toHaveBeenCalled();
     } finally {
       created.mockRestore();
-      clearDelegatedSession();
+      globalThis.indexedDB = new IDBFactory();
     }
   });
 });

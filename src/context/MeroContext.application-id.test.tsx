@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 
+import 'fake-indexeddb/auto';
+import { IDBFactory } from 'fake-indexeddb';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, waitFor, cleanup } from '@testing-library/react';
 
@@ -25,6 +27,7 @@ import { MeroProvider, useMero } from './MeroContext';
 import { AppMode } from '../types';
 import type { MeroContextValue } from '../types';
 import { pinRelayNodeKey, saveDelegatedSession } from '@calimero-network/mero-js';
+import { enrolledDevice } from '../test-utils/enrolledDevice';
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -41,6 +44,8 @@ function stubNetwork() {
     vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input instanceof Request ? input.url : input);
       requests.push(url);
+      if (url === `${RELAY}/auth/challenge`) return json({ data: { challenge: 'c'.repeat(64) } });
+      if (url === `${RELAY}/auth/token`) return json({ data: { access_token: 'relay-session', refresh_token: 'r' } });
       if (url.startsWith(`${RELAY}/admin-api/contexts`)) return json({ data: { contexts } });
       if (url.startsWith(`${RELAY}/admin-api/namespaces`)) return json({ data: [] });
       if (url.startsWith(`${REGISTRY}/api/v2/bundles`)) return registry();
@@ -58,7 +63,8 @@ function Capture() {
 const registryReads = () => requests.filter((u) => u.startsWith(`${REGISTRY}/api/v2/bundles`));
 const settled = () => waitFor(() => expect(seen?.isLoading).toBe(false));
 
-beforeEach(() => {
+beforeEach(async () => {
+  globalThis.indexedDB = new IDBFactory();
   localStorage.clear();
   sessionStorage.clear();
   seen = null;
@@ -72,7 +78,7 @@ beforeEach(() => {
   stubNetwork();
   vi.spyOn(console, 'warn').mockImplementation(() => {});
   vi.spyOn(console, 'error').mockImplementation(() => {});
-  saveDelegatedSession({ account: 'aa'.repeat(32), credential: 'cc', deviceSecret: '11'.repeat(32), relayUrl: RELAY });
+  await saveDelegatedSession({ ...(await enrolledDevice()), relayUrl: RELAY });
   pinRelayNodeKey(RELAY, NODE_KEY);
 });
 afterEach(() => {

@@ -12,7 +12,7 @@
  * connection mechanism — the only difference is how the relay was found.
  */
 
-import { useCallback, useState, useMemo } from 'react';
+import { useCallback, useState } from 'react';
 import type { SignedGroupOpenInvitation } from '@calimero-network/mero-js';
 import { useMero } from '../context';
 import {
@@ -21,8 +21,6 @@ import {
 } from '@calimero-network/mero-js';
 import {
   carryExecutorAccount,
-  readDelegatedCredential,
-  readDelegatedSession,
   rememberRelay,
   type DelegatedCredential,
 } from '@calimero-network/mero-js';
@@ -74,30 +72,13 @@ export interface UseDelegatedBootstrapResult {
 export function useDelegatedBootstrap(
   options: UseDelegatedBootstrapOptions = {},
 ): UseDelegatedBootstrapResult {
-  const { connectWithAccount, cloudBaseUrl: providerCloud } = useMero();
+  const { connectWithAccount, cloudBaseUrl: providerCloud, delegatedSession } = useMero();
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<BootstrapResult | null>(null);
 
-  // Read at render rather than held in state: the record is written by the
-  // enrolment return in `ConnectButtonAccount`, in the same tab but outside
-  // React's knowledge, so a cached copy would be stale exactly once — on the
-  // load where it matters.
-  //
-  // Read every render, but the same object while its contents are the same:
-  // a fresh parse each time made every callback below new on every render, and
-  // an app with any of them in an effect's dependencies looped ("Maximum update
-  // depth exceeded").
-  const read = readDelegatedCredential();
-  const credential = useMemo(
-    () => read,
-    // Keyed on the contents, not the parsed object.
-    [read?.account, read?.credential, read?.deviceSecret],
-  );
-  // The stored record rather than the context's `nodeUrl`: that one is seeded
-  // from `getNodeUrl()`, which can still hold a node URL from an earlier
-  // node-login on this origin, and a stale value there would hide the very state
-  // this reports.
-  const relayUrl = readDelegatedSession()?.relayUrl ?? null;
+  // Enrolment always connects, so the tab's session is the credential.
+  const credential: DelegatedCredential | null = delegatedSession;
+  const relayUrl = delegatedSession?.relayUrl ?? null;
 
   const cloudBaseUrl = options.cloudBaseUrl ?? providerCloud;
   const bootstrap = useCallback(
@@ -107,7 +88,7 @@ export function useDelegatedBootstrap(
       nodeUrl?: string;
       contextId?: string;
     }): Promise<BootstrapResult> => {
-      const held = readDelegatedCredential();
+      const held = credential;
       if (!held) {
         const failure: BootstrapResult = {
           ok: false,
@@ -141,14 +122,14 @@ export function useDelegatedBootstrap(
               contextId: input.contextId,
             });
           }
-          connectWithAccount(carryExecutorAccount(readDelegatedSession(), outcome.session));
+          connectWithAccount(carryExecutorAccount(delegatedSession, outcome.session));
         }
         return outcome;
       } finally {
         setRunning(false);
       }
     },
-    [cloudBaseUrl, connectWithAccount],
+    [cloudBaseUrl, connectWithAccount, credential, delegatedSession],
   );
 
   return {

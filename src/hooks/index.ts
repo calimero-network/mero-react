@@ -1,8 +1,8 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { classifyError, compareSemver, memberJoinedOpenOp, signerFromSecret } from '@calimero-network/mero-js';
+import { classifyError, compareSemver, memberJoinedOpenOp } from '@calimero-network/mero-js';
 import { useMero } from '../context';
 import { base58ToHex } from '../utils/base58';
-import { listDelegatedContexts, listDelegatedNamespaces, readDelegatedSession } from '@calimero-network/mero-js';
+import { listDelegatedContexts, listDelegatedNamespaces } from '@calimero-network/mero-js';
 import { governRoot } from '@calimero-network/mero-js';
 import { createDelegatedContext, createDelegatedPrivateContext } from '@calimero-network/mero-js';
 import type {
@@ -813,7 +813,7 @@ export function useSubscription(
  * Fetch contexts for the current node, optionally filtered by application ID.
  */
 export function useContexts(applicationId?: string | null) {
-  const { admin, isDelegated } = useMero();
+  const { admin, isDelegated, delegatedSession } = useMero();
   const { data, loading, error, refetch } = useAsyncResource<ApplicationContextRecord[]>(
     admin
       ? async () => {
@@ -824,7 +824,7 @@ export function useContexts(applicationId?: string | null) {
           if (isDelegated) {
             // Across every relay this account uses: its namespaces may each be
             // served by a different one, and each relay lists only its own.
-            const session = readDelegatedSession();
+            const session = delegatedSession;
             const listed = session ? await listDelegatedContexts(session) : [];
             const own = listed.filter(
               (c) => !applicationId || c.applicationId === applicationId,
@@ -838,7 +838,7 @@ export function useContexts(applicationId?: string | null) {
         }
       : null,
     [],
-    [admin, applicationId, isDelegated],
+    [admin, applicationId, isDelegated, delegatedSession],
   );
   return { contexts: data, loading, error, refetch };
 }
@@ -1117,7 +1117,7 @@ export function useContextDiscovery(options: ContextDiscoveryOptions): ContextDi
 // ---- Context CRUD Hooks ----
 
 export function useCreateContext() {
-  const { admin, isDelegated } = useMero();
+  const { admin, isDelegated, delegatedSession } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const createContext = useCallback(
@@ -1125,7 +1125,7 @@ export function useCreateContext() {
       if (isDelegated) {
         // An account creates a context through the relay serving the namespace,
         // under a creation warrant (mero-js createDelegatedContext).
-        const session = readDelegatedSession();
+        const session = delegatedSession;
         if (!session || !request.groupId) return null;
         return run(() =>
           createDelegatedContext(session, {
@@ -1141,7 +1141,7 @@ export function useCreateContext() {
       if (!admin) return null;
       return run(() => admin.createContext(request));
     },
-    [admin, run, isDelegated],
+    [admin, run, isDelegated, delegatedSession],
   );
 
   return { createContext, loading, error };
@@ -1166,13 +1166,13 @@ export interface CreatePrivateContextRequest {
  *    each under its own warrant (mero-js createDelegatedContext).
  */
 export function useCreatePrivateContext() {
-  const { admin, isDelegated } = useMero();
+  const { admin, isDelegated, delegatedSession } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const createPrivateContext = useCallback(
     async (request: CreatePrivateContextRequest): Promise<{ contextId: string } | null> => {
       if (isDelegated) {
-        const session = readDelegatedSession();
+        const session = delegatedSession;
         if (!session) return null;
         return run(() => createDelegatedPrivateContext(session, request));
       }
@@ -1193,7 +1193,7 @@ export function useCreatePrivateContext() {
         return { contextId };
       });
     },
-    [admin, run, isDelegated],
+    [admin, run, isDelegated, delegatedSession],
   );
 
   return { createPrivateContext, loading, error };
@@ -1235,26 +1235,25 @@ export function useJoinContext(options: MutationOptions = {}) {
 }
 
 export function useJoinSubgroupInheritance() {
-  const { admin, isDelegated } = useMero();
+  const { admin, isDelegated, delegatedSession } = useMero();
   const { loading, error, run } = useAsyncMutation();
 
   const joinSubgroupInheritance = useCallback(
     async (groupId: string) => {
       if (isDelegated) {
-        const session = readDelegatedSession();
+        const session = delegatedSession;
         if (!session) return null;
         // Joining an open subgroup yourself: a root op carrying your own credential.
         return run(async () => {
           await governRoot(session, groupId, memberJoinedOpenOp({ member: session.account, groupId, credential: session.credential }));
           // An account's identity in the subgroup is its device key: what its ops are signed with.
-          const { publicKey } = await signerFromSecret(session.deviceSecret);
-          return { groupId, memberPublicKey: publicKey, wasInherited: false };
+          return { groupId, memberPublicKey: session.signer.publicKey, wasInherited: false };
         });
       }
       if (!admin) return null;
       return run(() => admin.joinSubgroupInheritance(groupId));
     },
-    [admin, run, isDelegated],
+    [admin, run, isDelegated, delegatedSession],
   );
 
   return { joinSubgroupInheritance, loading, error };
@@ -1391,21 +1390,21 @@ export function useNodeIdentity() {
 }
 
 export function useNamespacesForApplication(applicationId?: string | null) {
-  const { admin, isDelegated } = useMero();
+  const { admin, isDelegated, delegatedSession } = useMero();
   const { data, loading, error, refetch } = useAsyncResource<Namespace[]>(
     admin && applicationId
       ? isDelegated
         ? async () => {
             // The per-application listing is node-wide, so a relay refuses it to
             // an account; list its own namespaces on every relay and filter.
-            const session = readDelegatedSession();
+            const session = delegatedSession;
             const listed = session ? await listDelegatedNamespaces(session) : [];
             return listed.filter((ns) => ns.targetApplicationId === applicationId);
           }
         : () => admin.listNamespacesForApplication(applicationId)
       : null,
     [],
-    [admin, applicationId, isDelegated],
+    [admin, applicationId, isDelegated, delegatedSession],
   );
   return { namespaces: data, loading, error, refetch };
 }
