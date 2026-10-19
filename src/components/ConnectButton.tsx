@@ -282,6 +282,8 @@ export function ConnectButton({
               }
             : false
         }
+        // `cloud` is already off on the desktop unless the caller asked for it.
+        cloudOnDesktop={cloud}
         initialTab={cloud && enrolment.returning ? 'cloud' : 'node'}
       />
     </div>

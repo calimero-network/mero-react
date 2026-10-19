@@ -77,6 +77,27 @@ describe('useAccountEnrolment', () => {
     expect(result.current.returning).toBe(false);
   });
 
+  describe('inside a Calimero Desktop window', () => {
+    beforeEach(() => {
+      (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = { invoke: () => Promise.resolve() };
+    });
+    afterEach(() => {
+      delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__;
+    });
+
+    it('is off by default and reads no callback', () => {
+      const { result } = renderHook(() => useAccountEnrolment(), { wrapper });
+      expect(readEnrolmentCallback).not.toHaveBeenCalled();
+      expect(result.current.returning).toBe(false);
+    });
+
+    it('`enabled: true` still turns it on', () => {
+      readEnrolmentCallback.mockReturnValue(null);
+      renderHook(() => useAccountEnrolment({ enabled: true }), { wrapper });
+      expect(readEnrolmentCallback).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('an error callback is returning and becomes the note', async () => {
     readEnrolmentCallback.mockImplementation(() => {
       throw new Error('enrolment cancelled');

@@ -16,6 +16,8 @@
  * `useAccountEnrolment` inside the modal, so an app that mounts `LoginModal`
  * itself gets account sign-in with no wiring; `cloud={false}` removes it, and
  * a `cloud` object (what `ConnectButton` passes) replaces it with the caller's.
+ * Inside a Calimero Desktop window there is no Cloud tab unless
+ * `cloudOnDesktop` is set.
  *
  * Because of that the modal reads `useMero()` and must sit inside a
  * `MeroProvider`, as every app's does.
@@ -83,13 +85,13 @@ export interface LoginModalProps {
    *   the modal is open. Nothing to wire; the modal must be inside a
    *   `MeroProvider`.
    * - **`false`**: no Cloud tab and no tabs at all — the node dialog as it was.
-   * - **omitted inside a Calimero Desktop window**: as `false` — the window is
-   *   already bound to the desktop's node. Pass a `cloud` object to override.
-   *   The modal reads no enrolment callback, leaving it to whichever component
-   *   does.
    * - **An object**: the caller's own enrolment, used verbatim; the modal reads
    *   none itself. The values are `useAccountEnrolment`'s, as `ConnectButton`
    *   passes them.
+   *
+   * Inside a Calimero Desktop window every form is as `false` — the window is
+   * already bound to the desktop's node, so there is no relay and no passkey to
+   * go through. `cloudOnDesktop` turns that off.
    */
   cloud?:
     | false
@@ -103,6 +105,12 @@ export interface LoginModalProps {
         /** Whether `walletUrl` is an override rather than the hosted wallet. */
         customWallet?: boolean;
       };
+  /**
+   * Show the Cloud tab inside a Calimero Desktop window too. Default false:
+   * the desktop logs in to its own node, so `cloud` — omitted or an object —
+   * is ignored there (see `isDesktopWindow`).
+   */
+  cloudOnDesktop?: boolean;
   /**
    * The tab selected when the modal opens. Ignored with `cloud={false}`.
    *
@@ -442,6 +450,7 @@ export function LoginModal({
   theme,
   localNodePorts = DEFAULT_LOCAL_NODE_PORTS,
   cloud,
+  cloudOnDesktop = false,
   initialTab: initialTabProp,
 }: LoginModalProps) {
   // The modal's own enrolment, for the default case only. A caller that passed
@@ -451,10 +460,11 @@ export function LoginModal({
   // exactly when nobody else is. Called before the `isOpen` early return, so a
   // tab coming back from the wallet is completed while the modal is closed too.
   //
-  // Inside a Calimero Desktop window there is no default Cloud tab: the window
-  // is already bound to the desktop's node (see `isDesktopWindow`). A caller
-  // that passes its own `cloud` object still gets it.
-  const ownCloud = cloud === undefined && !isDesktopWindow();
+  // Inside a Calimero Desktop window there is no Cloud tab at all, the caller's
+  // `cloud` object included: the window is already bound to the desktop's node
+  // (see `isDesktopWindow`). Only `cloudOnDesktop` brings it back.
+  const cloudAllowed = cloudOnDesktop || !isDesktopWindow();
+  const ownCloud = cloud === undefined && cloudAllowed;
   const own = useAccountEnrolment({ enabled: ownCloud });
   const cloudTab = useMemo(
     () =>
@@ -467,8 +477,8 @@ export function LoginModal({
             walletUrl: own.walletUrl,
             customWallet: own.customWallet,
           }
-        : cloud || null,
-    [cloud, ownCloud, own.goToWallet, own.note, own.walletUrl, own.customWallet],
+        : (cloudAllowed && cloud) || null,
+    [cloud, cloudAllowed, ownCloud, own.goToWallet, own.note, own.walletUrl, own.customWallet],
   );
   const initialTab: LoginModalTab =
     initialTabProp ?? (ownCloud && own.returning ? 'cloud' : 'node');
