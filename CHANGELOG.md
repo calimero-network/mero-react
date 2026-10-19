@@ -1,3 +1,9 @@
+## [10.2.0](https://github.com/calimero-network/mero-react/compare/mero-react-v10.1.2...mero-react-v10.2.0) (2026-10-19)
+
+### Features
+
+* **login:** no Cloud tab inside Calimero Desktop, even with a `cloud` object; `cloudOnDesktop` to opt back in ([#117](https://github.com/calimero-network/mero-react/issues/117)) ([b21e641](https://github.com/calimero-network/mero-react/commit/b21e641deade6083ecd6554d0a847aa7d4745c53)), closes [#99](https://github.com/calimero-network/mero-react/issues/99)
+
 ## [10.1.2](https://github.com/calimero-network/mero-react/compare/mero-react-v10.1.1...mero-react-v10.1.2) (2026-10-19)
 
 ### Bug Fixes
