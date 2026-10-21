@@ -1,3 +1,9 @@
+## [10.2.1](https://github.com/calimero-network/mero-react/compare/mero-react-v10.2.0...mero-react-v10.2.1) (2026-10-21)
+
+### Bug Fixes
+
+* **context:** resolve an account's applicationId from the registry without a relay ([#119](https://github.com/calimero-network/mero-react/issues/119)) ([92f9740](https://github.com/calimero-network/mero-react/commit/92f97403ea6f8c1687aefd68400d3ec5c01ddb90))
+
 ## [10.2.0](https://github.com/calimero-network/mero-react/compare/mero-react-v10.1.2...mero-react-v10.2.0) (2026-10-19)
 
 ### Features
