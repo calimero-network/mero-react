@@ -389,10 +389,14 @@ export function MeroProvider({
     let active = true;
     const stop = new AbortController();
     (async () => {
-      // No relay, so no client and nothing to ask. A brand-new account is a
+      // No relay, so no client and no contexts to ask. A brand-new account is a
       // member of nothing — there are no contexts to derive an application from,
-      // which is exactly the state an invitation changes.
-      if (!client || !relayUrl) return;
+      // which is exactly the state an invitation changes. The registry needs no
+      // relay, though: with a `packageName` the id is still learned below, or a
+      // brand-new account could never found its first namespace. Only learning
+      // the relay's key and the contexts fallback need one.
+      const hasRelay = Boolean(client && relayUrl);
+      if (!hasRelay && !packageName) return;
       // Admin reads and events need a session the relay accepts, which needs
       // its node key. Pinned, or learned from the relay's attestation; learned
       // now, the client is rebuilt so its session and events use it too. With
@@ -404,7 +408,8 @@ export function MeroProvider({
       // with backoff, and the client stays unpublished (and the session
       // loading) meanwhile: handing the app a client now would only send its
       // reads unsigned, to be refused as if the account had no access.
-      if (awaitingKey) {
+      // `awaitingKey` implies a client and a relay.
+      if (awaitingKey && relayUrl) {
         const nodeKey = await learnRelayNodeKey(relayUrl, { signal: stop.signal });
         if (!active) return;
         // `null` here is a refusal: the relay's quote did not verify, and asking
@@ -444,6 +449,8 @@ export function MeroProvider({
           if (!active) return;
         }
       }
+      // The contexts live on the relay: without one there is nothing to list.
+      if (!hasRelay) return;
       try {
         // Without a `packageName` (or with a registry that did not answer), the
         // contexts are the only thing that names an application. Across every

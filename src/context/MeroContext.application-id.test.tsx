@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, waitFor, cleanup } from '@testing-library/react';
+import { render, waitFor, cleanup, act } from '@testing-library/react';
 
 const NODE_KEY = 'cd'.repeat(32);
 // Loopback: mero-js seals a hosted relay's traffic to its attested TD, which is
@@ -18,13 +18,18 @@ vi.mock('@calimero-network/mero-js', async (importActual) => {
   return {
     ...actual,
     login: vi.fn(async () => ({ accessToken: 'relay-session', refreshToken: 'r' })),
+    // Stands in for the relay's attestation: pins and answers the key at once.
+    learnRelayNodeKey: vi.fn(async (relayUrl: string) => {
+      actual.pinRelayNodeKey(relayUrl, NODE_KEY);
+      return NODE_KEY;
+    }),
   };
 });
 
 import { MeroProvider, useMero } from './MeroContext';
 import { AppMode } from '../types';
 import type { MeroContextValue } from '../types';
-import { pinRelayNodeKey, saveDelegatedSession } from '@calimero-network/mero-js';
+import { learnRelayNodeKey, pinRelayNodeKey, saveDelegatedSession } from '@calimero-network/mero-js';
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -77,6 +82,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  vi.mocked(learnRelayNodeKey).mockClear();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -91,6 +97,48 @@ describe('MeroProvider — an account learns its applicationId', () => {
     await settled();
     await waitFor(() => expect(seen!.applicationId).toBe(KV_ID));
     expect(registryReads()).toEqual([`${REGISTRY}/api/v2/bundles?package=com.calimero.kv-store`]);
+  });
+
+  it('from the registry, by packageName, for a brand-new account that holds no relay yet', async () => {
+    // An account that has joined nothing has no relay. The registry needs none,
+    // and without the id the app could never found its first namespace.
+    localStorage.clear();
+    sessionStorage.clear();
+    saveDelegatedSession({ account: 'aa'.repeat(32), credential: 'cc', deviceSecret: '11'.repeat(32), relayUrl: null });
+    render(
+      <MeroProvider mode={AppMode.MultiContext} packageName="com.calimero.kv-store">
+        <Capture />
+      </MeroProvider>,
+    );
+    await settled();
+    await waitFor(() => expect(seen!.applicationId).toBe(KV_ID));
+    expect(seen!.isAuthenticated).toBe(true);
+    expect(seen!.mero).toBeNull();
+    expect(registryReads()).toEqual([`${REGISTRY}/api/v2/bundles?package=com.calimero.kv-store`]);
+    // No relay: no key to learn, no contexts to list.
+    expect(vi.mocked(learnRelayNodeKey)).not.toHaveBeenCalled();
+    expect(requests.some((u) => u.startsWith(`${RELAY}/admin-api/contexts`))).toBe(false);
+  });
+
+  it("still learns the relay's key once the session gains a relay after its first join", async () => {
+    localStorage.clear();
+    sessionStorage.clear();
+    const session = { account: 'aa'.repeat(32), credential: 'cc', deviceSecret: '11'.repeat(32) };
+    saveDelegatedSession({ ...session, relayUrl: null });
+    render(
+      <MeroProvider mode={AppMode.MultiContext} packageName="com.calimero.kv-store">
+        <Capture />
+      </MeroProvider>,
+    );
+    await waitFor(() => expect(seen!.applicationId).toBe(KV_ID));
+    expect(vi.mocked(learnRelayNodeKey)).not.toHaveBeenCalled();
+
+    // The first join hands the session a relay whose key is not pinned yet.
+    act(() => seen!.connectWithAccount({ ...session, relayUrl: RELAY }));
+    await waitFor(() => expect(vi.mocked(learnRelayNodeKey)).toHaveBeenCalledWith(RELAY, expect.anything()));
+    await settled();
+    expect(seen!.mero).not.toBeNull();
+    expect(seen!.applicationId).toBe(KV_ID);
   });
 
   it('stays null with no contexts and no packageName: nothing names an application', async () => {
