@@ -147,6 +147,8 @@ export interface MeroContextValue {
    * and events only for contexts it is a member of.
    */
   isDelegated: boolean;
+  /** True when the node serves this page from the app's own origin (see `MeroProviderConfig.servedByNode`). */
+  servedByNode?: boolean;
   /**
    * What this connection may do, so an app asks WHAT IS ALLOWED instead of
    * which transport it runs on. A node login can do everything; an account on
@@ -204,6 +206,13 @@ export interface MeroProviderConfig {
    * rejected and a security error is logged.
    */
   allowedNodeUrls?: string[];
+  /**
+   * Set when a node serves this page from the app's own origin
+   * (`{label}.localhost:2428`). The node is then `window.location.origin`: the
+   * client talks to it there whatever the callback's `node_url` says, and
+   * `ConnectButton` skips the node dialog and goes straight to login.
+   */
+  servedByNode?: boolean;
   /**
    * Token store for access/refresh tokens. Defaults to a localStorage-backed
    * store that persists across reloads.

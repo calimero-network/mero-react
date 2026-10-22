@@ -166,3 +166,21 @@ describe('ConnectButton — connected', () => {
     expect(value.logout).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('ConnectButton - served by a node', () => {
+  it('goes straight to the node login on its own origin, without the modal', () => {
+    const connectToNode = vi.fn();
+    renderButton({}, ctx({ servedByNode: true, connectToNode }));
+    fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+    expect(connectToNode).toHaveBeenCalledWith(window.location.origin);
+    expect(screen.queryByRole('tablist')).toBeNull();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('does not start the account enrolment', () => {
+    renderButton({ cloud: true }, ctx({ servedByNode: true }));
+    const enabled = (useAccountEnrolmentMock.mock.calls as unknown as [{ enabled: boolean }][]).map(([opts]) => opts.enabled);
+    expect(enabled.length).toBeGreaterThan(0);
+    expect(enabled.every((e) => e === false)).toBe(true);
+  });
+});
