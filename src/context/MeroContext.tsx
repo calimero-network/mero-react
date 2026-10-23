@@ -162,8 +162,10 @@ export function MeroProvider({
   cloudBaseUrl,
   timeoutMs = 30000,
   allowedNodeUrls,
+  servedByNode,
   tokenStore: tokenStoreProp,
 }: MeroProviderProps) {
+  const ownOrigin = servedByNode && isBrowser ? window.location.origin : null;
   const tokenStore = useMemo<TokenStore>(
     () => tokenStoreProp ?? new LocalStorageTokenStore(),
     [tokenStoreProp],
@@ -182,7 +184,7 @@ export function MeroProvider({
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
-  const [nodeUrl, setNodeUrlState] = useState<string | null>(() => getNodeUrl());
+  const [nodeUrl, setNodeUrlState] = useState<string | null>(() => ownOrigin ?? getNodeUrl());
   const [applicationId, setApplicationIdState] = useState<string | null>(
     () => getApplicationId() || null,
   );
@@ -206,14 +208,14 @@ export function MeroProvider({
         meroRef.current.close();
       }
       const instance = new MeroJs({
-        baseUrl: url,
+        baseUrl: ownOrigin ?? url,
         tokenStore,
         timeoutMs,
       });
       meroRef.current = instance;
       return instance;
     },
-    [timeoutMs, tokenStore],
+    [timeoutMs, tokenStore, ownOrigin],
   );
 
   const checkAuth = useCallback(
@@ -325,12 +327,12 @@ export function MeroProvider({
     setDelegated(null);
     setMero(null);
     setIsAuthenticated(false);
-    setNodeUrlState(null);
+    setNodeUrlState(ownOrigin);
     setApplicationIdState(null);
     setContextIdState(null);
     setContextIdentityState(null);
     meroRef.current = null;
-  }, [tokenStore]);
+  }, [tokenStore, ownOrigin]);
 
   /**
    * Install the relay client for a delegated record.
@@ -516,11 +518,15 @@ export function MeroProvider({
         // The callback URL is attacker-influenceable, so validate its node_url
         // BEFORE storing tokens or connecting — otherwise a malicious node_url
         // would receive the freshly-minted tokens (exfiltration).
-        const { url, rejected } = resolveTrustedNodeUrl({
-          candidate: callback.nodeUrl,
-          initiated: initiatedNodeUrl,
-          allowedNodeUrls,
-        });
+        // A node-served page is on the node's own origin: that origin is the
+        // trust anchor and the callback's `node_url` is not consulted.
+        const { url, rejected } = ownOrigin
+          ? { url: ownOrigin, rejected: false }
+          : resolveTrustedNodeUrl({
+              candidate: callback.nodeUrl,
+              initiated: initiatedNodeUrl,
+              allowedNodeUrls,
+            });
 
         callbackRef.current = null;
 
@@ -584,7 +590,7 @@ export function MeroProvider({
         // url === null && !rejected → callback had no node to bind to; ignore it.
       }
 
-      const savedUrl = nodeFromCallback || getNodeUrl();
+      const savedUrl = nodeFromCallback || ownOrigin || getNodeUrl();
       if (!savedUrl) {
         if (active) setIsLoading(false);
         return;
@@ -614,7 +620,7 @@ export function MeroProvider({
     return () => {
       active = false;
     };
-  }, [createMeroInstance, checkAuth, allowedNodeUrls, delegated]);
+  }, [createMeroInstance, checkAuth, allowedNodeUrls, delegated, ownOrigin]);
 
   // SSE connection for online/offline detection — no polling.
   useEffect(() => {
@@ -788,6 +794,7 @@ export function MeroProvider({
       connectToNode,
       connectWithAccount,
       isDelegated: delegated !== null,
+      servedByNode: ownOrigin !== null,
       admin,
       can: delegated !== null
         // An account founds a namespace through its relay and gives it this
@@ -802,7 +809,7 @@ export function MeroProvider({
       logout,
       isLoading,
     }),
-    [mero, admin, isAuthenticated, isOnline, nodeUrl, applicationId, contextId, contextIdentity, connectToNode, connectWithAccount, delegated, logout, isLoading, packageName, packageVersion, registryUrl, cloudBaseUrl],
+    [mero, admin, isAuthenticated, isOnline, nodeUrl, applicationId, contextId, contextIdentity, connectToNode, connectWithAccount, delegated, ownOrigin, logout, isLoading, packageName, packageVersion, registryUrl, cloudBaseUrl],
   );
 
   return (

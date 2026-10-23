@@ -71,4 +71,12 @@ describe('resolveTrustedNodeUrl', () => {
     const r = resolveTrustedNodeUrl({ candidate: 'https://unknown.example.com', initiated: null });
     expect(r).toEqual({ url: null, rejected: true });
   });
+
+  it('accepts a callback node_url on the same origin as the page that started login', () => {
+    const r = resolveTrustedNodeUrl({
+      candidate: 'http://app.localhost:2428/cb',
+      initiated: 'http://app.localhost:2428',
+    });
+    expect(r).toEqual({ url: 'http://app.localhost:2428/cb', rejected: false });
+  });
 });
