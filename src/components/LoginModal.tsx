@@ -31,10 +31,11 @@
  * with today's shadow as the fallback.
  */
 
-import { useMemo, useState, useEffect, useCallback, useRef } from 'react';
+import { useContext, useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { CalimeroLogo } from './CalimeroLogo';
 import { AccountSignInPanel } from './AccountSignInPanel';
+import { MeroContext } from '../context';
 import { useAccountEnrolment } from '../delegated/useAccountEnrolment';
 import { isDesktopWindow } from '../utils/desktop';
 import type { ConnectionType, CustomConnectionConfig } from '../types';
@@ -463,7 +464,9 @@ export function LoginModal({
   // Inside a Calimero Desktop window there is no Cloud tab at all, the caller's
   // `cloud` object included: the window is already bound to the desktop's node
   // (see `isDesktopWindow`). Only `cloudOnDesktop` brings it back.
-  const cloudAllowed = cloudOnDesktop || !isDesktopWindow();
+  // Read without throwing: a caller passing its own `cloud` may sit outside a provider.
+  const servedByNode = useContext(MeroContext)?.servedByNode ?? false;
+  const cloudAllowed = !servedByNode && (cloudOnDesktop || !isDesktopWindow());
   const ownCloud = cloud === undefined && cloudAllowed;
   const own = useAccountEnrolment({ enabled: ownCloud });
   const cloudTab = useMemo(
@@ -523,13 +526,18 @@ export function LoginModal({
     }
   }, []);
 
+  // A page the node serves has one node: its own origin. No picker, no probe.
+  useEffect(() => {
+    if (isOpen && servedByNode) onConnect(window.location.origin);
+  }, [isOpen, servedByNode]);
+
   // Probe local ports whenever the modal is open; a bumpable nonce lets the
   // user trigger a re-scan.
   const [scanNonce, setScanNonce] = useState(0);
   const portsKey = useMemo(() => localNodePorts.join(','), [localNodePorts]);
 
   useEffect(() => {
-    if (!isOpen) {
+    if (!isOpen || servedByNode) {
       return;
     }
 
@@ -561,7 +569,7 @@ export function LoginModal({
       controller.abort();
     };
     // portsKey captures localNodePorts content; scanNonce forces a re-scan.
-  }, [isOpen, portsKey, scanNonce]);
+  }, [isOpen, servedByNode, portsKey, scanNonce]);
 
   const isCustom = selected === CUSTOM_SELECTION;
   const hasDiscovered = discovered.length > 0;
@@ -613,7 +621,7 @@ export function LoginModal({
     }
   }, [selected, customUrl, onConnect]);
 
-  if (!isOpen) {
+  if (!isOpen || servedByNode) {
     return null;
   }
 

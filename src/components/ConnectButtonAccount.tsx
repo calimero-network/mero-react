@@ -103,8 +103,8 @@ export function ConnectButtonAccount({
   defaults = {},
   cloud: cloudProp,
 }: ConnectButtonAccountProps) {
-  const cloud = cloudProp ?? !isDesktopWindow();
-  const { isAuthenticated, isOnline, nodeUrl, isDelegated, connectToNode, logout } = useMero();
+  const { isAuthenticated, isOnline, nodeUrl, isDelegated, connectToNode, logout, servedByNode } = useMero();
+  const cloud = !servedByNode && (cloudProp ?? !isDesktopWindow());
 
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isNodeModalOpen, setIsNodeModalOpen] = useState(false);
@@ -205,7 +205,9 @@ export function ConnectButtonAccount({
         <button
           className={['mero-connect-button', className].filter(Boolean).join(' ')}
           style={style}
-          onClick={() => setIsNodeModalOpen(true)}
+          onClick={() =>
+            servedByNode ? connectToNode(window.location.origin) : setIsNodeModalOpen(true)
+          }
         >
           <CalimeroLogo size={18} className="mero-logo" />
           I run a node
