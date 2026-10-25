@@ -22,8 +22,9 @@ import { resolveMeroTheme, themeToCssVars, type MeroTheme } from '../theme';
 export interface ConnectButtonProps {
   /**
    * Connection behaviour. `Custom` (object form) connects straight to the
-   * given URL, skipping the modal; every other value opens the LoginModal,
-   * which always shows node discovery + manual URL entry.
+   * given URL, skipping the modal; every other value opens the LoginModal
+   * (local node discovery + manual URL entry). A page the node serves
+   * (`servedByNode`) skips the modal and logs in at its own origin.
    */
   connectionType?: ConnectionType | CustomConnectionConfig;
   /** Custom class name */
@@ -84,8 +85,8 @@ export function ConnectButton({
   cloud: cloudProp,
   accountDefaults,
 }: ConnectButtonProps) {
-  const cloud = cloudProp ?? !isDesktopWindow();
-  const { isAuthenticated, connectToNode, logout, nodeUrl, isOnline, isDelegated } = useMero();
+  const { isAuthenticated, connectToNode, logout, nodeUrl, isOnline, isDelegated, servedByNode } = useMero();
+  const cloud = !servedByNode && (cloudProp ?? !isDesktopWindow());
   const enrolment = useAccountEnrolment({
     walletUrl: accountDefaults?.walletUrl,
     enabled: cloud,
@@ -147,6 +148,11 @@ export function ConnectButton({
   const buttonClassName = logoOnly ? 'mero-logo-only' : '';
 
   const handleConnect = () => {
+    if (servedByNode) {
+      connectToNode(window.location.origin);
+      return;
+    }
+
     // If Custom type with URL, connect directly
     if (
       typeof connectionType === 'object' &&

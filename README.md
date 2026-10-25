@@ -92,6 +92,7 @@ Props (`MeroProviderConfig & { children }`):
 | `registryUrl` | `string` | No | Registry URL override |
 | `timeoutMs` | `number` | No | HTTP request timeout (default 30000) |
 | `allowedNodeUrls` | `string[]` | No | Origins the OAuth callback may authenticate against. The initiated node is always trusted; this allowlist additionally permits direct-callback entry. A callback `node_url` matching neither is rejected. |
+| `servedByNode` | `boolean` | No | The node serves this page from its own origin. See [Serving an app from a node](#serving-an-app-from-a-node). |
 | `tokenStore` | `TokenStore` | No | Pluggable access/refresh token store. Defaults to localStorage. Pass a `MemoryTokenStore` or cookie-backed store for sensitive deployments (localStorage tokens are XSS-readable). |
 
 Modes and their permissions:
@@ -103,6 +104,22 @@ Modes and their permissions:
 | `Admin` | `admin` | Admin dashboards, dev tools |
 
 Auth flow: when `connectToNode(url)` is called, the provider redirects to the node's auth page. After login, the node redirects back with tokens in the URL hash. The provider processes these once (StrictMode-safe via ref) and sets `isAuthenticated = true`. The callback's `node_url` is validated against the node login was initiated with (or `allowedNodeUrls`); a `node_url` matching neither is rejected.
+
+#### Serving an app from a node
+
+When a node serves your bundled frontend (for example at `my-app.localhost:2428`), pass `servedByNode`.
+The node is then the page's own origin: the client talks to `window.location.origin` whatever the login callback's `node_url` says, and nothing probes other origins.
+`ConnectButton` skips the node picker and goes straight to `/auth/login` on that origin, which the node redirects to its login page.
+Set the prop yourself, for example from a build flag; the provider does not detect it.
+
+```tsx
+<MeroProvider mode={AppMode.MultiContext} servedByNode>
+```
+
+The node serves the page under a strict CSP (`connect-src 'self'`), so the bundle must:
+
+- be built with Vite `base: './'` and reference assets by relative URL;
+- have no inline scripts and no CDN-hosted scripts, styles or fonts.
 
 Online detection: the provider opens an SSE connection to the node after auth. `isOnline` reflects the SSE connection state — no polling.
 
@@ -413,7 +430,7 @@ Helpers: `defaultMeroTheme` (the full default palette), `resolveMeroTheme(partia
 
 | Prop | Type | Default | Notes |
 |------|------|---------|-------|
-| `connectionType` | `ConnectionType \| CustomConnectionConfig` | `Remote` | `Custom` connects straight to the given URL, skipping the modal. Every other value opens the LoginModal (node discovery + manual URL entry). |
+| `connectionType` | `ConnectionType \| CustomConnectionConfig` | `Remote` | `Custom` connects straight to the given URL, skipping the modal. Every other value opens the LoginModal (local node discovery + manual URL entry). Inside a `servedByNode` provider the button skips the modal and logs in at the page's own origin. |
 | `theme` | `MeroTheme` | — | Partial token override. |
 | `logoOnly` | `boolean` | `false` | Render only the Calimero logo (square button). The label is still announced via `aria-label`. |
 | `label` | `string \| { connect?, connected?, reconnecting? }` | — | Override default labels. Bare string targets the disconnected state. |
