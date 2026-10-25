@@ -1,3 +1,13 @@
+## [10.3.0](https://github.com/calimero-network/mero-react/compare/mero-react-v10.2.1...mero-react-v10.3.0) (2026-10-25)
+
+### Features
+
+* add a servedByNode mode for frontends a node serves ([b1c06f1](https://github.com/calimero-network/mero-react/commit/b1c06f15ecefb1abef445025294d8364b5e58d89))
+
+### Bug Fixes
+
+* keep every connect path on the node's origin when servedByNode ([52bf148](https://github.com/calimero-network/mero-react/commit/52bf148d0eed8bc8dc22358f79d60f9b559df956))
+
 ## [10.2.1](https://github.com/calimero-network/mero-react/compare/mero-react-v10.2.0...mero-react-v10.2.1) (2026-10-21)
 
 ### Bug Fixes
