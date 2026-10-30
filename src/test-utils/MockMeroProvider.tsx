@@ -1,64 +1,44 @@
 /**
- * MockMeroProvider — a non-functional MeroContext provider for stories,
- * tests, and visual prototyping. Supplies the same shape `useMero()` reads
- * from so any component that depends on context renders without spinning up
- * a real MeroJs instance, talking to a node, or touching localStorage.
- *
- * The action callbacks (`connectToNode`, `logout`) just log so you can see
- * what would have fired.
+ * A `MeroContext` with fixed values, for stories and component tests that do
+ * not need a client.
  */
 
 import React from 'react';
 import { MeroContext } from '../context';
 import type { MeroContextValue } from '../types';
 
-export interface MockMeroProviderProps {
-  children?: React.ReactNode;
-  isAuthenticated?: boolean;
-  isOnline?: boolean;
-  isLoading?: boolean;
-  nodeUrl?: string | null;
-  applicationId?: string | null;
-  contextId?: string | null;
-  contextIdentity?: string | null;
+export interface MockMeroProviderProps extends Partial<MeroContextValue> {
+  children: React.ReactNode;
 }
 
-export function MockMeroProvider({
-  children,
-  isAuthenticated = false,
-  isOnline = true,
-  isLoading = false,
-  nodeUrl = 'http://node1.127.0.0.1.nip.io',
-  applicationId = 'mock-application-id',
-  contextId = 'mock-context-id',
-  contextIdentity = 'mock-context-identity',
-}: MockMeroProviderProps) {
-  const value: MeroContextValue = {
-    mero: null,
-    isAuthenticated,
-    isOnline,
-    isLoading,
-    nodeUrl: isAuthenticated ? nodeUrl : null,
-    applicationId: isAuthenticated ? applicationId : null,
-    contextId: isAuthenticated ? contextId : null,
-    contextIdentity: isAuthenticated ? contextIdentity : null,
-    connectToNode: (url: string) => {
-      console.info('[MockMeroProvider] connectToNode →', url);
-    },
-    connectWithAccount: (session) => {
-      console.info('[MockMeroProvider] connectWithAccount →', session.relayUrl);
-    },
-    isDelegated: false,
-    servedByNode: false,
-    admin: null,
-    can: { createNamespace: true, createContext: true, invite: true, upgrade: true },
-    app: {},
-    logout: () => {
-      console.info('[MockMeroProvider] logout');
-    },
-  };
+const noop = () => undefined;
+const none = async () => null;
 
+export function MockMeroProvider({ children, ...overrides }: MockMeroProviderProps) {
+  const isAuthenticated = overrides.isAuthenticated ?? false;
+  const value: MeroContextValue = {
+    client: null,
+    mero: null,
+    nodeUrl: 'https://node.example.com',
+    connectToNode: noop,
+    disconnect: noop,
+    session: null,
+    accountId: isAuthenticated ? 'acc_3f9a2c7d1e5b8a4f6c0d' : null,
+    isAuthenticated,
+    isLoading: false,
+    signIn: none,
+    signUp: none,
+    signOut: async () => undefined,
+    signOutEverywhere: async () => undefined,
+    logout: noop,
+    appId: null,
+    setAppId: noop,
+    passkey: { create: () => Promise.reject(new Error('mock')), get: () => Promise.reject(new Error('mock')) },
+    servedByNode: false,
+    allowMock: false,
+    failure: null,
+    reportError: noop,
+    ...overrides,
+  };
   return <MeroContext.Provider value={value}>{children}</MeroContext.Provider>;
 }
-
-export default MockMeroProvider;

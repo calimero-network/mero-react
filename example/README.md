@@ -7,6 +7,15 @@ This repository contains two independent parts:
 
 The folders are separate projects; treat each as its own repo.
 
+## Calimero 1.0
+
+The frontend (`app/src/App.tsx`) uses mero-react 11 on the 1.0 client: passkey sign-in, `useApps`, `useView('entries')`, `useExecute().execute('set', …)` and `useSubscription` for live updates.
+
+- **Bundled and served by the node** (the default): the page runs at `{label}.{apps-domain}` with `servedByNode`. Set `VITE_MIN_RELEASE` to the oldest mero-tee release to trust.
+- **Against `merod local`** (Linux, or Docker on macOS): `cargo run -p merod -- local`, install the bundle and create an instance with `meroctl`, then run `VITE_NODE_URL=http://127.0.0.1:2501 pnpm --dir app dev`. That turns on `allowMock` (mock attestation, dev only).
+
+The `network:bootstrap` script below still drives merobox, which 1.0 retired; use `merod local` instead.
+
 ## Prerequisites
 
 - pnpm (or npm) for JavaScript tooling

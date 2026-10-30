@@ -1,251 +1,52 @@
 /**
- * mero-react - React bindings for MeroJs
+ * mero-react: React bindings for the Calimero 1.0 client (mero-js
+ * `CalimeroClient`).
  *
  * @packageDocumentation
  */
 
-// Component styles — bundled and injected as <style> at runtime by tsup
-// (see `injectStyle: true` in tsup.config.ts), so consumers don't need a
-// separate CSS import.
+// Component styles: bundled and injected as a <style> at runtime by tsup
+// (`injectStyle: true`), so consumers need no CSS import.
 import './components/styles.css';
 
-// Context & Provider
-export { MeroProvider, useMero, MeroContext, getPermissionsForMode } from './context';
+// Provider
+export { MeroProvider, useMero, MeroContext } from './context';
 export type { MeroProviderProps } from './context';
+export type { MeroContextValue, MeroProviderConfig } from './types';
+export { resolvePolicy, SessionReportingClient } from './client';
+export type { PolicyOptions } from './client';
 
-// Components
-export { ConnectButton } from './components';
-export type { ConnectButtonProps } from './components';
-export { ConnectButtonAccount } from './components';
-export type { ConnectButtonAccountProps } from './components';
-// The account (delegated) layer lives in mero-js (src/account/) and is
-// re-exported here under the names apps already import. mero-js names the
-// session type `DelegatedAccountSession` (its login module owns the bare
-// `DelegatedSession`); this package keeps calling it `DelegatedSession`, and
-// this explicit export is what shadows the star re-export below.
-export type { DelegatedAccountSession as DelegatedSession, DelegatedCredential } from '@calimero-network/mero-js';
-export {
-  readDelegatedCredential,
-  saveDelegatedCredential,
-  clearDelegatedCredential,
-  pinRelayNodeKey,
-  readPinnedRelayNodeKey,
-  listDelegatedContexts,
-  readRelayMap,
-  relayForContext,
-  rememberRelay,
-} from '@calimero-network/mero-js';
-
-// Bootstrapping an account that is a member of nothing, from an invitation —
-// the one step between a freshly enrolled account and a usable relay.
-export { resolveRelayFromInvitation, normaliseAccount } from '@calimero-network/mero-js';
-export type {
-  RelayResolutionStep,
-  RelayResolutionFailure,
-  ResolvedInvitationRelay,
-  ResolveRelayResult,
-  ResolveRelayFromInvitationInput,
-} from '@calimero-network/mero-js';
-export { joinWithNode } from '@calimero-network/mero-js';
-export type {
-  JoinWithNodeInput,
-  JoinWithNodeResult,
-  JoinWithNodeSuccess,
-  JoinWithNodeFailure,
-  JoinWithNodeStep,
-} from '@calimero-network/mero-js';
-export { bootstrapFromInvitation } from '@calimero-network/mero-js';
-export type {
-  BootstrapStep,
-  BootstrapResult,
-  BootstrapSuccess,
-  BootstrapFailure,
-  BootstrapFromInvitationInput,
-} from '@calimero-network/mero-js';
-export { useDelegatedBootstrap } from './delegated/useDelegatedBootstrap';
-export { createDelegatedContext, HA_ACCOUNT_NOT_LINKED_MESSAGE, HA_REFUSAL_MESSAGES } from '@calimero-network/mero-js';
-export type { FoundedDelegatedNamespace } from '@calimero-network/mero-js';
-export { applicationIdForBundle, resolveApplicationIdFromRegistry, selectLatestBundle } from '@calimero-network/mero-js';
-export type { RegistryBundle, ResolvedApplication } from '@calimero-network/mero-js';
-export { createAccountAdmin, InvitationNotClaimableError, NoRelayError, NotForAccountError } from '@calimero-network/mero-js';
-export { createNodeAdmin } from '@calimero-network/mero-js';
-export type { AccountAdminDeps } from '@calimero-network/mero-js';
-
-// Invitations by link: capture (cold open, desktop deep link, PWA launch),
-// redemption, the one prompt every app shows, and the wait for a just-joined
-// namespace's data.
-export * from './invitations';
-
-// One call to join from an invitation, whatever the connection.
-export { useJoinInvitation, isFinalInvitationError } from './join/useJoinInvitation';
-export type {
-  JoinInvitationInput,
-  JoinInvitationResult,
-  JoinInvitationStep,
-} from './join/useJoinInvitation';
-export type {
-  UseDelegatedBootstrapOptions,
-  UseDelegatedBootstrapResult,
-} from './delegated/useDelegatedBootstrap';
-export { LoginModal } from './components';
-export type { LoginModalProps, LoginModalTab } from './components';
-export { AccountSignInPanel } from './components';
-export type { AccountSignInPanelProps } from './components';
-export { useAccountEnrolment, isReturningFromWallet } from './delegated/useAccountEnrolment';
-export type { UseAccountEnrolmentOptions, AccountEnrolment } from './delegated/useAccountEnrolment';
-export { CalimeroLogo } from './components';
-export type { CalimeroLogoProps } from './components';
-export { MigrationPendingBanner } from './components';
-export type { MigrationPendingBannerProps } from './components';
-export { MigrationAdminPanel } from './components';
-export type { MigrationAdminPanelProps } from './components';
-
-// Local-node discovery
-export {
-  discoverLocalNodes,
-  probeNodeHealth,
-  localNodeUrl,
-  nodeEndpoint,
-  DEFAULT_LOCAL_NODE_PORTS,
-} from '@calimero-network/mero-js';
-export type { DiscoverLocalNodesOptions } from '@calimero-network/mero-js';
-
-// Theme
-export {
-  MERO_CSS_VARS,
-  cssVar,
-  defaultMeroTheme,
-  resolveMeroTheme,
-  themeToCssVars,
-} from './theme';
-export type { MeroTheme, ResolvedMeroTheme } from './theme';
+// Errors
+export { describeError, isLoginRequired } from './errors';
+export type { Failure, FailureKind } from './errors';
 
 // Hooks
-export {
-  useApplicationContexts,
-  useBlobInfo,
-  useBlobUrl,
-  useContextDiscovery,
-  useContextGroup,
-  useContexts,
-  useCreateContext,
-  useCreatePrivateContext,
-  useCreateGroupInNamespace,
-  useCreateNamespace,
-  useCreateNamespaceInvitation,
-  useDefaultCapabilities,
-  useDeleteContext,
-  useDeleteGroup,
-  useDeleteNamespace,
-  useDetachContextFromGroup,
-  useEphemeral,
-  useExecute,
-  useGroupCapabilities,
-  useGroupContexts,
-  useGroupInfo,
-  useGroupInvitations,
-  useGroupMembers,
-  useGroupMetadata,
-  useGroupUpgradeStatus,
-  useJoinContext,
-  useJoinGroup,
-  useJoinNamespace,
-  useRedeemInvitation,
-  useJoinSubgroupInheritance,
-  useMemberMetadata,
-  useNamespace,
-  useNamespaceGroups,
-  useMigrationEvents,
-  useNodeIdentity,
-  useNamespaces,
-  useNamespacesForApplication,
-  useRetryGroupUpgrade,
-  useSetContextMetadata,
-  useSetDefaultCapabilities,
-  useSetGroupMetadata,
-  useSetMemberMetadata,
-  useSetSubgroupVisibility,
-  useSetTeeAdmissionPolicy,
-  useReparentGroup,
-  useSubgroups,
-  useSubgroupVisibility,
-  useUpdateMemberRole,
-  useUpgradeGroup,
-  useUploadBlob,
-  useResyncContext,
-  useAddGroupMembers,
-  useRemoveGroupMembers,
-  useSubscription,
-  useSyncGroup,
-  useMigrationStatus,
-  DEFAULT_MIGRATION_POLL_INTERVAL_MS,
-  useAppVersion,
-  useLatestVersion,
-  useGroupAppVersion,
-  useInstallFromRegistry,
-  useMyAuthoredMigration,
-} from './hooks';
-export type {
-  BlobHookOptions,
-  MutationOptions,
-  UseBlobUrlOptions,
-  SetMetadataInput,
-  SubscriptionInput,
-  SubscriptionEventData,
-  Codec,
-  EphemeralClient,
-  EphemeralEntry,
-  UseEphemeralOptions,
-  UseEphemeralResult,
-  CreatePrivateContextRequest,
-} from './hooks';
+export * from './hooks';
 
-// Types
-export {
-  AppMode,
-  ConnectionType,
-} from './types';
-export type {
-  AppContext,
-  ApplicationContextRecord,
-  ContextDiscoveryOptions,
-  ContextDiscoveryState,
-  CustomConnectionConfig,
-  ExecutionResult,
-  MeroCapabilities,
-  MeroContextValue,
-  MeroProviderConfig,
-} from './types';
+// Components
+export { ConnectButton, LoginModal, CalimeroLogo, shortAccount } from './components';
+export type { ConnectButtonProps, LoginModalProps, LoginModalTab, CalimeroLogoProps } from './components';
 
-// Storage utilities
+// Theme
+export { MERO_CSS_VARS, cssVar, defaultMeroTheme, resolveMeroTheme, themeToCssVars } from './theme';
+export type { MeroTheme, ResolvedMeroTheme } from './theme';
+
+// Storage
 export {
-  localStorageTokenStorage,
+  localStorageSessionStore,
+  memorySessionStore,
   getNodeUrl,
   setNodeUrl,
   clearNodeUrl,
-  getTokenNodeUrl,
-  setTokenNodeUrl,
-  clearTokenNodeUrl,
-  getApplicationId,
-  setApplicationId,
-  clearApplicationId,
-  getContextId,
-  setContextId,
-  clearContextId,
-  getContextIdentity,
-  setContextIdentity,
-  clearContextIdentity,
+  getAppId,
+  setAppId,
+  clearAppId,
   clearAllStorage,
 } from './storage';
+export type { SessionStore } from './storage';
 
-// Is this a Calimero Desktop (Tauri) app window? Drives the Cloud sign-in's default.
-export { isDesktopWindow } from './utils/desktop';
-
-// Re-export everything from mero-js so apps only need one import
+// mero-js, so apps need one import: CalimeroClient, the typed errors
+// (AppError, ConfirmRequired, WrongNode, ...), browserPasskey, the consent
+// request builders (releaseConsent, upgradeConsent, consentReturn), ORG_CAPABILITIES.
+// mero-react's own `Codec` (presence) wins over the export * below.
 export * from '@calimero-network/mero-js';
-
-// Explicit re-exports of the capability helpers / metadata types. These already
-// flow through the `export *` above, but are listed here so the public surface
-// of this package is self-documenting.
-export { CAPABILITIES, hasCap, withCap, withoutCap } from '@calimero-network/mero-js';
-export type { MetadataRecord } from '@calimero-network/mero-js';

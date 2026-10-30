@@ -1,913 +1,205 @@
 /**
- * LoginModal - Modal for connecting to a Calimero node
+ * LoginModal: sign in, or create an account, with a passkey.
  *
- * A single section: the modal auto-discovers nodes on the well-known local
- * ports (see `nodeDiscovery`) and offers whatever is running as radio choices,
- * plus an always-available "enter URL manually" option. With nothing found it
- * falls straight through to manual URL entry.
- *
- * The old Local/Remote tabs are gone — the "Local" tab pointed at a hardcoded
- * default node (`node1.127.0.0.1.nip.io`) that doesn't resolve in most setups;
- * discovery + manual entry covers both cases properly.
- *
- * By default the modal has two tabs: **Node** (everything above, unchanged,
- * selected by default) and **Cloud** (sign in with a Calimero account — see
- * `AccountSignInPanel` / `useAccountEnrolment`). The Cloud tab is sourced from
- * `useAccountEnrolment` inside the modal, so an app that mounts `LoginModal`
- * itself gets account sign-in with no wiring; `cloud={false}` removes it, and
- * a `cloud` object (what `ConnectButton` passes) replaces it with the caller's.
- * Inside a Calimero Desktop window there is no Cloud tab unless
- * `cloudOnDesktop` is set.
- *
- * Because of that the modal reads `useMero()` and must sit inside a
- * `MeroProvider`, as every app's does.
- *
- * Styling: colors and radius are `--mero-*` tokens (a `theme` prop, or global
- * variables). Every part also carries a stable `mero-login-*` class, as
- * `InvitationDialog` does with `mero-invite-*`, so an app can restyle what the
- * tokens do not reach. Inline styles outrank classes, so the look that is not a
- * token stays out of them where it can: the font is inherited (set it on
- * `.mero-login-overlay`), and the dialog's shadow reads `--mero-login-shadow`
- * with today's shadow as the fallback.
+ * On a page the node serves (`servedByNode`) the node is the page's origin, so
+ * the dialog asks nothing but the passkey. Elsewhere it asks for the node's URL
+ * first. Creating an account asks for a name (what the passkey is saved
+ * under).
  */
 
-import { useContext, useMemo, useState, useEffect, useCallback, useRef } from 'react';
-import { createPortal } from 'react-dom';
+import React, { useEffect, useId, useRef, useState } from 'react';
+import { useMero } from '../context';
+import { resolveMeroTheme, themeToCssVars, type MeroTheme } from '../theme';
 import { CalimeroLogo } from './CalimeroLogo';
-import { AccountSignInPanel } from './AccountSignInPanel';
-import { MeroContext } from '../context';
-import { useAccountEnrolment } from '../delegated/useAccountEnrolment';
-import { isDesktopWindow } from '../utils/desktop';
-import type { ConnectionType, CustomConnectionConfig } from '../types';
-import {
-  discoverLocalNodes,
-  nodeEndpoint,
-  DEFAULT_LOCAL_NODE_PORTS,
-} from '@calimero-network/mero-js';
-import {
-  cssVar,
-  resolveMeroTheme,
-  themeToCssVars,
-  type MeroTheme,
-  type ResolvedMeroTheme,
-} from '../theme';
 
-/** Sentinel selection value for the manual "enter a URL" option. */
-const CUSTOM_SELECTION = '__custom__';
+export type LoginModalTab = 'sign-in' | 'sign-up';
 
 export interface LoginModalProps {
-  /** Callback when user connects */
-  onConnect: (url: string) => void;
-  /** Callback when modal is closed */
-  onClose: () => void;
-  /**
-   * @deprecated Ignored. The modal always shows node discovery + manual URL
-   * entry; the old hardcoded-default "Local" view was removed. Kept so
-   * existing call sites keep compiling.
-   */
-  connectionType?: ConnectionType | CustomConnectionConfig;
-  /** Whether the modal is open */
   isOpen: boolean;
-  /** Theme overrides — accepts any subset of `MeroTheme` tokens */
-  theme?: MeroTheme;
-  /**
-   * Ports probed when discovering local nodes. Defaults to the well-known
-   * Calimero dev ports (2428, 2429, 2528, 2529). Mostly an escape hatch for
-   * non-standard setups and tests.
-   */
-  localNodePorts?: readonly number[];
-  /**
-   * The second way in: a **Cloud** tab, signing in with a Calimero account by
-   * enrolling this tab's device key at the wallet.
-   *
-   * - **Omitted** (the default): the tab is shown, sourced from
-   *   `useAccountEnrolment()` inside the modal — enrolment starts from the tab,
-   *   and a page coming back from the wallet is completed here, whether or not
-   *   the modal is open. Nothing to wire; the modal must be inside a
-   *   `MeroProvider`.
-   * - **`false`**: no Cloud tab and no tabs at all — the node dialog as it was.
-   * - **An object**: the caller's own enrolment, used verbatim; the modal reads
-   *   none itself. The values are `useAccountEnrolment`'s, as `ConnectButton`
-   *   passes them.
-   *
-   * Inside a Calimero Desktop window every form is as `false` — the window is
-   * already bound to the desktop's node, so there is no relay and no passkey to
-   * go through. `cloudOnDesktop` turns that off.
-   */
-  cloud?:
-    | false
-    | {
-        /** Start enrolment — normally `useAccountEnrolment().goToWallet`. */
-        onEnrol: () => void;
-        /** What the last enrolment had to say, shown on the Cloud tab. */
-        note?: string | null;
-        /** The wallet enrolment goes to. Shown only when `customWallet`. */
-        walletUrl?: string;
-        /** Whether `walletUrl` is an override rather than the hosted wallet. */
-        customWallet?: boolean;
-      };
-  /**
-   * Show the Cloud tab inside a Calimero Desktop window too. Default false:
-   * the desktop logs in to its own node, so `cloud` — omitted or an object —
-   * is ignored there (see `isDesktopWindow`).
-   */
-  cloudOnDesktop?: boolean;
-  /**
-   * The tab selected when the modal opens. Ignored with `cloud={false}`.
-   *
-   * Default `'node'` — except that a modal sourcing its own Cloud tab opens on
-   * `'cloud'` when the page is coming back from the wallet, so whatever the
-   * completion has to say is where the person is looking. An explicit value
-   * always wins.
-   */
+  onClose: () => void;
+  /** Called once a session is open. */
+  onSignedIn?: () => void;
+  /** Which form to open on. Default `sign-in`. */
   initialTab?: LoginModalTab;
+  /** Offer account creation. Default true. */
+  allowSignUp?: boolean;
+  /** The app's name, shown above the title. */
+  appName?: string;
+  theme?: MeroTheme;
 }
 
-/** The two tabs of the connect dialog, when it has a Cloud tab. */
-export type LoginModalTab = 'node' | 'cloud';
-
-const TABS: readonly { id: LoginModalTab; label: string }[] = [
-  { id: 'node', label: 'Node' },
-  { id: 'cloud', label: 'Cloud' },
-];
-
-/**
- * Validate URL format
- */
-function isValidUrl(urlString: string): boolean {
-  if (!urlString || urlString.trim() === '') {
-    return false;
-  }
-
-  try {
-    const urlToTest =
-      urlString.startsWith('http://') || urlString.startsWith('https://')
-        ? urlString
-        : `https://${urlString}`;
-
-    const url = new URL(urlToTest);
-
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-      return false;
-    }
-
-    if (!url.hostname) {
-      return false;
-    }
-
-    const hostname = url.hostname;
-
-    // Allow localhost
-    if (hostname === 'localhost') {
-      return true;
-    }
-
-    // Check for valid IP address
-    const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
-    if (ipv4Regex.test(hostname)) {
-      const octets = hostname.split('.').map(Number);
-      return octets.every((octet) => octet >= 0 && octet <= 255);
-    }
-
-    // Check for valid domain name
-    const domainRegex =
-      /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
-    return domainRegex.test(hostname);
-  } catch {
-    return false;
-  }
-}
-
-/** Strip the scheme for a compact node label (e.g. `localhost:2428`). */
-function displayNodeUrl(url: string): string {
-  return url.replace(/^https?:\/\//, '').replace(/\/+$/, '');
-}
-
-/**
- * Mix a color with transparent using CSS `color-mix`. Works for any valid CSS
- * color value (hex of any length, rgb(), hsl(), named colors, var(...)) — not
- * just 6-digit hex.
- */
-function tint(color: string, percent: number): string {
-  return `color-mix(in srgb, ${color} ${percent}%, transparent)`;
-}
-
-/**
- * Build the inline-style map from a resolved theme. Each value is emitted as
- * `var(--mero-*, fallback)` so a global `:root { --mero-* }` rule reaches the
- * portal-rendered modal; the fallback ensures the modal still renders correctly
- * if the consumer hasn't imported `styles.css`.
- */
-function buildStyles(t: ResolvedMeroTheme) {
-  const bg = cssVar(t, 'background');
-  const bgSecondary = cssVar(t, 'backgroundSecondary');
-  const text = cssVar(t, 'text');
-  const textSecondary = cssVar(t, 'textSecondary');
-  const accent = cssVar(t, 'primary');
-  const onPrimary = cssVar(t, 'primaryText');
-  const border = cssVar(t, 'border');
-  const error = cssVar(t, 'error');
-  const overlay = cssVar(t, 'overlay');
-  const radius = cssVar(t, 'radius');
-
-  const errorBg = tint(error, 10);
-  const errorBorder = tint(error, 30);
-  const accentGlow = tint(accent, 15);
-
-  return {
-    overlay: {
-      position: 'fixed' as const,
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      backgroundColor: overlay,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 10000,
-      padding: '1rem',
-      animation: 'meroFadeIn 0.2s ease-out',
-    },
-    content: {
-      backgroundColor: bg,
-      borderRadius: radius,
-      padding: '2rem',
-      maxWidth: '420px',
-      width: '100%',
-      position: 'relative' as const,
-      border: `1px solid ${border}`,
-      // Not a theme token, so an app could not reach it past the inline style:
-      // `--mero-login-shadow` replaces it whole. Unset, it is the shadow and
-      // accent ring the dialog always had.
-      boxShadow: `var(--mero-login-shadow, 0 25px 50px -12px rgba(0, 0, 0, 0.6), 0 0 0 1px ${accentGlow})`,
-      animation: 'meroSlideIn 0.25s ease-out',
-      color: text,
-    },
-    closeButton: {
-      position: 'absolute' as const,
-      top: '0.75rem',
-      right: '0.75rem',
-      background: 'none',
-      border: 'none',
-      fontSize: '1.5rem',
-      color: textSecondary,
-      cursor: 'pointer',
-      padding: '0.25rem',
-      lineHeight: 1,
-    },
-    header: {
-      display: 'flex',
-      flexDirection: 'column' as const,
-      alignItems: 'center',
-      gap: '0.75rem',
-      marginBottom: '1.5rem',
-    },
-    title: {
-      fontSize: '1.25rem',
-      fontWeight: 600,
-      color: text,
-      margin: 0,
-    },
-    info: {
-      color: textSecondary,
-      textAlign: 'center' as const,
-      marginBottom: '1.5rem',
-      fontSize: '0.875rem',
-    },
-    error: {
-      color: error,
-      backgroundColor: errorBg,
-      border: `1px solid ${errorBorder}`,
-      borderRadius: radius,
-      padding: '0.75rem',
-      marginBottom: '1rem',
-      fontSize: '0.875rem',
-      textAlign: 'center' as const,
-    },
-    radioList: {
-      display: 'flex',
-      flexDirection: 'column' as const,
-      gap: '0.5rem',
-      marginBottom: '1rem',
-    },
-    radioItem: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: '0.625rem',
-      color: text,
-      cursor: 'pointer',
-      padding: '0.75rem 1rem',
-      borderRadius: radius,
-      border: `1px solid ${border}`,
-      backgroundColor: bgSecondary,
-      transition: 'all 0.15s ease',
-      fontSize: '0.875rem',
-    },
-    radioItemActive: {
-      // Override the full `border` shorthand (not just borderColor) so React
-      // never has to mix shorthand + longhand on the same element.
-      border: `1px solid ${accent}`,
-      backgroundColor: accentGlow,
-      color: text,
-    },
-    radioIndicator: {
-      flexShrink: 0,
-      width: '1rem',
-      height: '1rem',
-      borderRadius: '50%',
-      border: `2px solid ${border}`,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    radioIndicatorActive: {
-      border: `2px solid ${accent}`,
-    },
-    radioDot: {
-      width: '0.5rem',
-      height: '0.5rem',
-      borderRadius: '50%',
-      backgroundColor: accent,
-    },
-    nodeMeta: {
-      marginLeft: 'auto',
-      fontSize: '0.75rem',
-      color: textSecondary,
-    },
-    input: {
-      width: '100%',
-      padding: '0.75rem 1rem',
-      borderRadius: radius,
-      border: `1px solid ${border}`,
-      backgroundColor: bgSecondary,
-      color: text,
-      fontSize: '0.875rem',
-      outline: 'none',
-      marginBottom: '1rem',
-      boxSizing: 'border-box' as const,
-    },
-    toolbar: {
-      display: 'flex',
-      justifyContent: 'center',
-      marginBottom: '1rem',
-    },
-    rescan: {
-      background: 'none',
-      border: 'none',
-      color: accent,
-      cursor: 'pointer',
-      fontSize: '0.8125rem',
-      padding: '0.25rem 0.5rem',
-    },
-    buttonGroup: {
-      display: 'flex',
-      justifyContent: 'center',
-    },
-    button: {
-      padding: '0.75rem 2rem',
-      borderRadius: radius,
-      border: 'none',
-      fontSize: '0.875rem',
-      fontWeight: 600,
-      cursor: 'pointer',
-      backgroundColor: accent,
-      color: onPrimary,
-      transition: 'all 0.15s ease',
-    },
-    buttonDisabled: {
-      opacity: 0.5,
-      cursor: 'not-allowed',
-    },
-    loading: {
-      display: 'flex',
-      flexDirection: 'column' as const,
-      alignItems: 'center',
-      gap: '1rem',
-      padding: '2rem',
-      color: textSecondary,
-    },
-    discovering: {
-      display: 'flex',
-      flexDirection: 'column' as const,
-      alignItems: 'center',
-      gap: '0.75rem',
-      padding: '1rem',
-      color: textSecondary,
-      fontSize: '0.875rem',
-    },
-    spinner: {
-      width: '2rem',
-      height: '2rem',
-      border: `3px solid ${border}`,
-      borderTopColor: accent,
-      borderRadius: '50%',
-      animation: 'meroSpin 1s linear infinite',
-    },
-    tabList: {
-      display: 'flex',
-      gap: '0.25rem',
-      padding: '0.25rem',
-      marginBottom: '1.5rem',
-      borderRadius: radius,
-      border: `1px solid ${border}`,
-      backgroundColor: bgSecondary,
-    },
-    tab: {
-      flex: 1,
-      padding: '0.5rem 1rem',
-      borderRadius: radius,
-      border: '1px solid transparent',
-      backgroundColor: 'transparent',
-      color: textSecondary,
-      fontSize: '0.875rem',
-      fontWeight: 600,
-      cursor: 'pointer',
-      transition: 'all 0.15s ease',
-    },
-    tabActive: {
-      border: `1px solid ${accent}`,
-      backgroundColor: accentGlow,
-      color: text,
-    },
-    spinnerSmall: {
-      width: '1.5rem',
-      height: '1.5rem',
-      border: `3px solid ${border}`,
-      borderTopColor: accent,
-      borderRadius: '50%',
-      animation: 'meroSpin 1s linear infinite',
-    },
-  };
-}
-
-/**
- * LoginModal - Connection modal component
- */
 export function LoginModal({
-  onConnect,
-  onClose,
   isOpen,
+  onClose,
+  onSignedIn,
+  initialTab = 'sign-in',
+  allowSignUp = true,
+  appName,
   theme,
-  localNodePorts = DEFAULT_LOCAL_NODE_PORTS,
-  cloud,
-  cloudOnDesktop = false,
-  initialTab: initialTabProp,
 }: LoginModalProps) {
-  // The modal's own enrolment, for the default case only. A caller that passed
-  // its own `cloud` already holds an enabled hook, and the callback it reads is
-  // single-use: a second enabled reader here would find nothing, or — if it
-  // rendered first — take the callback away from the caller. So this is on
-  // exactly when nobody else is. Called before the `isOpen` early return, so a
-  // tab coming back from the wallet is completed while the modal is closed too.
-  //
-  // Inside a Calimero Desktop window there is no Cloud tab at all, the caller's
-  // `cloud` object included: the window is already bound to the desktop's node
-  // (see `isDesktopWindow`). Only `cloudOnDesktop` brings it back.
-  // Read without throwing: a caller passing its own `cloud` may sit outside a provider.
-  const servedByNode = useContext(MeroContext)?.servedByNode ?? false;
-  const cloudAllowed = !servedByNode && (cloudOnDesktop || !isDesktopWindow());
-  const ownCloud = cloud === undefined && cloudAllowed;
-  const own = useAccountEnrolment({ enabled: ownCloud });
-  const cloudTab = useMemo(
-    () =>
-      ownCloud
-        ? {
-            onEnrol: () => {
-              void own.goToWallet();
-            },
-            note: own.note,
-            walletUrl: own.walletUrl,
-            customWallet: own.customWallet,
-          }
-        : (cloudAllowed && cloud) || null,
-    [cloud, cloudAllowed, ownCloud, own.goToWallet, own.note, own.walletUrl, own.customWallet],
-  );
-  const initialTab: LoginModalTab =
-    initialTabProp ?? (ownCloud && own.returning ? 'cloud' : 'node');
-
+  const { servedByNode, nodeUrl, client, connectToNode, signIn, signUp, isLoading, failure } = useMero();
   const [tab, setTab] = useState<LoginModalTab>(initialTab);
-  // Each opening starts on `initialTab`: the modal stays mounted while closed,
-  // so without this a reopen would land on whatever tab was left selected.
+  const [url, setUrl] = useState(nodeUrl ?? '');
+  const [name, setName] = useState('');
+  const [localError, setLocalError] = useState<string | null>(null);
+  // A sign-in waiting for the client of a node just chosen.
+  const [queued, setQueued] = useState<LoginModalTab | null>(null);
+  const titleId = useId();
+  const dialogRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
-    if (isOpen) setTab(initialTab);
-  }, [isOpen, initialTab]);
-  const tabRefs = useRef<Record<LoginModalTab, HTMLButtonElement | null>>({
-    node: null,
-    cloud: null,
-  });
-  const activeTab: LoginModalTab = cloudTab ? tab : 'node';
-
-  // `selected` is a discovered node URL or CUSTOM.
-  const [selected, setSelected] = useState<string>(CUSTOM_SELECTION);
-  const [discovered, setDiscovered] = useState<string[]>([]);
-  const [discovering, setDiscovering] = useState<boolean>(false);
-  const [customUrl, setCustomUrl] = useState<string>('');
-
-  const [loading, setLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const resolved = useMemo(() => resolveMeroTheme(theme), [theme]);
-  const styles = useMemo(() => buildStyles(resolved), [resolved]);
-  // Only emit inline `--mero-*` variables when a `theme` prop was actually
-  // provided. Without a prop, we let global `:root { --mero-* }` rules cascade
-  // through to the portal-rendered modal (with `var()` fallbacks in buildStyles
-  // covering the case where no global rules are loaded).
-  const themeVars = useMemo(
-    () => (theme ? themeToCssVars(resolved) : undefined),
-    [theme, resolved],
-  );
-
-  // Load saved URL into the manual field
-  useEffect(() => {
-    const savedUrl = localStorage.getItem('mero:node_url');
-    if (savedUrl) {
-      setCustomUrl(savedUrl);
+    if (isOpen) {
+      setTab(initialTab);
+      setLocalError(null);
+      setUrl(nodeUrl ?? '');
+      dialogRef.current?.focus();
     }
-  }, []);
+    // Reset only when it opens.
+  }, [isOpen]);
 
-  // A page the node serves has one node: its own origin. No picker, no probe.
+  const run = async (which: LoginModalTab) => {
+    const session = which === 'sign-up' ? await signUp(name.trim()) : await signIn();
+    if (session) {
+      onSignedIn?.();
+      onClose();
+    }
+  };
+
   useEffect(() => {
-    if (isOpen && servedByNode) onConnect(window.location.origin);
-  }, [isOpen, servedByNode]);
+    if (!queued || !client || client.nodeUrl.replace(/\/+$/, '') !== url.trim().replace(/\/+$/, '')) return;
+    const which = queued;
+    setQueued(null);
+    void run(which);
+  }, [queued, client]);
 
-  // Probe local ports whenever the modal is open; a bumpable nonce lets the
-  // user trigger a re-scan.
-  const [scanNonce, setScanNonce] = useState(0);
-  const portsKey = useMemo(() => localNodePorts.join(','), [localNodePorts]);
+  if (!isOpen) return null;
 
-  useEffect(() => {
-    if (!isOpen || servedByNode) {
+  const submit = (event: React.FormEvent) => {
+    event.preventDefault();
+    setLocalError(null);
+    if (tab === 'sign-up' && !name.trim()) {
+      setLocalError('Enter a name for your account.');
       return;
     }
-
-    const controller = new AbortController();
-    let active = true;
-    setDiscovering(true);
-    // Clear any prior results so a re-scan never shows stale nodes.
-    setDiscovered([]);
-    setError(null);
-
-    discoverLocalNodes({ ports: localNodePorts, signal: controller.signal })
-      .then((nodes) => {
-        if (!active) return;
-        setDiscovered(nodes);
-        // Default to the first discovered node, else fall through to manual.
-        setSelected(nodes.length > 0 ? nodes[0] : CUSTOM_SELECTION);
-      })
-      // discoverLocalNodes is designed never to reject; the catch is purely
-      // defensive so a future change can't surface an unhandled rejection.
-      .catch(() => {
-        if (active) setSelected(CUSTOM_SELECTION);
-      })
-      .finally(() => {
-        if (active) setDiscovering(false);
-      });
-
-    return () => {
-      active = false;
-      controller.abort();
-    };
-    // portsKey captures localNodePorts content; scanNonce forces a re-scan.
-  }, [isOpen, servedByNode, portsKey, scanNonce]);
-
-  const isCustom = selected === CUSTOM_SELECTION;
-  const hasDiscovered = discovered.length > 0;
-
-  // Whether the connect button can fire in the current state.
-  const canConnect =
-    !loading && !discovering && (isCustom ? isValidUrl(customUrl) : true);
-
-  // Keep a ref so the input's keydown handler always sees current validity.
-  const canConnectRef = useRef(canConnect);
-  canConnectRef.current = canConnect;
-
-  const handleConnect = useCallback(async () => {
-    const usingDiscovered = selected !== CUSTOM_SELECTION;
-    const targetUrl = usingDiscovered ? selected : customUrl;
-
-    // Manual URLs must look valid before we try them.
-    if (!usingDiscovered && !isValidUrl(targetUrl)) {
-      return;
-    }
-
-    const normalizedUrl = targetUrl.replace(/\/+$/, '');
-
-    // A discovered node already answered a health check — connect straight away.
-    if (usingDiscovered) {
-      onConnect(normalizedUrl);
-      return;
-    }
-
-    // Manually entered URLs are verified via is-authed.
-    setLoading(true);
-    setError(null);
-
-    try {
-      const response = await fetch(
-        nodeEndpoint(normalizedUrl, 'admin-api/is-authed'),
-      );
-
-      if (response.ok || response.status === 401) {
-        setLoading(false);
-        onConnect(normalizedUrl);
-      } else {
-        throw new Error(`Connection failed: ${response.statusText}`);
+    if (!servedByNode) {
+      const target = url.trim();
+      try {
+        const parsed = new URL(target);
+        if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') throw new Error();
+      } catch {
+        setLocalError('Enter the node URL, for example https://node.example.com');
+        return;
       }
-    } catch (err) {
-      console.error('Connection failed:', err);
-      setError('Failed to connect. Please check the URL and try again.');
-      setLoading(false);
+      if (!client || target.replace(/\/+$/, '') !== nodeUrl) {
+        connectToNode(target);
+        setQueued(tab);
+        return;
+      }
     }
-  }, [selected, customUrl, onConnect]);
+    void run(tab);
+  };
 
-  if (!isOpen || servedByNode) {
-    return null;
-  }
+  const vars = theme ? themeToCssVars(resolveMeroTheme(theme)) : undefined;
+  const message = localError ?? failure?.message ?? null;
+  const busy = isLoading || queued !== null;
 
-  const showManualInput = isCustom;
-  const renderRadio = (value: string, label: string, meta?: string) => {
-    const active = selected === value;
-    return (
-      // Selection is driven solely by the radio input's `onChange` — clicking
-      // anywhere on the wrapping label forwards to the input, and keyboard
-      // users can tab to / arrow through the (visually hidden but focusable)
-      // input. A label `onClick` here would double-fire `setSelected`.
-      <label
-        key={value}
-        className={
-          active ? 'mero-login-option mero-login-option-active' : 'mero-login-option'
-        }
-        data-testid={`node-option-${value === CUSTOM_SELECTION ? 'custom' : displayNodeUrl(value)}`}
-        style={{
-          ...styles.radioItem,
-          ...(active ? styles.radioItemActive : {}),
+  return (
+    <div
+      className="mero-dialog-overlay"
+      style={vars}
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget && !busy) onClose();
+      }}
+    >
+      <div
+        ref={dialogRef}
+        className="mero-dialog-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape' && !busy) onClose();
         }}
       >
-        <input
-          type="radio"
-          name="mero-node"
-          value={value}
-          checked={active}
-          onChange={() => setSelected(value)}
-          style={{ position: 'absolute', opacity: 0 }}
-        />
-        <span
-          className="mero-login-option-indicator"
-          style={{
-            ...styles.radioIndicator,
-            ...(active ? styles.radioIndicatorActive : {}),
-          }}
-        >
-          {active && (
-            <span className="mero-login-option-dot" style={styles.radioDot} />
-          )}
-        </span>
-        {label}
-        {meta && (
-          <span className="mero-login-option-meta" style={styles.nodeMeta}>
-            {meta}
+        {appName && <p className="mero-dialog-app">{appName}</p>}
+        <div className="mero-dialog-head">
+          <span className="mero-dialog-icon" aria-hidden="true">
+            <CalimeroLogo size={20} />
           </span>
-        )}
-      </label>
-    );
-  };
-
-  const renderNodeSection = () => {
-    if (discovering) {
-      return (
-        <div
-          className="mero-login-discovering"
-          style={styles.discovering}
-          data-testid="node-discovering"
-        >
-          <div className="mero-login-spinner" style={styles.spinnerSmall} />
-          <p>Searching for local nodes...</p>
+          <h2 id={titleId} className="mero-dialog-title">
+            {tab === 'sign-up' ? 'Create your account' : 'Sign in'}
+          </h2>
         </div>
-      );
-    }
-
-    return (
-      <>
-        <p className="mero-login-info" style={styles.info}>
-          {hasDiscovered
-            ? 'Select your Calimero node to continue.'
-            : 'No local node found. Enter a node URL to continue.'}
+        <p className="mero-dialog-body">
+          {tab === 'sign-up'
+            ? 'Your device saves a passkey for this account. There is no password.'
+            : 'Use the passkey saved on this device.'}
         </p>
-
-        {hasDiscovered && (
-          <div
-            className="mero-login-options"
-            style={styles.radioList}
-            role="radiogroup"
-            aria-label="Available nodes"
-          >
-            {discovered.map((url) =>
-              renderRadio(url, displayNodeUrl(url), 'local'),
-            )}
-            {/* Manual entry is always offered alongside discovered nodes. */}
-            {renderRadio(CUSTOM_SELECTION, 'Enter node URL manually')}
+        <form onSubmit={submit} noValidate>
+          {!servedByNode && (
+            <label className="mero-dialog-field">
+              Node URL
+              <input
+                className="mero-dialog-input"
+                type="url"
+                inputMode="url"
+                autoComplete="url"
+                placeholder="https://node.example.com"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                disabled={busy}
+              />
+            </label>
+          )}
+          {tab === 'sign-up' && (
+            <label className="mero-dialog-field">
+              Name
+              <input
+                className="mero-dialog-input"
+                type="text"
+                autoComplete="username webauthn"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                disabled={busy}
+              />
+            </label>
+          )}
+          {message && (
+            <p className="mero-dialog-body mero-dialog-body-error" role="alert">
+              {message}
+            </p>
+          )}
+          {busy && (
+            <div className="mero-dialog-progress" aria-hidden="true">
+              <div className="mero-dialog-progress-bar" />
+            </div>
+          )}
+          <div className="mero-dialog-actions">
+            <button type="button" className="mero-dialog-button mero-dialog-secondary" onClick={onClose} disabled={busy}>
+              Cancel
+            </button>
+            <button type="submit" className="mero-dialog-button mero-dialog-primary" disabled={busy}>
+              {tab === 'sign-up' ? 'Create account' : 'Sign in with passkey'}
+            </button>
           </div>
-        )}
-
-        {showManualInput && (
-          <input
-            type="text"
-            value={customUrl}
-            onChange={(e) => setCustomUrl(e.target.value)}
-            placeholder="https://your-node-url.calimero.network"
-            className="mero-login-input"
-            style={styles.input}
-            data-testid="node-url-input"
-            autoFocus={!hasDiscovered}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && canConnectRef.current) {
-                handleConnect();
-              }
-            }}
-          />
-        )}
-
-        <div className="mero-login-toolbar" style={styles.toolbar}>
+        </form>
+        {allowSignUp && (
           <button
             type="button"
-            className="mero-login-rescan"
-            style={styles.rescan}
-            onClick={() => setScanNonce((n) => n + 1)}
-            data-testid="rescan-button"
+            className="mero-dialog-link"
+            onClick={() => {
+              setLocalError(null);
+              setTab(tab === 'sign-up' ? 'sign-in' : 'sign-up');
+            }}
+            disabled={busy}
           >
-            ↻ Rescan local nodes
+            {tab === 'sign-up' ? 'I already have a passkey' : 'New here? Create an account'}
           </button>
-        </div>
-      </>
-    );
-  };
-
-  // The node dialog's body, exactly as it was before there were tabs. With a
-  // Cloud tab it is wrapped as the Node tabpanel; without one it is the whole
-  // modal body, with no wrapper, so a direct LoginModal user sees no change.
-  const renderNodeBody = () => {
-    const body = loading ? (
-      <div className="mero-login-loading" style={styles.loading}>
-        <p>Connecting to node...</p>
-        <div className="mero-login-spinner" style={styles.spinner} />
-      </div>
-    ) : (
-      <>
-        {error && (
-          <p className="mero-login-error" style={styles.error}>
-            {error}
-          </p>
         )}
-
-        {renderNodeSection()}
-
-        <div className="mero-login-actions" style={styles.buttonGroup}>
-          <button
-            className="mero-login-button mero-login-primary"
-            onClick={handleConnect}
-            disabled={!canConnect}
-            style={{
-              ...styles.button,
-              ...(!canConnect ? styles.buttonDisabled : {}),
-            }}
-            data-testid="connect-button"
-          >
-            Connect
-          </button>
-        </div>
-      </>
-    );
-    if (!cloudTab) return body;
-    return (
-      <div
-        className="mero-login-panel"
-        role="tabpanel"
-        id="mero-login-panel-node"
-        aria-labelledby="mero-login-tab-node"
-      >
-        {body}
       </div>
-    );
-  };
-
-  // WAI-ARIA tabs with automatic activation: the selected tab is the one tab
-  // stop, and the arrow keys (plus Home/End) move selection and focus.
-  const selectTab = (id: LoginModalTab) => {
-    setTab(id);
-    tabRefs.current[id]?.focus();
-  };
-  const onTabKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
-    const i = TABS.findIndex((t) => t.id === activeTab);
-    let next: number | null = null;
-    if (e.key === 'ArrowRight') next = (i + 1) % TABS.length;
-    else if (e.key === 'ArrowLeft') next = (i - 1 + TABS.length) % TABS.length;
-    else if (e.key === 'Home') next = 0;
-    else if (e.key === 'End') next = TABS.length - 1;
-    if (next === null) return;
-    e.preventDefault();
-    selectTab(TABS[next].id);
-  };
-  const renderTabs = () => (
-    <div
-      className="mero-login-tabs"
-      role="tablist"
-      aria-label="How to connect"
-      style={styles.tabList}
-    >
-      {TABS.map((t) => {
-        const selected = activeTab === t.id;
-        return (
-          <button
-            key={t.id}
-            ref={(el) => {
-              tabRefs.current[t.id] = el;
-            }}
-            type="button"
-            className={
-              selected ? 'mero-login-tab mero-login-tab-active' : 'mero-login-tab'
-            }
-            role="tab"
-            id={`mero-login-tab-${t.id}`}
-            aria-selected={selected}
-            aria-controls={`mero-login-panel-${t.id}`}
-            tabIndex={selected ? 0 : -1}
-            onClick={() => setTab(t.id)}
-            onKeyDown={onTabKeyDown}
-            style={{ ...styles.tab, ...(selected ? styles.tabActive : {}) }}
-            data-testid={`login-tab-${t.id}`}
-          >
-            {t.label}
-          </button>
-        );
-      })}
     </div>
   );
-
-  const modalContent = (
-    <>
-      <style>{`
-        @keyframes meroSpin { to { transform: rotate(360deg); } }
-        @keyframes meroFadeIn { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes meroSlideIn { from { transform: translateY(-12px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-      `}</style>
-      <div
-        className="mero-login-overlay"
-        style={{ ...themeVars, ...styles.overlay }}
-        onClick={onClose}
-      >
-        <div
-          className="mero-login-dialog"
-          style={styles.content}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <button
-            className="mero-login-close"
-            style={styles.closeButton}
-            onClick={onClose}
-            aria-label="Close"
-          >
-            &times;
-          </button>
-
-          <div className="mero-login-header" style={styles.header}>
-            <CalimeroLogo
-              size={44}
-              color={cssVar(resolved, 'primary')}
-              className="mero-login-logo"
-            />
-            <h1 className="mero-login-title" style={styles.title}>
-              Connect to Calimero
-            </h1>
-          </div>
-
-          {cloudTab && renderTabs()}
-
-          {activeTab === 'cloud' && cloudTab ? (
-            <div
-              className="mero-login-panel"
-              role="tabpanel"
-              id="mero-login-panel-cloud"
-              aria-labelledby="mero-login-tab-cloud"
-              tabIndex={0}
-            >
-              <AccountSignInPanel
-                onEnrol={cloudTab.onEnrol}
-                note={cloudTab.note}
-                walletUrl={cloudTab.walletUrl}
-                customWallet={cloudTab.customWallet}
-                theme={theme}
-              />
-            </div>
-          ) : (
-            renderNodeBody()
-          )}
-        </div>
-      </div>
-    </>
-  );
-
-  return createPortal(modalContent, document.body);
 }
 
 export default LoginModal;
