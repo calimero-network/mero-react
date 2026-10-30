@@ -1,8 +1,18 @@
 # @calimero-network/mero-react
 
-React bindings for [@calimero-network/mero-js](../mero-js) — the Calimero Network SDK.
+React bindings for **Calimero 1.0**, on the mero-js 27 client (`CalimeroClient`).
 
-No external UI framework. No styled-components. No axios. A provider, 44 hooks, storage helpers, and optional headless utility components (ConnectButton, LoginModal).
+A 1.0 node runs in an attested TDX cluster. The client verifies the node's attestation, seals every request to the node's attested key, and signs people in with **passkeys**. mero-react puts one client in context and builds the hooks on top of it:
+
+- passkey sign-in and sign-up;
+- sessions that refresh by themselves;
+- calls, views and live events on an app instance;
+- organizations, teams and invites;
+- the node's consent page for approvals;
+- blobs and presence;
+- typed errors your UI can switch on.
+
+> **Upgrading from 10.x?** 11.0 is a rewrite for core 1.0, which removed `/admin-api`, `/jsonrpc`, `/ws`, `/sse`, mero-auth and `/auth/token`. Read [Migrating from 10.x](#migrating-from-10x) below.
 
 ## Installation
 
@@ -10,369 +20,229 @@ No external UI framework. No styled-components. No axios. A provider, 44 hooks, 
 pnpm add @calimero-network/mero-react
 ```
 
-Peer dependencies: `react` ^18 || ^19, `react-dom` ^18 || ^19. `mero-js` is a bundled dependency — no separate install needed.
+`@calimero-network/mero-js` (^27.2) comes with it, and every mero-js export is re-exported, so apps need only this import. React 18 or 19 is a peer dependency.
 
 ## Quick start
 
 ```tsx
-import { MeroProvider, useMero, useExecute, useSubscription, AppMode } from '@calimero-network/mero-react';
+import {
+  MeroProvider,
+  ConnectButton,
+  useMero,
+  useView,
+  useExecute,
+  useSubscription,
+} from '@calimero-network/mero-react';
 
-function App() {
+export function Root() {
   return (
-    <MeroProvider mode={AppMode.SingleContext} packageName="com.calimero.my-app">
-      <MyApp />
+    // A frontend the node serves at {label}.{apps-domain}:
+    <MeroProvider servedByNode minReleaseVersion="2.3.109" appId={APP_ID}>
+      <App />
     </MeroProvider>
   );
 }
 
-function MyApp() {
-  const { isAuthenticated, connectToNode, logout, contextId, contextIdentity } = useMero();
-
-  if (!isAuthenticated) {
-    return <button onClick={() => connectToNode('http://localhost:4001')}>Connect</button>;
-  }
-
-  return <Dashboard />;
-}
-
-function Dashboard() {
-  const { contextId, contextIdentity } = useMero();
-  const { execute, loading } = useExecute(contextId, contextIdentity);
-  const [items, setItems] = useState([]);
-
-  // Real-time updates via SSE
-  useSubscription(
-    contextId ? [contextId] : [],
-    () => fetchItems(),
-  );
-
-  const fetchItems = async () => {
-    const data = await execute('list');
-    if (data) setItems(data);
-  };
-
-  const addItem = async (title: string) => {
-    await execute('add', { title });
-    await fetchItems();
-  };
-
-  return (
-    <div>
-      {loading && <p>Loading...</p>}
-      {items.map(item => <div key={item.id}>{item.title}</div>)}
-      <button onClick={() => addItem('New item')}>Add</button>
-    </div>
-  );
-}
-```
-
-## API reference
-
-### `<MeroProvider>`
-
-Wraps your app with a MeroJs instance, auth state, and SSE connectivity.
-
-```tsx
-<MeroProvider
-  mode={AppMode.SingleContext}    // required
-  packageName="com.calimero.my-app"  // for package-based apps
-  timeoutMs={30000}                  // optional, default 30s
->
-  {children}
-</MeroProvider>
-```
-
-Props (`MeroProviderConfig & { children }`):
-
-| Prop | Type | Required | Description |
-|------|------|----------|-------------|
-| `mode` | `AppMode` | Yes | `SingleContext`, `MultiContext`, or `Admin` |
-| `packageName` | `string` | No | Package name for registry/node lookup |
-| `packageVersion` | `string` | No | Specific version (defaults to latest) |
-| `registryUrl` | `string` | No | Registry URL override |
-| `timeoutMs` | `number` | No | HTTP request timeout (default 30000) |
-| `allowedNodeUrls` | `string[]` | No | Origins the OAuth callback may authenticate against. The initiated node is always trusted; this allowlist additionally permits direct-callback entry. A callback `node_url` matching neither is rejected. |
-| `servedByNode` | `boolean` | No | The node serves this page from its own origin. See [Serving an app from a node](#serving-an-app-from-a-node). |
-| `tokenStore` | `TokenStore` | No | Pluggable access/refresh token store. Defaults to localStorage. Pass a `MemoryTokenStore` or cookie-backed store for sensitive deployments (localStorage tokens are XSS-readable). |
-
-Modes and their permissions:
-
-| Mode | Permissions | Use case |
-|------|-------------|----------|
-| `SingleContext` | `context:execute` | Apps that work with one context |
-| `MultiContext` | `context:create`, `context:list`, `context:execute` | Apps managing multiple contexts |
-| `Admin` | `admin` | Admin dashboards, dev tools |
-
-Auth flow: when `connectToNode(url)` is called, the provider redirects to the node's auth page. After login, the node redirects back with tokens in the URL hash. The provider processes these once (StrictMode-safe via ref) and sets `isAuthenticated = true`. The callback's `node_url` is validated against the node login was initiated with (or `allowedNodeUrls`); a `node_url` matching neither is rejected.
-
-#### Serving an app from a node
-
-When a node serves your bundled frontend (for example at `my-app.localhost:2428`), pass `servedByNode`.
-The node is then the page's own origin: the client talks to `window.location.origin` whatever the login callback's `node_url` says, and nothing probes other origins.
-`ConnectButton` skips the node picker and goes straight to `/auth/login` on that origin, which the node redirects to its login page.
-Set the prop yourself, for example from a build flag; the provider does not detect it.
-
-```tsx
-<MeroProvider mode={AppMode.MultiContext} servedByNode>
-```
-
-The node serves the page under a strict CSP (`connect-src 'self'`), so the bundle must:
-
-- be built with Vite `base: './'` and reference assets by relative URL;
-- have no inline scripts and no CDN-hosted scripts, styles or fonts.
-
-Online detection: the provider opens an SSE connection to the node after auth. `isOnline` reflects the SSE connection state — no polling.
-
-### `useMero()`
-
-Access the MeroJs instance, auth state, and actions.
-
-```tsx
-const {
-  mero,             // MeroJs | null — the SDK instance
-  isAuthenticated,  // boolean
-  isOnline,         // boolean — SSE connection state
-  isLoading,        // boolean — initial session restore
-  nodeUrl,          // string | null
-  applicationId,    // string | null — node: from the auth callback; account: see below
-  contextId,        // string | null — from auth callback
-  contextIdentity,  // string | null — executor public key from auth callback
-  connectToNode,    // (url: string) => void — starts auth redirect
-  admin,            // AdminApiClient | null — the session's admin: node admin on a node, account admin on an account
-  logout,           // () => void — clears tokens and state
-} = useMero();
-```
-
-Every hook in this package goes through that `admin`, never the raw `mero.admin`: on a node it is the node's own admin API; on an account (delegated session) it is the account admin, whose reads go to the relay and whose writes are the account's own form of the call (invitations signed with the device key, joins through the admit route, group changes as governance ops under warrants). An app gets the same result from `useCreateNamespaceInvitation`, `useJoinNamespace`, `useAddGroupMembers` and the rest on a node and on an account; a call an account has no form of (`useUpgradeGroup`, `useDeleteNamespace`, `useJoinGroup`, ...) surfaces `NotForAccountError` through `error`.
-
-How an account (delegated session) learns its `applicationId`: `packageName` decides. When the app passes one, the id is derived from the registry: `sha256(borsh((package, signerId)))` of the newest non-yanked bundle, exactly as merod computes it at install, so a brand-new account can found its first namespace (`admin.createNamespace({ applicationId })`) and an account already used in other apps is never handed one of THEIR ids. The account's own contexts on the relay are consulted only when the app passes no `packageName` (or the registry did not answer, after one `console.warn`): one distinct application across them is the answer; several leaves it `null` on purpose (nothing says which the tab is for). When the registry lists the package under more than one publisher, it stays `null`. `applicationIdForBundle` and `resolveApplicationIdFromRegistry` are exported for apps that need the same derivation.
-
-On an account, `admin.createContext(request)` (and `useCreateContext`) signs a creation warrant the relay acts on: `applicationId`, `groupId`, `serviceName` (which service of a multi-service bundle, e.g. mero-docs' `registry`), `name`, `contextSeed` and `initializationParams` are all carried into it; `identitySecret` is not, since the account itself is the new context's member identity.
-
-Through `mero` you access the full MeroJs API:
-
-```tsx
-// Admin API (flat methods, NOT nested)
-await mero.admin.healthCheck();
-await mero.admin.getContexts();
-await mero.admin.getContext(contextId);
-await mero.admin.getContextIdentitiesOwned(contextId);
-await mero.admin.listApplications();
-await mero.admin.getApplication(appId);
-await mero.admin.installApplication(request);
-await mero.admin.createContext(request);
-await mero.admin.uploadBlob(request);
-await mero.admin.getPeersCount();
-
-// Auth API
-await mero.auth.getProviders();
-await mero.auth.generateTokens(request);
-await mero.auth.refreshToken(request);
-
-// RPC
-await mero.rpc.execute({ contextId, method, argsJson, executorPublicKey });
-
-// SSE events
-mero.events.connect();
-mero.events.subscribe(contextIds);
-mero.events.on('event', handler);
-
-// Tokens
-mero.getTokenData();        // { access_token, refresh_token, expires_at } | null
-mero.isAuthenticated();     // boolean
-```
-
-### `useExecute(contextId, executorId)`
-
-Wraps `mero.rpc.execute()` with loading/error state. Unmount-safe.
-
-```tsx
-const { execute, loading, error } = useExecute(contextId, contextIdentity);
-
-// Generic typed
-const todos = await execute<Todo[]>('list');
-await execute('add', { title: 'Buy milk' });
-await execute('toggle', { id: '1' });
-```
-
-| Return | Type | Description |
-|--------|------|-------------|
-| `execute` | `<T>(method, params?) => Promise<T \| null>` | Call a contract method |
-| `loading` | `boolean` | Request in flight |
-| `error` | `Error \| null` | Last error |
-
-### `useSubscription(contextIds, callback)`
-
-Manages SSE event subscription lifecycle. StrictMode-safe — connects once per MeroJs instance, cleans up on unmount.
-
-```tsx
-useSubscription(
-  contextId ? [contextId] : [],
-  (event) => {
-    console.log('Context event:', event.contextId, event.data);
-    refreshData();
-  },
-);
-```
-
-| Param | Type | Description |
-|-------|------|-------------|
-| `contextIds` | `string[]` | Context IDs to subscribe to (empty array = no subscription) |
-| `callback` | `(event: SseEventData) => void` | Called on each context event |
-
-The SSE connection is shared — multiple `useSubscription` hooks reuse the same connection. The first one to mount calls `connect()`, subsequent ones just add handlers.
-
-### `useContexts(applicationId?)`
-
-Fetches contexts from the node, optionally filtered by application ID.
-
-```tsx
-const { contexts, loading, error, refetch } = useContexts(applicationId);
-
-// contexts: Array<{ contextId: string; applicationId: string }>
-```
-
-### Blob hooks
-
-`useBlobInfo` / `useBlobUrl` / `useUploadBlob` read and write the node's blob
-store. The reads take an optional `contextId`, and it is what picks the mode:
-
-- **without `contextId`** — local-only. The node answers from its own blob
-  store immediately, or 404s.
-- **with `contextId`** — network discovery. The node probes that context's
-  peers (availability nodes first) for a holder.
-
-Discovery is slow: core bounds the search by a **~30s deadline**, and for
-`useBlobUrl` the byte transfer is on top of that. `loading` is real UI state on
-these hooks, not decoration.
-
-```tsx
-// Presence and size, no download — ask this before pulling something large.
-const { info, notFound, loading, error } = useBlobInfo(blobId, { contextId });
-// info: { blobId, size, hash?, mimeType?, source?: 'local' | 'peer' } | null
-
-// Bytes as an object URL, revoked for you on unmount and on id/context change.
-const { url } = useBlobUrl(blobId, { contextId, type: 'image/png' });
-return url ? <img src={url} /> : null;
-
-// Upload. Pass contextId to announce the blob so the context's peers can
-// discover it later.
-const { uploadBlob, loading, error } = useUploadBlob();
-const result = await uploadBlob({ data: bytes, contextId });
-```
-
-A null/undefined `blobId` fetches nothing, like the other `string | null` read
-hooks. `hash` and `mimeType` are genuinely optional — a peer probe carries only
-presence and size, so a discovery-sourced hit has neither; read `info.source`
-to tell a local answer from a peer one. `notFound` marks the node's legitimate
-"no holder" 404 apart from a transport failure; `error` is set for both.
-
-### Storage helpers
-
-Persist/read node URL, application ID, context ID, and context identity in localStorage.
-
-```tsx
-import {
-  getNodeUrl, setNodeUrl, clearNodeUrl,
-  getApplicationId, setApplicationId, clearApplicationId,
-  clearAllStorage,
-} from '@calimero-network/mero-react';
-```
-
-These are used internally by `MeroProvider` but exported for apps that need direct access.
-
-### Invitations by link
-
-An invitation reaches an app only by its link being opened: `https://links.calimero.network/<package>/join?invitation=…`. The links page opens the app with `?invitation=…` appended, and a desktop app that is already open receives a `deep-link` event. This module covers that path end to end:
-
-```tsx
-import {
-  primeInvitationCapture,
-  useInviteRedemption,
-  InvitationDialog,
-  InvitationGate,
-  buildInviteLink,
-} from '@calimero-network/mero-react';
-
-// main.tsx, before the router runs: take the link from the URL or the desktop
-// bridge and buffer it until something asks.
-primeInvitationCapture('my-app', { slug: 'com.example.my-app' });
-
-// The app root, once: ask, join, wait for the data, done.
-function Invitations() {
-  const redemption = useInviteRedemption({
-    parse: (token) => decodeMyToken(token), // { namespaceId, invitation, teamName? }
-    redeemer: { join, isMember },            // mero-js `InviteRedeemer`
-    onJoined: (namespaceId) => navigate(`/w/${namespaceId}`),
+function App() {
+  const { isAuthenticated } = useMero();
+  const items = useView<string[]>('list_items');
+  const { execute, failure } = useExecute();
+  useSubscription(undefined, (event) => {
+    if (event.kind === 'ItemAdded') void items.refetch();
   });
+
+  if (!isAuthenticated) return <ConnectButton appName="Notes" />;
   return (
     <>
-      {/* Logged out: "You're invited", with the login. Logged in: nothing. */}
-      <InvitationGate parse={decodeMyToken} noun="workspace" appName="My App" />
-      <InvitationDialog redemption={redemption} noun="workspace" appName="My App" />
+      <ul>{items.data?.map((item) => <li key={item}>{item}</li>)}</ul>
+      <button onClick={() => execute('add_item', { text: 'hello' })}>Add</button>
+      {failure && <p role="alert">{failure.message}</p>}
     </>
   );
 }
-
-// Sharing: one link shape for every app.
-const link = buildInviteLink('com.example.my-app', token);
 ```
 
-An app whose join does more than join the namespace (entering a context, choosing where to land) passes `redeem: (parsed) => Promise<RedeemOutcome>` instead of `redeemer`; `parse` may return extra fields, which reach `redeem` and come back as `parsed`. The dialog takes `detail` (the app's own words under the question) and `status` (the step a slow join is on).
-
-`InvitationGate` is what a link shows someone who is not logged in. Without it they land on the app's ordinary logged-out page (usually its marketing landing), with nothing saying they were invited, while the invitation waits in storage for a login they have to think of themselves. The gate shows a full page instead: **You're invited to join “Design team”** (decoded by the app's own `parse`, which needs no session), in which app, with **Log in to join** (`ConnectButton` and its Node / Cloud dialog) and **Not now** (acks the invitation, so it does not come back). While the session is still restoring it shows a blank page with a spinner, so neither the landing page nor the invite screen flashes; once logged in it renders nothing and the dialog takes over. Mounted with no children it covers the page as a full-page layer; wrapped around the app (`<InvitationGate …>{app}</InvitationGate>`) it renders instead of the app. Test ids: `invite-landing` (with `data-state`: `checking`, `invited`, `invalid`), `invite-landing-login`, `invite-landing-decline`.
-
-`InvitationDialog` walks through every stage in one modal: **ask** (Join / Not now) → **joining** → **syncing** → **ready** (closes by itself), or **already a member**, or **failed** (the reason in plain words, with Try again when a retry can help).
-
-**Syncing** lasts until the joined namespace's data has arrived. Redemption marks the namespace just-joined, and the page that reads its data clears that mark:
+For local development against `merod local` (three `--dev` nodes with mock attestation on 127.0.0.1:2501-2503):
 
 ```tsx
-// The page showing the namespace: `settled` once a read has come back,
-// including an empty one.
-const { isSyncing, dismiss } = useJoinSync({ namespaceId, settled: !loading });
+<MeroProvider
+  nodeUrl="http://127.0.0.1:2501"
+  nodes={['http://127.0.0.1:2502', 'http://127.0.0.1:2503']}
+  allowMock
+>
 ```
 
-An app whose root already knows can pass `synced` to the dialog instead. A sync that never settles says so after `JOIN_SYNC_WATCHDOG_MS`, offering **Continue in background**, and lets go at `JOIN_SYNC_MAX_MS`. `JoinSyncBanner` is the matching in-page strip: a page that can be reached while its namespace is still syncing shows it rather than its empty state.
+`allowMock` accepts mock attestation quotes. Never set it from anything a visitor controls, such as a URL parameter or the environment of a deployed build.
 
-Joining and syncing cannot be closed by a click on the backdrop or by Escape, and while the dialog is up the rest of the page is `inert`. After **Continue in background** the dialog keeps the flag's `JOIN_SYNC_MAX_MS` ceiling running, so a person who navigates away from the page that would clear it is not left with a namespace flagged for the rest of the session.
+## `<MeroProvider>`
 
-The dialog is styled with the same `--mero-*` variables as `<ConnectButton>` and `<LoginModal>` (see [Theming](#theming)). Its test ids are `invite-prompt` (with `data-stage`), `invite-accept`, `invite-decline`, `invite-continue`, `invite-done`, `invite-retry` and `invite-error`.
+| Prop | Type | What it does |
+| --- | --- | --- |
+| `minReleaseVersion` | `string` | The oldest mero-tee release to trust, for example `2.3.109`. This is shorthand for `policy: { release: { minReleaseVersion } }`. |
+| `policy` | `CloudPolicy` | The full attestation policy (profile, release source, `verifyQuote`, `appHash`). Takes precedence over `minReleaseVersion`. |
+| `allowMock` | `boolean` | Accept mock quotes (`merod local`, `--dev` clusters). The provider throws if `minReleaseVersion`, `policy` and `allowMock` are all missing. |
+| `servedByNode` | `boolean` | The node serves this page. The node is then `window.location.origin`, and a passkey ceremony here opens a session bound to this app's package. `ConnectButton` skips the node field. |
+| `nodeUrl` | `string` | The node to use when the page is not node-served. Without it, the provider uses the node kept from the last visit, or waits for `connectToNode`. |
+| `nodes` | `string[]` | Other nodes of the cluster. On `421 WRONG_NODE` the client moves to the next one and repeats the request once. |
+| `appId` | `string` | The app instance that hooks default to. |
+| `sessionStore` | `SessionStore` | Where the session is kept. The default is `localStorageSessionStore`; `memorySessionStore()` keeps it for the tab's lifetime only. |
+| `passkey` | `PasskeyProvider` | The WebAuthn prompt. The default is mero-js `browserPasskey()`. |
+| `fetch`, `retry` | | Passed through to `CalimeroClient`. |
+| `client` | `CalimeroClient` | Use this client instead of building one, for tests or custom setups. |
+| `onError` | `(failure) => void` | Called with every failure that a hook or a sign-in reports. |
 
-### Re-exports from mero-js
+### `useMero()`
 
-mero-react re-exports everything from mero-js via `export * from '@calimero-network/mero-js'`. Any new API added to mero-js is automatically available from mero-react — no manual sync needed.
-
-```tsx
-// All of these work from a single import
-import {
-  MeroProvider, useMero, useExecute, useSubscription,  // react
-  MeroJs, RpcClient, SseClient, WsClient,              // core
-  parseAuthCallback, buildAuthLoginUrl,                  // auth helpers
-  LocalStorageTokenStore, MemoryTokenStore,              // token stores
-} from '@calimero-network/mero-react';
+```ts
+const {
+  client,            // CalimeroClient | null (null until a node is known)
+  nodeUrl, connectToNode, disconnect,
+  session, accountId, isAuthenticated, isLoading,
+  signIn,            // () => Promise<CalimeroSession | null>: an existing passkey
+  signUp,            // (name) => Promise<CalimeroSession | null>: a new account and passkey
+  signOut, signOutEverywhere,
+  appId, setAppId,
+  passkey, servedByNode, allowMock,
+  failure,           // the last sign-in or session failure, described
+  reportError,
+} = useMero();
 ```
 
-## Theming
+**Sessions.** A 1.0 session is a session token (`v2.…`) that lasts 15 minutes, plus a refresh token (`rt_…`) that lasts 30 days and can be used once.
 
-`ConnectButton` and `LoginModal` default to the green Calimero palette used in admin-dashboard, tauri-app, and app-registry. Pass nothing for the default — provide a partial `MeroTheme` to override any subset.
+- The client refreshes by itself on a `401`. One refresh is shared by every request waiting on it, because reusing a refresh token revokes the session (mero-js#318).
+- The provider saves every new session to `sessionStore`, so a reload resumes the session.
+- When a refresh is refused, hooks get `LoginRequired`, and the provider ends the session and sets `failure.kind = 'login'`.
+- `mero` is still on the value as a deprecated alias of `client`.
 
-```tsx
-import { ConnectButton } from '@calimero-network/mero-react';
+## Hooks
 
-// Default green palette — no theme prop needed
-<ConnectButton />
+Every read hook returns `{ data, loading, error, failure, refetch }`. Every action hook returns its action plus `{ loading, error, failure }`.
 
-// Override only what you want; the rest stay default
-<ConnectButton
-  theme={{
-    primary: '#ff4081',
-    primaryHover: '#e91e63',
-    primaryText: '#ffffff',
-  }}
-/>
+- `error` is the error exactly as the client threw it, so `instanceof AppError` still works.
+- `failure` is `describeError(error)`; see [Errors](#errors).
+- An action resolves `null` when it fails. Pass `{ throwOnError: true }` to make it throw instead.
+
+### App: calls, views, events
+
+| Hook | Returns |
+| --- | --- |
+| `useApp(appId?)` | `{ appId, app, call, view, loading, error, failure, refetch }`. `call` and `view` are bound to the app and throw. |
+| `useExecute(appId?, opts?)` | `{ execute, call, loading, error, failure }`. `execute(method, args?, { idempotencyKey?, confirm? })` resolves the method's result; `call` resolves the whole `CallResult` (`index`, `events`). `confirm: true` answers `412 CONFIRM_REQUIRED` with the passkey (`callConfirmed`). |
+| `useView<T>(method, args?, { appId?, stale?, minIndex?, enabled? })` | `{ data: T, index, … }`. It reads again when the method or the arguments change. |
+| `useSubscription(appIds?, callback, opts?)` | Calls `callback` with each `AppEvent` (`{ appId, id, index, seq, kind, data }`). |
+| `useAppAbi(appId?)` | The app's ABI. |
+
+`appId` defaults to the provider's `appId`.
+
+How `useSubscription` behaves:
+
+- Each app gets one SSE stream with an `AbortController`. Unmounting, or changing the app ids, aborts it.
+- A stream that ends or fails reopens with backoff from the last event it saw. Events at or before that one are skipped, so nothing is delivered twice.
+- `from` defaults to `'live'`. Pass a log index to replay from it (`0` replays the whole history).
+- `onOpen` is called each time a stream opens. Refetch views there to cover a gap.
+
+### Apps
+
+| Hook | Was (10.x) |
+| --- | --- |
+| `useApps({ package?, bundle? })` | `useContexts` |
+| `useCreateApp().create({ name, bundle, org?, access?, confirmMethods?, initArgs? })` | `useCreateContext` |
+| `useDeleteApp().deleteApp(appId)` | `useDeleteContext` |
+| `useSetAppMetadata().setMetadata(appId, metadata)` | `useSetContextMetadata` |
+| `useUpgradeApp(appId?).upgrade({ version, … })` | `useUpgradeGroup`. It asks for the passkey. |
+| `usePackages()` | none (new) |
+
+### Organizations and teams
+
+| Hook | Was (10.x) |
+| --- | --- |
+| `useOrg(orgId)` | `useNamespace` |
+| `useCreateOrg().create(name)` | `useCreateNamespace` |
+| `useDeleteOrg().deleteOrg(orgId)` | `useDeleteNamespace`. It asks for the passkey. |
+| `useSetMember().setMember(org, account, role)` | `useUpdateMemberRole`, and `useAddGroupMembers` at org level |
+| `useRemoveMember().removeMember(org, account)` | none (new) |
+| `useSetOrgMetadata()`, `useSetMemberMetadata()` | `useSetGroupMetadata`, `useSetMemberMetadata` |
+| `useSetCapabilities().setCapabilities(org, bits, { account?, team? })` | `useSetDefaultCapabilities` |
+| `useTeam(org, team)` | `useGroupInfo` |
+| `useCreateTeam().create({ orgId, name, join?, parent? })` | `useCreateGroupInNamespace` |
+| `useUpdateTeam().update(org, team, { name?, join?, parent?, metadata? })` | `useSetGroupMetadata`, `useReparentGroup`, `useSetSubgroupVisibility` |
+| `useDeleteTeam()`, `useSetTeamMember()`, `useRemoveTeamMember()` | `useDeleteGroup`, `useAddGroupMembers`, `useRemoveGroupMembers` |
+
+### Invites
+
+| Hook | Notes |
+| --- | --- |
+| `useCreateInvite().create({ orgId, role?, teams?, ttlSecs?, uses?, linkBase? })` | Resolves `{ token, link }`. The link carries the token in the fragment (`#invite=…`), so it stays out of server logs. |
+| `useRedeemInvite().redeem(token)` | `POST /invites/{token}/redeem` |
+| `useInviteRedemption({ autoRedeem? })` | The whole link flow. It reads the token from the address bar and removes it there, keeps it through sign-in, and redeems it once the person is signed in. `status` is `idle`, `waiting-for-sign-in`, `redeeming`, `redeemed` or `failed`. |
+
+`inviteLink(token, base?)` and `readInviteToken(href)` are exported too.
+
+### Consent page
+
+Approvals happen only on the page the node serves on its own origin, never inside an app. A session opened on an app's frontend cannot approve anything.
+
+```ts
+const consent = useConsent();
+await consent.open(upgradeConsent(appId, '1.2.0', window.location.href)); // navigates to the node's page
+// … back on returnTo:
+if (consent.returned) await consent.check(consent.returned.requestId);    // confirm the hint
+// or, when the page was opened in another window:
+await consent.wait(started.requestId);
 ```
 
-The same theme is forwarded to the embedded `LoginModal` and is also exposed as CSS variables on the component root, so a global stylesheet works too:
+`useConsent()` returns `{ request, open, check, wait, cancel, started, result, returned, … }`. Build requests with mero-js `releaseConsent`, `withdrawConsent` and `upgradeConsent`.
+
+### Blobs, presence, account
+
+| Hook | Notes |
+| --- | --- |
+| `useUploadBlob({ appId? }).upload(bytes \| Blob \| File)` | Resolves `{ blobId, id, size }`. Blobs now belong to an app instance. |
+| `useBlobInfo(blobId, { appId? })`, `useBlobs(appId?)` | |
+| `useBlobUrl(blobId, { appId?, mimeType? })` | `{ url }` is an object URL. The bytes come over the sealed channel, and the URL is revoked on unmount. |
+| `useDeleteBlob({ appId? }).deleteBlob(blobId)` | |
+| `useEphemeral<T>(appId, { codec?, initial?, throttleMs?, includeSelf? })` | Presence. Returns `{ peers: Map<account, T>, entries, setPresence, leave, error }`. It sends a heartbeat every 5 s and retracts on unmount. |
+| `useAccount()` | `GET /auth/me`. Was `useNodeIdentity`. |
+| `usePasskeys()` | `{ add, remove, label }` for the account's passkeys. |
+
+## Errors
+
+mero-js maps every refusal to a typed error (`errorFrom`, mero-js#312). mero-react keeps that error in `error` and adds `failure = describeError(error)`:
+
+```ts
+type Failure = {
+  kind: FailureKind;          // see the table
+  message: string;            // a sentence you can show as it is
+  retryable: boolean;
+  status?: number; code?: string;
+  appCode?: string; fields?: Record<string, unknown>;   // kind 'app'
+  committed?: false | 'unknown';                         // kind 'unavailable'
+  release?: string;                                      // kind 'release-deadline'
+  error: unknown;
+};
+```
+
+| `kind` | From |
+| --- | --- |
+| `app` | `AppError` (`422 APP_ERROR`): the app's own error, with `appCode` and named `fields` |
+| `trap` | `TrapError` (`422 TRAP`) |
+| `login` | `LoginRequired`: the refresh was refused. The provider ends the session. |
+| `confirm` / `cancelled` | `ConfirmRequired` (`412`) / `ConfirmCancelled` (the person dismissed the passkey prompt) |
+| `wrong-node` | `WrongNode` / `421 NOT_LEADER` after failover ran out |
+| `unavailable` | `UnavailableError` (`503` or no answer after retries). Check `committed`. |
+| `not-found`, `forbidden`, `too-large`, `idempotency`, `rate-limited` | `404`, `403`, `413`, `409 IDEMPOTENCY_MISMATCH`, `429` |
+| `release-deadline`, `consent-stale`, `operator-signature` | `409 RELEASE_DEADLINE`, `409 CONSENT_STALE`, `428 OPERATOR_SIGNATURE_REQUIRED` |
+| `attestation` | The sealed channel or the attestation check failed |
+
+## Components
+
+- `<ConnectButton appName? allowSignUp? initialTab? theme? logoOnly? label? />`. Signed out, it shows "Sign in" and opens `LoginModal`. Signed in, it shows the account, with a menu for Sign out and Sign out everywhere.
+- `<LoginModal isOpen onClose onSignedIn? initialTab? allowSignUp? appName? theme? />`. Sign in with a passkey, or create an account, which asks for a name. Off a node-served page it asks for the node URL first.
+
+### Theming
+
+Pass a partial `MeroTheme` (`primary`, `primaryHover`, `primaryText`, `background`, `backgroundSecondary`, `backgroundTertiary`, `border`, `text`, `textSecondary`, `error`, `overlay`, `radius`), or set the `--mero-*` CSS variables globally:
 
 ```css
 :root {
@@ -381,176 +251,78 @@ The same theme is forwarded to the embedded `LoginModal` and is also exposed as 
 }
 ```
 
-The connect dialog also carries stable class names, for what the tokens do not cover. Its inline styles still win over a class, so a class rule can add what the dialog leaves unset (its font is inherited from the page, for one) but not replace an inline value; the dialog's shadow, the one look that is neither a token nor inherited, reads `--mero-login-shadow` and keeps its default when that is unset.
+The dialog's classes are `mero-dialog-overlay`, `mero-dialog-panel`, `mero-dialog-title`, `mero-dialog-body`, `mero-dialog-field`, `mero-dialog-input`, `mero-dialog-button`, `mero-dialog-primary`, `mero-dialog-secondary` and `mero-dialog-link`. The button's classes are `mero-connect-button`, `mero-dropdown` and `mero-dropdown-item`.
 
-| Class | Element |
+## Storage
+
+- `localStorageSessionStore` and `memorySessionStore()`: session stores.
+- `getNodeUrl` / `setNodeUrl` / `clearNodeUrl` and `getAppId` / `setAppId` / `clearAppId`.
+- `clearAllStorage()` clears all of the above.
+- Keys: `mero:session`, `mero:nodeUrl`, `mero:appId`. 10.x tokens are not read.
+
+## Migrating from 10.x
+
+core 1.0 is a different node, and mero-js 27 is a different client, so 11.0 is a breaking release. Most app ports are mechanical:
+
+1. **Provider.**
+   - Drop `mode`, `packageName`, `packageVersion`, `registryUrl`, `cloudBaseUrl`, `timeoutMs`, `allowedNodeUrls` and `tokenStore`.
+   - Add `minReleaseVersion` (production) or `allowMock` (`merod local`).
+   - Keep `servedByNode`. Pass `appId` if the app works on one instance.
+2. **Client.**
+   - `useMero().mero` (a `MeroJs` or relay client) is now `useMero().client` (a `CalimeroClient`).
+   - `mero.rpc.execute({ contextId, method, argsJson, executorPublicKey })` is now `client.call(appId, method, args)`, or `client.view(…)` for reads.
+3. **Vocabulary.**
+   - context is now app instance (`appId`);
+   - namespace is now organization;
+   - group is now team;
+   - executor / node identity is now the signed-in account.
+4. **Auth.**
+   - There is no redirect, callback or `access_token` in the URL any more.
+   - `connectToNode(url)` only picks the node. Signing in is `signIn()` or `signUp(name)` (passkeys), or `<ConnectButton />`.
+5. **Errors.** Switch on `failure.kind`, or `instanceof AppError` / `ConfirmRequired` / `WrongNode`, instead of HTTP status checks.
+
+| 10.x | 11.0 |
 | --- | --- |
-| `mero-login-overlay` | the full-screen backdrop, a direct child of `body` |
-| `mero-login-dialog` | the dialog surface |
-| `mero-login-close`, `mero-login-header`, `mero-login-logo`, `mero-login-title` | close button, header, emblem, "Connect to Calimero" |
-| `mero-login-tabs`, `mero-login-tab` (+ `mero-login-tab-active`), `mero-login-panel` | Node / Cloud tabs and their panels |
-| `mero-login-info`, `mero-login-error`, `mero-login-note`, `mero-login-hint` | body copy, the connection error, the Cloud tab's note and wallet hint |
-| `mero-login-options`, `mero-login-option` (+ `mero-login-option-active`), `mero-login-option-indicator`, `mero-login-option-dot`, `mero-login-option-meta` | discovered-node radio list |
-| `mero-login-input`, `mero-login-toolbar`, `mero-login-rescan` | manual URL field, rescan link |
-| `mero-login-actions`, `mero-login-button mero-login-primary` | Connect / Enrol buttons |
-| `mero-login-discovering`, `mero-login-loading`, `mero-login-spinner`, `mero-login-account` | progress states, the Cloud tab's body |
+| `MeroProvider mode={AppMode.X}` | `MeroProvider minReleaseVersion=… \| allowMock` (no modes, no permission scopes) |
+| `useMero().mero` | `useMero().client` (`mero` is kept as a deprecated alias) |
+| `useMero().contextId` / `contextIdentity` / `applicationId` | `useMero().appId` / `accountId` / none |
+| `useMero().isOnline` | none: the client retries and fails over by itself |
+| `connectToNode(url)` + redirect login | `connectToNode(url)` + `signIn()` / `signUp(name)` |
+| `connectWithAccount`, `isDelegated`, `can`, `admin` | none (no relays, no delegated accounts) |
+| `useExecute(contextId, executorId).execute(m, p)` | `useExecute(appId).execute(m, args, { confirm?, idempotencyKey? })` |
+| none | `useView(method, args)`, `useApp(appId)` |
+| `useSubscription(contextIds, cb)` / `{ contextIds, groupIds }` | `useSubscription(appIds, cb, { from?, onOpen? })` |
+| `useContexts`, `useApplicationContexts`, `useNamespacesForApplication` | `useApps({ package? })` |
+| `useCreateContext`, `useCreatePrivateContext` | `useCreateApp` (`access` for private apps) |
+| `useDeleteContext`, `useSetContextMetadata` | `useDeleteApp`, `useSetAppMetadata` |
+| `useNamespace`, `useNamespaces`, `useCreateNamespace`, `useDeleteNamespace` | `useOrg`, `useAccount` (orgs), `useCreateOrg`, `useDeleteOrg` |
+| `useGroupInfo`, `useNamespaceGroups`, `useSubgroups`, `useContextGroup` | `useTeam` (teams are listed in `useOrg`) |
+| `useCreateGroupInNamespace`, `useDeleteGroup` | `useCreateTeam`, `useDeleteTeam` |
+| `useAddGroupMembers`, `useRemoveGroupMembers`, `useGroupMembers` | `useSetTeamMember`, `useRemoveTeamMember`, `useTeam` |
+| `useUpdateMemberRole`, `useGroupCapabilities`, `useSetDefaultCapabilities` | `useSetMember`, `useOrg`, `useSetCapabilities` |
+| `useSetGroupMetadata`, `useGroupMetadata`, `useMemberMetadata` | `useSetOrgMetadata` / `useUpdateTeam`, `useOrg` / `useTeam` |
+| `useReparentGroup`, `useSetSubgroupVisibility` | `useUpdateTeam({ parent, join })` |
+| `useCreateNamespaceInvitation`, `useGroupInvitations` | `useCreateInvite` |
+| `useRedeemInvitation`, `useJoinNamespace`, `useJoinGroup`, `useJoinContext` | `useRedeemInvite` |
+| `useInviteRedemption`, `useJoinInvitation` | `useInviteRedemption` (no relay or sync step) |
+| `useUpgradeGroup`, `useInstallFromRegistry` | `useUpgradeApp`, or `useConsent` + `upgradeConsent` from an app frontend |
+| `useGroupUpgradeStatus`, `useRetryGroupUpgrade` | mero-js `client.upgradeRun` / `retryUpgradeRun` (org upgrade runs) |
+| `useUploadBlob`, `useBlobInfo`, `useBlobUrl` | Same names, now per app (`{ appId }`) |
+| `useEphemeral(contextId, opts)` | `useEphemeral(appId, opts)`: peers keyed by account |
+| `useNodeIdentity` | `useAccount` |
+| `classifyError(err)` / `ClassifiedError` | `describeError(err)` / `Failure` |
+| `getPermissionsForMode`, `AppMode`, `ConnectionType` | removed (no permission scopes) |
+| `localStorageTokenStore`, `get/setContextId`, `get/setApplicationId`, `get/setContextIdentity` | `localStorageSessionStore`, `get/setAppId` |
 
-```css
-/* `body >` outranks mero-react's own single-class rules, injected after yours. */
-body > .mero-login-overlay {
-  --mero-login-shadow: 0 30px 60px -30px rgba(20, 26, 60, 0.45);
-  font-family: 'Figtree', sans-serif;
-}
-```
+**Removed with no replacement** (v1 or desktop only):
 
-`MeroTheme` keys (all optional): `primary`, `primaryHover`, `primaryText`, `background`, `backgroundSecondary`, `backgroundTertiary`, `border`, `text`, `textSecondary`, `error`, `overlay`, `radius`. Defaults: `#a5ff11` / `#8ed40d` / `#0d1117` / `#161b22` / `#1c2128` / `#30363d` / `#e6edf3` / `#8b949e` / `#ff6b6b` / `rgba(0,0,0,0.75)` / `8px`.
-
-Helpers: `defaultMeroTheme` (the full default palette), `resolveMeroTheme(partial?)` (merges a partial with defaults), and `themeToCssVars(resolved)` (returns a `CSSProperties` map of `--mero-*` variables for applying to your own container) are exported for advanced use.
-
-**Browser support**: hover-state and modal tints use CSS [`color-mix()`](https://developer.mozilla.org/en-US/docs/Web/CSS/color_value/color-mix), which requires Chrome 111+, Safari 16.2+, or Firefox 113+ (all 2023). On older browsers the bundled `styles.css` falls back to the default green `rgba()` for the button hover; the modal renders without subtle tints but is otherwise fully functional.
-
-### `<ConnectButton>` props
-
-```tsx
-// Square 40×40 icon button — logo only, no text
-<ConnectButton logoOnly />
-
-// Custom label (shorthand: bare string overrides the disconnected label)
-<ConnectButton label="Sign in with Calimero" />
-
-// Per-state label overrides
-<ConnectButton
-  label={{
-    connect: 'Sign in',
-    connected: 'Signed in',
-    reconnecting: 'Reconnecting…',
-  }}
-/>
-```
-
-| Prop | Type | Default | Notes |
-|------|------|---------|-------|
-| `connectionType` | `ConnectionType \| CustomConnectionConfig` | `Remote` | `Custom` connects straight to the given URL, skipping the modal. Every other value opens the LoginModal (local node discovery + manual URL entry). Inside a `servedByNode` provider the button skips the modal and logs in at the page's own origin. |
-| `theme` | `MeroTheme` | — | Partial token override. |
-| `logoOnly` | `boolean` | `false` | Render only the Calimero logo (square button). The label is still announced via `aria-label`. |
-| `label` | `string \| { connect?, connected?, reconnecting? }` | — | Override default labels. Bare string targets the disconnected state. |
-| `className` / `style` | — | — | Forwarded to the inner `<button>`. |
-| `cloud` | `boolean` | `true` | The modal has two tabs: **Node** (discovery + URL, default) and **Cloud** (sign in with a Calimero account by enrolling at the wallet). `false` removes the Cloud tab. A page coming back from the wallet opens the modal on Cloud automatically. |
-| `accountDefaults` | `{ walletUrl?: string }` | — | Local development only: enrol at a wallet other than the hosted one. |
-
-### `<LoginModal>` and the Cloud tab
-
-An app that mounts the modal itself gets the same two tabs with nothing wired: by default `LoginModal` sources its Cloud tab from `useAccountEnrolment()` internally, so "Enrol with your account" works and a page coming back from the wallet is completed (and lands on the Cloud tab) whether or not the modal is open. It must sit inside `MeroProvider`.
-
-```tsx
-// Node + Cloud tabs, account sign-in included (default)
-<LoginModal isOpen={open} onConnect={connectToNode} onClose={() => setOpen(false)} />
-
-// Node dialog only, no tabs — the pre-Cloud behaviour
-<LoginModal cloud={false} isOpen={open} onConnect={connectToNode} onClose={() => setOpen(false)} />
-
-// Your own enrolment (what ConnectButton does): the object is used verbatim
-<LoginModal cloud={{ onEnrol, note, walletUrl, customWallet }} initialTab="cloud" ... />
-```
-
-| `cloud` | Cloud tab | Enrolment callback read by |
-|---------|-----------|----------------------------|
-| omitted | shown, sourced by the modal | the modal |
-| `false` | none (no tabs) | nobody here |
-| object | shown, the caller's values | the caller |
-
-`initialTab` defaults to `'node'`; with `cloud` omitted it defaults to `'cloud'` on the load coming back from the wallet. An explicit `initialTab` wins.
-
-The caller owns `isOpen`. To have the modal open by itself on the way back from the wallet (as `ConnectButton` does), seed its open state with `isReturningFromWallet()`, which peeks at the fragment without consuming it: `const [open, setOpen] = useState(isReturningFromWallet);`. The account flow without any of these is `useAccountEnrolment()` (returns `goToWallet`, `note`, `returning`, `walletUrl`, `customWallet`); its UI is `<AccountSignInPanel>`.
-
-## Enums
-
-```tsx
-AppMode.SingleContext   // 'single-context'
-AppMode.MultiContext    // 'multi-context'
-AppMode.Admin           // 'admin'
-
-ConnectionType.Remote          // 'remote' — opens the LoginModal (discovery + manual URL)
-ConnectionType.Custom          // 'custom' — skip the modal, connect to a fixed URL
-ConnectionType.RemoteAndLocal  // deprecated, same as Remote
-ConnectionType.Local           // deprecated, same as Remote
-```
-
-## Types
-
-```tsx
-import type {
-  MeroContextValue,        // useMero() return type
-  MeroProviderConfig,      // MeroProvider props (without children)
-  MeroProviderProps,       // MeroProvider props (with children)
-  CustomConnectionConfig,  // { type: ConnectionType.Custom, url: string }
-  AppContext,              // { contextId, executorId, applicationId }
-  ExecutionResult,         // { success, result?, error? }
-  ApplicationContextRecord,// { contextId, applicationId }
-  ContextDiscoveryOptions, // options for useContextDiscovery
-  ContextDiscoveryState,   // return type of useContextDiscovery
-  MeroTheme,               // partial theme override for ConnectButton / LoginModal
-  ResolvedMeroTheme,       // fully populated theme returned by resolveMeroTheme()
-} from '@calimero-network/mero-react';
-```
-
-## Full exports list
-
-```
-// Provider & context (mero-react)
-MeroProvider, useMero, MeroContext
-
-// Components (mero-react)
-ConnectButton, LoginModal
-
-// Theming (mero-react)
-MeroTheme, ResolvedMeroTheme, defaultMeroTheme, resolveMeroTheme, themeToCssVars
-
-// Enums (mero-react)
-AppMode, ConnectionType
-
-// Hooks (mero-react)
-useExecute, useSubscription
-useContexts, useApplicationContexts, useContextGroup, useContextDiscovery
-useCreateContext, useDeleteContext, useJoinContext
-useGroupInfo, useGroupMembers, useGroupContexts, useGroupInvitations, useGroupCapabilities
-useJoinGroup, useDeleteGroup, useAddGroupMembers, useRemoveGroupMembers
-useSyncGroup, useReparentGroup, useSubgroups
-useUpgradeGroup, useGroupUpgradeStatus, useRetryGroupUpgrade
-useSetGroupMetadata, useSetMemberMetadata, useSetContextMetadata
-useGroupMetadata, useMemberMetadata, useUpdateMemberRole
-useSetDefaultCapabilities, useDefaultCapabilities
-useSetSubgroupVisibility, useSubgroupVisibility, useSetTeeAdmissionPolicy
-useDetachContextFromGroup
-useNamespaces, useNamespace, useNamespaceGroups, useNodeIdentity
-useNamespacesForApplication, useCreateNamespace, useDeleteNamespace
-useJoinNamespace, useRedeemInvitation, useCreateNamespaceInvitation, useCreateGroupInNamespace
-useBlobInfo, useBlobUrl, useUploadBlob
-
-// Types (mero-react)
-MeroContextValue, MeroProviderConfig, MeroProviderProps
-CustomConnectionConfig, AppContext, ExecutionResult
-ApplicationContextRecord, ContextDiscoveryOptions, ContextDiscoveryState
-BlobHookOptions, UseBlobUrlOptions, MutationOptions
-
-// Storage (mero-react)
-localStorageTokenStorage
-getNodeUrl, setNodeUrl, clearNodeUrl
-getApplicationId, setApplicationId, clearApplicationId
-getContextId, setContextId, clearContextId
-getContextIdentity, setContextIdentity, clearContextIdentity
-clearAllStorage
-
-// Everything from @calimero-network/mero-js (auto re-exported)
-MeroJs, createMeroJs, MeroJsConfig, TokenData
-RpcClient, RpcError, ExecuteParams
-SseClient, SseEventData, WsClient, WsEventData
-AuthApiClient, AdminApiClient
-LocalStorageTokenStore, MemoryTokenStore, TokenStore
-parseAuthCallback, buildAuthLoginUrl, AuthCallbackResult, AuthLoginOptions
-WebHttpClient, HttpClient, HTTPError
-// ...and all other mero-js exports
-```
+- admin-API hooks: `useSyncGroup`, `useResyncContext`, `useJoinSubgroupInheritance`, `useDetachContextFromGroup`, `useSetTeeAdmissionPolicy`, `useContextDiscovery`;
+- migration hooks and components: `useMigrationStatus`, `useMigrationEvents`, `useMyAuthoredMigration`, `MigrationPendingBanner`, `MigrationAdminPanel`;
+- version hooks: `useAppVersion`, `useLatestVersion`, `useGroupAppVersion`;
+- the delegated / relay / account-enrolment layer: `useAccountEnrolment`, `useDelegatedBootstrap`, `ConnectButtonAccount`, `AccountSignInPanel`, and the relay, `joinWithNode` and `bootstrapFromInvitation` re-exports;
+- invitation UI: `InvitationGate`, `InvitationDialog`, `JoinSyncBanner`, `useJoinSync`;
+- local-node discovery: `discoverLocalNodes`;
+- desktop (Tauri): `isDesktopWindow`.
 
 ## License
 

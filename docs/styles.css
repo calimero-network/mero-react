@@ -734,3 +734,15 @@ html.light .typedef { background: #f0f3f6; border-color: #d0d7de; color: #24292f
   .hero h1 { font-size: 2.4rem; }
   .content { padding: 40px 18px 60px; }
 }
+
+/* Pages generated from the README (mero-react 11) */
+.prose h2 { margin: 36px 0 12px; }
+.prose h3 { margin: 24px 0 10px; }
+.prose p, .prose li { color: var(--text-dim); line-height: 1.65; margin-bottom: 10px; }
+.prose ul, .prose ol { padding-left: 22px; margin-bottom: 14px; }
+.prose pre.typedef { white-space: pre; overflow-x: auto; margin: 12px 0 18px; }
+.prose .callout { border-left: 3px solid var(--accent); padding: 10px 14px; margin: 14px 0; background: var(--bg-2, rgba(255,255,255,.03)); }
+.table-wrap { overflow-x: auto; margin: 12px 0 20px; }
+.prose table { border-collapse: collapse; width: 100%; font-size: .85rem; }
+.prose th, .prose td { border: 1px solid var(--border); padding: 8px 10px; text-align: left; vertical-align: top; }
+.prose th { color: var(--text); font-weight: 600; }

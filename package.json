@@ -1,7 +1,7 @@
 {
   "name": "@calimero-network/mero-react",
   "version": "10.3.0",
-  "description": "React bindings for MeroJs - Calimero Network SDK",
+  "description": "React bindings for the Calimero 1.0 client (mero-js CalimeroClient)",
   "type": "module",
   "main": "dist/index.cjs",
   "module": "dist/index.js",
@@ -23,21 +23,18 @@
     "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "vitest run --config vitest.e2e.config.ts",
-    "test:e2e:presence": "MERO_E2E_PRESENCE=1 vitest run --config vitest.e2e.config.ts tests/e2e/ephemeral.live.test.tsx",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
     "prepublishOnly": "pnpm build && pnpm typecheck"
   },
   "dependencies": {
-    "@calimero-network/mero-js": "^26.1.0"
+    "@calimero-network/mero-js": "^27.2.0"
   },
   "peerDependencies": {
     "react": "^18.0.0 || ^19.0.0",
     "react-dom": "^18.0.0 || ^19.0.0"
   },
   "devDependencies": {
-    "@calimero-network/mero-platform": "^0.1.0",
     "@semantic-release/changelog": "^6.0.3",
     "@semantic-release/commit-analyzer": "^13.0.1",
     "@semantic-release/git": "^10.0.1",
@@ -71,7 +68,8 @@
     "calimero",
     "mero",
     "react",
-    "p2p",
+    "passkeys",
+    "confidential-cloud",
     "sdk"
   ],
   "license": "MIT",
