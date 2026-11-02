@@ -41,4 +41,5 @@ export type { BlobHookOptions, UseBlobUrlOptions } from './blobs';
 export { useEphemeral, jsonCodec } from './presence';
 export type { Codec, EphemeralEntry, UseEphemeralOptions, UseEphemeralResult } from './presence';
 
-export { useAccount, usePasskeys } from './account';
+export { useAccount, usePasskeys, useApiKeys } from './account';
+export type { CreateApiKeyInput } from './account';

@@ -13,7 +13,7 @@ describe('ConnectButton / LoginModal', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
     expect(screen.getByRole('dialog')).toBeTruthy();
-    expect(screen.queryByLabelText('Node URL')).toBeNull();
+    expect(screen.queryByLabelText('Node URL or cluster')).toBeNull();
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Sign in with passkey' }));
     });
@@ -33,12 +33,27 @@ describe('ConnectButton / LoginModal', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create account' }));
     expect(screen.getByRole('alert').textContent).toMatch(/name/);
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'ada' } });
-    fireEvent.change(screen.getByLabelText('Node URL'), { target: { value: 'not a url' } });
+    fireEvent.change(screen.getByLabelText('Node URL or cluster'), { target: { value: 'not a url' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create account' }));
     expect(screen.getByRole('alert').textContent).toMatch(/node URL/);
-    fireEvent.change(screen.getByLabelText('Node URL'), { target: { value: 'https://n.test' } });
+    fireEvent.change(screen.getByLabelText('Node URL or cluster'), { target: { value: 'https://n.test' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create account' }));
     expect(connectToNode).toHaveBeenCalledWith('https://n.test');
+  });
+
+  it('takes a cluster name in place of a node URL', async () => {
+    const connectToCluster = vi.fn();
+    const connectToNode = vi.fn();
+    render(
+      <MockMeroProvider connectToCluster={connectToCluster} connectToNode={connectToNode} nodeUrl={null}>
+        <ConnectButton />
+      </MockMeroProvider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    fireEvent.change(screen.getByLabelText('Node URL or cluster'), { target: { value: ' eu-shared-1 ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in with passkey' }));
+    expect(connectToCluster).toHaveBeenCalledWith('eu-shared-1');
+    expect(connectToNode).not.toHaveBeenCalled();
   });
 
   it('shows the account and signs out when signed in', async () => {

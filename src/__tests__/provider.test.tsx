@@ -1,5 +1,6 @@
 import { act, render, renderHook, screen, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import React from 'react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { errorFrom } from '@calimero-network/mero-js';
 import { MeroProvider, useMero } from '../context';
 import { memorySessionStore } from '../storage';
@@ -109,6 +110,62 @@ describe('MeroProvider', () => {
     act(() => screen.getByRole('button').click());
     await waitFor(() => expect(screen.getByRole('button').textContent).toBe('https://n2.test'));
     expect(localStorage.getItem('mero:nodeUrl')).toBe('https://n2.test');
+  });
+
+  it('connects to a cluster by name through the node directory', async () => {
+    const fetch = vi.fn(async (input: RequestInfo | URL) => {
+      expect(String(input)).toBe('https://dir.test/eu-shared-1');
+      return new Response(
+        JSON.stringify({
+          cluster: 'eu-shared-1',
+          nodes: [{ id: 'n1', url: 'https://n1.test', zone: 'z', weight: 1 }],
+          refreshAfterSeconds: 60,
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    });
+    function Probe() {
+      const { client, cluster, nodeUrl, isConnecting } = useMero();
+      return (
+        <span>
+          {cluster} {isConnecting ? 'connecting' : (client?.nodeUrl ?? 'none')} {nodeUrl ?? '-'}
+        </span>
+      );
+    }
+    render(
+      <MeroProvider
+        cluster="eu-shared-1"
+        directory="https://dir.test"
+        fetch={fetch as unknown as typeof globalThis.fetch}
+        minReleaseVersion="2.3.109"
+        sessionStore={memorySessionStore()}
+      >
+        <Probe />
+      </MeroProvider>,
+    );
+    await waitFor(() => expect(screen.getByText(/eu-shared-1/).textContent).toBe('eu-shared-1 https://n1.test https://n1.test'));
+  });
+
+  it('reports a cluster the directory does not know', async () => {
+    const fetch = vi.fn(async () => new Response('{}', { status: 404 }));
+    const onError = vi.fn();
+    const { result } = renderHook(() => useMero(), {
+      wrapper: ({ children }: { children: React.ReactNode }) => (
+        <MeroProvider
+          cluster="nope"
+          directory="https://dir.test"
+          fetch={fetch as unknown as typeof globalThis.fetch}
+          minReleaseVersion="2.3.109"
+          sessionStore={memorySessionStore()}
+          onError={onError}
+        >
+          {children}
+        </MeroProvider>
+      ),
+    });
+    await waitFor(() => expect(result.current.failure?.kind).toBe('directory'));
+    expect(result.current.client).toBeNull();
+    expect(onError).toHaveBeenCalled();
   });
 
   it('refuses a provider that trusts no release', () => {

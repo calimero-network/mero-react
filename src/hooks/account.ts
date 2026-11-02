@@ -4,6 +4,7 @@
  */
 
 import { useCallback } from 'react';
+import type { PasskeyProvider } from '@calimero-network/mero-js';
 import { useMero } from '../context';
 import { useClientAction, useResource, useSignedInClient, type MutationOptions } from './internal';
 
@@ -15,18 +16,31 @@ export function useAccount() {
   return { accountId, ...me };
 }
 
-/** Add a passkey (another device) or remove one. */
+/**
+ * Add a passkey (another device), remove one, or name one.
+ *
+ * Adding and removing are approved with a passkey the account already has
+ * (the node answers `412 CONFIRM_REQUIRED`): by default the provider's
+ * `passkey`, which in a browser lets the person pick any passkey they hold.
+ * `add({ passkey, approver })` takes other providers when the new passkey and
+ * the approving one come from different places (a security key next to the
+ * platform one).
+ */
 export function usePasskeys(options?: MutationOptions) {
   const { passkey } = useMero();
   const { withClient, ...state } = useClientAction(options);
-  const add = useCallback(() => withClient((c) => c.addPasskey(passkey)), [withClient, passkey]);
+  const add = useCallback(
+    (providers: { passkey?: PasskeyProvider; approver?: PasskeyProvider } = {}) =>
+      withClient((c) => c.addPasskey(providers.passkey ?? passkey, providers.approver ?? passkey)),
+    [withClient, passkey],
+  );
   const remove = useCallback(
     (credentialId: string) =>
       withClient(async (c) => {
-        await c.removePasskey(credentialId);
+        await c.removePasskey(credentialId, passkey);
         return true;
       }),
-    [withClient],
+    [withClient, passkey],
   );
   const label = useCallback(
     (credentialId: string, name: string) =>
@@ -37,4 +51,60 @@ export function usePasskeys(options?: MutationOptions) {
     [withClient],
   );
   return { add, remove, label, ...state };
+}
+
+/** What `useApiKeys().create` takes. */
+export interface CreateApiKeyInput {
+  label?: string;
+  /** Apps the key may call (all of the account's when left out). */
+  apps?: string[];
+  /** Methods the key may call. */
+  methods?: string[];
+  readOnly?: boolean;
+  /** Let the key make calls that need a confirmation. */
+  allowConfirm?: boolean;
+  ttlSecs?: number;
+}
+
+/**
+ * The account's API keys, for agents and servers: list them, create one
+ * (approved with the passkey; needs a passkey session, not an API key) and
+ * revoke one. `create` resolves `{ keyId, key }`, and the key is shown once.
+ */
+export function useApiKeys(options?: MutationOptions) {
+  const client = useSignedInClient();
+  const { passkey, accountId } = useMero();
+  const keys = useResource<Array<Record<string, unknown>>>(client ? () => client.listApiKeys() : null, [], [
+    client,
+    accountId,
+  ]);
+  const { refetch } = keys;
+  const { withClient, ...state } = useClientAction(options);
+  const create = useCallback(
+    (input: CreateApiKeyInput = {}) =>
+      withClient(async (c) => {
+        const created = await c.createApiKey(input, passkey);
+        void refetch();
+        return created;
+      }),
+    [withClient, passkey, refetch],
+  );
+  const revoke = useCallback(
+    (keyId: string) =>
+      withClient(async (c) => {
+        await c.revokeApiKey(keyId);
+        void refetch();
+        return true;
+      }),
+    [withClient, refetch],
+  );
+  return {
+    keys: keys.data,
+    keysLoading: keys.loading,
+    keysFailure: keys.failure,
+    refetch,
+    create,
+    revoke,
+    ...state,
+  };
 }

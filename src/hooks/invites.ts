@@ -70,16 +70,20 @@ export interface CreateInviteInput {
   linkBase?: string;
 }
 
-/** Mint an invitation. Was `useCreateNamespaceInvitation`. Resolves `{ token, link }`. */
+/**
+ * Mint an invitation (asks for the passkey). Was `useCreateNamespaceInvitation`.
+ * Resolves `{ token, link }`. Redeeming it needs no passkey.
+ */
 export function useCreateInvite(options?: MutationOptions) {
+  const { passkey } = useMero();
   const { withClient, ...state } = useClientAction(options);
   const create = useCallback(
     ({ orgId, role = 'member', teams = [], ttlSecs, uses, linkBase }: CreateInviteInput) =>
       withClient(async (c) => {
-        const token = await c.invite(orgId, role, teams, { ttlSecs, uses });
+        const token = await c.invite(orgId, role, passkey, teams, { ttlSecs, uses });
         return { token, link: inviteLink(token, linkBase) };
       }),
-    [withClient],
+    [withClient, passkey],
   );
   return { create, ...state };
 }

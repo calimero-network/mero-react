@@ -64,3 +64,21 @@ export class SessionReportingClient extends CalimeroClient {
     super.useSession(session);
   }
 }
+
+/**
+ * {@link SessionReportingClient}'s reporting for a client mero-js built itself
+ * (`CalimeroClient.connect`, a cluster by name): every session it takes from
+ * now on goes to `onSession` too. Answers the unreported `useSession`, for a
+ * session kept from an earlier page load.
+ */
+export function reportSessions(
+  client: CalimeroClient,
+  onSession: (session: CalimeroSession) => void,
+): (session: CalimeroSession) => void {
+  const take = client.useSession.bind(client);
+  client.useSession = (session: CalimeroSession) => {
+    take(session);
+    onSession(session);
+  };
+  return take;
+}

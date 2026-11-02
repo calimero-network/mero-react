@@ -40,7 +40,8 @@ export function ConnectButton({
   allowSignUp,
   initialTab,
 }: ConnectButtonProps) {
-  const { isAuthenticated, accountId, nodeUrl, signOut, signOutEverywhere, servedByNode, allowMock } = useMero();
+  const { isAuthenticated, accountId, nodeUrl, cluster, signOut, signOutEverywhere, servedByNode, allowMock } =
+    useMero();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -86,9 +87,9 @@ export function ConnectButton({
                 Account {shortAccount(accountId)}
               </div>
             )}
-            {!servedByNode && nodeUrl && (
-              <div className="mero-dropdown-info" title={nodeUrl}>
-                {nodeUrl}
+            {!servedByNode && (cluster || nodeUrl) && (
+              <div className="mero-dropdown-info" title={nodeUrl ?? undefined}>
+                {cluster ? `Cluster ${cluster}` : nodeUrl}
                 {allowMock ? ' (dev)' : ''}
               </div>
             )}

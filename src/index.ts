@@ -13,7 +13,7 @@ import './components/styles.css';
 export { MeroProvider, useMero, MeroContext } from './context';
 export type { MeroProviderProps } from './context';
 export type { MeroContextValue, MeroProviderConfig } from './types';
-export { resolvePolicy, SessionReportingClient } from './client';
+export { resolvePolicy, reportSessions, SessionReportingClient } from './client';
 export type { PolicyOptions } from './client';
 
 // Errors
@@ -38,6 +38,9 @@ export {
   getNodeUrl,
   setNodeUrl,
   clearNodeUrl,
+  getCluster,
+  setCluster,
+  clearCluster,
   getAppId,
   setAppId,
   clearAppId,
@@ -46,7 +49,8 @@ export {
 export type { SessionStore } from './storage';
 
 // mero-js, so apps need one import: CalimeroClient, the typed errors
-// (AppError, ConfirmRequired, WrongNode, ...), browserPasskey, the consent
-// request builders (releaseConsent, upgradeConsent, consentReturn), ORG_CAPABILITIES.
+// (AppError, ConfirmRequired, WrongNode, DirectoryError, ...), browserPasskey,
+// the consent request builders (releaseConsent, upgradeConsent, consentReturn),
+// confirmationCode, ORG_CAPABILITIES, DEFAULT_DIRECTORY.
 // mero-react's own `Codec` (presence) wins over the export * below.
 export * from '@calimero-network/mero-js';

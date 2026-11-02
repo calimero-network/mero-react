@@ -1,6 +1,6 @@
 # @calimero-network/mero-react
 
-React bindings for **Calimero 1.0**, on the mero-js 27 client (`CalimeroClient`).
+React bindings for **Calimero 1.0**, on the mero-js 28 client (`CalimeroClient`).
 
 A 1.0 node runs in an attested TDX cluster. The client verifies the node's attestation, seals every request to the node's attested key, and signs people in with **passkeys**. mero-react puts one client in context and builds the hooks on top of it:
 
@@ -20,7 +20,7 @@ A 1.0 node runs in an attested TDX cluster. The client verifies the node's attes
 pnpm add @calimero-network/mero-react
 ```
 
-`@calimero-network/mero-js` (^27.2) comes with it, and every mero-js export is re-exported, so apps need only this import. React 18 or 19 is a peer dependency.
+`@calimero-network/mero-js` (^28.0) comes with it, and every mero-js export is re-exported, so apps need only this import. React 18 or 19 is a peer dependency.
 
 ## Quick start
 
@@ -62,6 +62,12 @@ function App() {
 }
 ```
 
+A frontend hosted elsewhere reaches a Calimero Cloud cluster by name, failing over between its nodes:
+
+```tsx
+<MeroProvider cluster="eu-shared-1" minReleaseVersion="2.3.109" appId={APP_ID}>
+```
+
 For local development against `merod local` (three `--dev` nodes with mock attestation on 127.0.0.1:2501-2503):
 
 ```tsx
@@ -82,8 +88,10 @@ For local development against `merod local` (three `--dev` nodes with mock attes
 | `policy` | `CloudPolicy` | The full attestation policy (profile, release source, `verifyQuote`, `appHash`). Takes precedence over `minReleaseVersion`. |
 | `allowMock` | `boolean` | Accept mock quotes (`merod local`, `--dev` clusters). The provider throws if `minReleaseVersion`, `policy` and `allowMock` are all missing. |
 | `servedByNode` | `boolean` | The node serves this page. The node is then `window.location.origin`, and a passkey ceremony here opens a session bound to this app's package. `ConnectButton` skips the node field. |
-| `nodeUrl` | `string` | The node to use when the page is not node-served. Without it, the provider uses the node kept from the last visit, or waits for `connectToNode`. |
-| `nodes` | `string[]` | Other nodes of the cluster. On `421 WRONG_NODE` the client moves to the next one and repeats the request once. |
+| `nodeUrl` | `string` | The node to use when the page is not node-served. Without it (and without `cluster`), the provider uses the node or cluster kept from the last visit, or waits for `connectToNode` / `connectToCluster`. |
+| `nodes` | `string[]` | Other nodes of the cluster, with `nodeUrl`. On `421 WRONG_NODE`, or when a node stays unavailable, the client moves to the next one. |
+| `cluster` | `string` | A Calimero Cloud cluster by name (`eu-shared-1`), in place of `nodeUrl`. The client reads the cluster's nodes from the public node directory (mero-js `CalimeroClient.connect`) and fails over between them. The directory only picks which nodes to try: each is attested under your policy first. `nodeUrl` wins when both are given. |
+| `zone`, `directory` | `string` | With `cluster`: the zone whose nodes are tried first, and another node directory than mero-js `DEFAULT_DIRECTORY`. |
 | `appId` | `string` | The app instance that hooks default to. |
 | `sessionStore` | `SessionStore` | Where the session is kept. The default is `localStorageSessionStore`; `memorySessionStore()` keeps it for the tab's lifetime only. |
 | `passkey` | `PasskeyProvider` | The WebAuthn prompt. The default is mero-js `browserPasskey()`. |
@@ -95,22 +103,27 @@ For local development against `merod local` (three `--dev` nodes with mock attes
 
 ```ts
 const {
-  client,            // CalimeroClient | null (null until a node is known)
-  nodeUrl, connectToNode, disconnect,
+  client,            // CalimeroClient | null (null until a node is known, or a cluster's nodes are)
+  nodeUrl,           // the node in use
+  cluster,           // the cluster connected to by name, or null
+  isConnecting,      // the node directory is being read
+  connectToNode,     // (url) => void
+  connectToCluster,  // (name) => void
+  disconnect,
   session, accountId, isAuthenticated, isLoading,
   signIn,            // () => Promise<CalimeroSession | null>: an existing passkey
   signUp,            // (name) => Promise<CalimeroSession | null>: a new account and passkey
   signOut, signOutEverywhere,
   appId, setAppId,
   passkey, servedByNode, allowMock,
-  failure,           // the last sign-in or session failure, described
+  failure,           // the last sign-in, connection or session failure, described
   reportError,
 } = useMero();
 ```
 
 **Sessions.** A 1.0 session is a session token (`v2.…`) that lasts 15 minutes, plus a refresh token (`rt_…`) that lasts 30 days and can be used once.
 
-- The client refreshes by itself on a `401`. One refresh is shared by every request waiting on it, because reusing a refresh token revokes the session (mero-js#318).
+- The client refreshes by itself on a `401`. One refresh is shared by every request waiting on it, because reusing a refresh token revokes the session. When the node that issued the session is gone, the refresh goes to another node of the cluster (mero-js#318).
 - The provider saves every new session to `sessionStore`, so a reload resumes the session.
 - When a refresh is refused, hooks get `LoginRequired`, and the provider ends the session and sets `failure.kind = 'login'`.
 - `mero` is still on the value as a deprecated alias of `client`.
@@ -160,21 +173,23 @@ How `useSubscription` behaves:
 | `useOrg(orgId)` | `useNamespace` |
 | `useCreateOrg().create(name)` | `useCreateNamespace` |
 | `useDeleteOrg().deleteOrg(orgId)` | `useDeleteNamespace`. It asks for the passkey. |
-| `useSetMember().setMember(org, account, role)` | `useUpdateMemberRole`, and `useAddGroupMembers` at org level |
-| `useRemoveMember().removeMember(org, account)` | none (new) |
+| `useSetMember().setMember(org, account, role)` | `useUpdateMemberRole`, and `useAddGroupMembers` at org level. It asks for the passkey. |
+| `useRemoveMember().removeMember(org, account)` | none (new). It asks for the passkey. |
 | `useSetOrgMetadata()`, `useSetMemberMetadata()` | `useSetGroupMetadata`, `useSetMemberMetadata` |
-| `useSetCapabilities().setCapabilities(org, bits, { account?, team? })` | `useSetDefaultCapabilities` |
+| `useSetCapabilities().setCapabilities(org, bits, { account?, team? })` | `useSetDefaultCapabilities`. It asks for the passkey. |
 | `useTeam(org, team)` | `useGroupInfo` |
 | `useCreateTeam().create({ orgId, name, join?, parent? })` | `useCreateGroupInNamespace` |
 | `useUpdateTeam().update(org, team, { name?, join?, parent?, metadata? })` | `useSetGroupMetadata`, `useReparentGroup`, `useSetSubgroupVisibility` |
-| `useDeleteTeam()`, `useSetTeamMember()`, `useRemoveTeamMember()` | `useDeleteGroup`, `useAddGroupMembers`, `useRemoveGroupMembers` |
+| `useDeleteTeam()`, `useSetTeamMember()`, `useRemoveTeamMember()` | `useDeleteGroup`, `useAddGroupMembers`, `useRemoveGroupMembers`. Setting and removing a team member ask for the passkey. |
+
+**Passkey step-ups.** Since mero-js 28 the node approves membership changes, capabilities, invites, passkeys and API keys with the caller's passkey: it answers `412 CONFIRM_REQUIRED` and the client answers that with the provider's `passkey` (`browserPasskey()` by default), so the person sees a passkey prompt. A dismissed prompt fails the action with `failure.kind = 'cancelled'`.
 
 ### Invites
 
 | Hook | Notes |
 | --- | --- |
-| `useCreateInvite().create({ orgId, role?, teams?, ttlSecs?, uses?, linkBase? })` | Resolves `{ token, link }`. The link carries the token in the fragment (`#invite=…`), so it stays out of server logs. |
-| `useRedeemInvite().redeem(token)` | `POST /invites/{token}/redeem` |
+| `useCreateInvite().create({ orgId, role?, teams?, ttlSecs?, uses?, linkBase? })` | Resolves `{ token, link }`. It asks for the passkey. The link carries the token in the fragment (`#invite=…`), so it stays out of server logs. |
+| `useRedeemInvite().redeem(token)` | `POST /invites/{token}/redeem`. No passkey needed. |
 | `useInviteRedemption({ autoRedeem? })` | The whole link flow. It reads the token from the address bar and removes it there, keeps it through sign-in, and redeems it once the person is signed in. `status` is `idle`, `waiting-for-sign-in`, `redeeming`, `redeemed` or `failed`. |
 
 `inviteLink(token, base?)` and `readInviteToken(href)` are exported too.
@@ -185,14 +200,17 @@ Approvals happen only on the page the node serves on its own origin, never insid
 
 ```ts
 const consent = useConsent();
-await consent.open(upgradeConsent(appId, '1.2.0', window.location.href)); // navigates to the node's page
+await consent.open(upgradeConsent(appId, '1.2.0', window.location.href), {
+  // Show the confirmation code before leaving; the node's page shows the same one.
+  confirm: (started) => window.confirm(`The approval page will show the code ${started.code}. Continue?`),
+}); // then navigates to the node's page
 // … back on returnTo:
 if (consent.returned) await consent.check(consent.returned.requestId);    // confirm the hint
 // or, when the page was opened in another window:
 await consent.wait(started.requestId);
 ```
 
-`useConsent()` returns `{ request, open, check, wait, cancel, started, result, returned, … }`. Build requests with mero-js `releaseConsent`, `withdrawConsent` and `upgradeConsent`.
+`useConsent()` returns `{ request, open, check, wait, cancel, started, code, result, returned, … }`. `code` is the confirmation code (`XXX-XXX`) the consent page shows for the request under way: show it next to the link or in `open`'s `confirm`, so the person can check they landed on the page their request opened. `open` throws `CONSENT_CODE_MISMATCH` when the node's code does not match the request (mero-js `confirmationCode`). Build requests with mero-js `releaseConsent`, `withdrawConsent` and `upgradeConsent`.
 
 ### Blobs, presence, account
 
@@ -204,7 +222,8 @@ await consent.wait(started.requestId);
 | `useDeleteBlob({ appId? }).deleteBlob(blobId)` | |
 | `useEphemeral<T>(appId, { codec?, initial?, throttleMs?, includeSelf? })` | Presence. Returns `{ peers: Map<account, T>, entries, setPresence, leave, error }`. It sends a heartbeat every 5 s and retracts on unmount. |
 | `useAccount()` | `GET /auth/me`. Was `useNodeIdentity`. |
-| `usePasskeys()` | `{ add, remove, label }` for the account's passkeys. |
+| `usePasskeys()` | `{ add, remove, label }` for the account's passkeys. Adding and removing are approved with a passkey the account already has; `add({ passkey?, approver? })` takes other providers for the new passkey and the approving one. |
+| `useApiKeys()` | `{ keys, create, revoke, refetch, … }` for API keys (agents, servers). `create({ label?, apps?, methods?, readOnly?, allowConfirm?, ttlSecs? })` asks for the passkey, needs a passkey session, and resolves `{ keyId, key }`: the key is shown once. |
 
 ## Errors
 
@@ -234,11 +253,12 @@ type Failure = {
 | `not-found`, `forbidden`, `too-large`, `idempotency`, `rate-limited` | `404`, `403`, `413`, `409 IDEMPOTENCY_MISMATCH`, `429` |
 | `release-deadline`, `consent-stale`, `operator-signature` | `409 RELEASE_DEADLINE`, `409 CONSENT_STALE`, `428 OPERATOR_SIGNATURE_REQUIRED` |
 | `attestation` | The sealed channel or the attestation check failed |
+| `directory` | `DirectoryError`: the node directory does not know the cluster (`code: 'not-found'`), lists no usable node (`empty`) or could not be read |
 
 ## Components
 
 - `<ConnectButton appName? allowSignUp? initialTab? theme? logoOnly? label? />`. Signed out, it shows "Sign in" and opens `LoginModal`. Signed in, it shows the account, with a menu for Sign out and Sign out everywhere.
-- `<LoginModal isOpen onClose onSignedIn? initialTab? allowSignUp? appName? theme? />`. Sign in with a passkey, or create an account, which asks for a name. Off a node-served page it asks for the node URL first.
+- `<LoginModal isOpen onClose onSignedIn? initialTab? allowSignUp? appName? theme? />`. Sign in with a passkey, or create an account, which asks for a name. Off a node-served page it asks first for the node URL or a cluster name.
 
 ### Theming
 
@@ -256,13 +276,13 @@ The dialog's classes are `mero-dialog-overlay`, `mero-dialog-panel`, `mero-dialo
 ## Storage
 
 - `localStorageSessionStore` and `memorySessionStore()`: session stores.
-- `getNodeUrl` / `setNodeUrl` / `clearNodeUrl` and `getAppId` / `setAppId` / `clearAppId`.
+- `getNodeUrl` / `setNodeUrl` / `clearNodeUrl`, `getCluster` / `setCluster` / `clearCluster` and `getAppId` / `setAppId` / `clearAppId`.
 - `clearAllStorage()` clears all of the above.
-- Keys: `mero:session`, `mero:nodeUrl`, `mero:appId`. 10.x tokens are not read.
+- Keys: `mero:session`, `mero:nodeUrl`, `mero:cluster`, `mero:appId`. 10.x tokens are not read.
 
 ## Migrating from 10.x
 
-core 1.0 is a different node, and mero-js 27 is a different client, so 11.0 is a breaking release. Most app ports are mechanical:
+core 1.0 is a different node, and mero-js 28 is a different client, so 11.0 is a breaking release. Most app ports are mechanical:
 
 1. **Provider.**
    - Drop `mode`, `packageName`, `packageVersion`, `registryUrl`, `cloudBaseUrl`, `timeoutMs`, `allowedNodeUrls` and `tokenStore`.

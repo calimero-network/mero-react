@@ -12,15 +12,30 @@ import type { SessionStore } from './storage';
 export interface MeroProviderConfig extends PolicyOptions {
   /**
    * The node to talk to. Ignored when `servedByNode` (the page's own origin is
-   * the node). Without it the provider uses the node kept from last time, or
-   * waits for `connectToNode`.
+   * the node). Without it (and without `cluster`) the provider uses the node
+   * or cluster kept from last time, or waits for `connectToNode` /
+   * `connectToCluster`.
    */
   nodeUrl?: string;
   /**
    * Other nodes of the same cluster, tried in order when a node answers
-   * `421 WRONG_NODE`. Each is attested under the same policy first.
+   * `421 WRONG_NODE` or stays unavailable. Each is attested under the same
+   * policy first. Only with `nodeUrl`.
    */
   nodes?: string[];
+  /**
+   * A Calimero Cloud cluster by name (e.g. `eu-shared-1`), the alternative to
+   * `nodeUrl`: the client reads the cluster's nodes from the node directory
+   * (mero-js `CalimeroClient.connect`) and fails over between them. The
+   * directory only picks which nodes to try; each is attested under the
+   * policy first. Ignored when `servedByNode`; `nodeUrl` wins when both are
+   * given.
+   */
+  cluster?: string;
+  /** With `cluster`: try this zone's nodes first (e.g. `europe-west4-a`). */
+  zone?: string;
+  /** With `cluster`: the node directory to ask. Default mero-js `DEFAULT_DIRECTORY`. */
+  directory?: string;
   /**
    * Set when a node serves this page (`{label}.{apps-domain}`): the node is
    * `window.location.origin`, and a passkey sign-in here opens a session bound
@@ -49,15 +64,27 @@ export interface MeroProviderConfig extends PolicyOptions {
 
 /** What `useMero()` answers. */
 export interface MeroContextValue {
-  /** The 1.0 client, or `null` until a node is known. */
+  /**
+   * The 1.0 client, or `null` until a node is known (and, for a cluster,
+   * until the directory has named its nodes).
+   */
   client: CalimeroClient | null;
   /** @deprecated The same object as `client`; kept so `const { mero } = useMero()` still compiles. */
   mero: CalimeroClient | null;
-  /** The node the client talks to first. */
+  /** The node the client talks to (for a cluster, the node in use when it connected). */
   nodeUrl: string | null;
+  /** The cluster the client was connected to by name, or `null`. */
+  cluster: string | null;
+  /** The node directory is being read for `cluster`. */
+  isConnecting: boolean;
   /** Talk to another node (not when `servedByNode`). Signs out of the previous one locally. */
   connectToNode: (url: string) => void;
-  /** Forget the node and the session. */
+  /**
+   * Talk to a Calimero Cloud cluster by name (not when `servedByNode`), with
+   * failover between its nodes. Signs out of the previous one locally.
+   */
+  connectToCluster: (name: string) => void;
+  /** Forget the node or cluster, and the session. */
   disconnect: () => void;
   /** The passkey session, or `null`. */
   session: CalimeroSession | null;
@@ -84,7 +111,7 @@ export interface MeroContextValue {
   servedByNode: boolean;
   /** Whether mock attestation is accepted (`merod local`). */
   allowMock: boolean;
-  /** The last sign-in or session failure. */
+  /** The last sign-in, connection or session failure. */
   failure: Failure | null;
   /** Hooks report what they caught here; a `LoginRequired` ends the session. */
   reportError: (error: unknown) => void;

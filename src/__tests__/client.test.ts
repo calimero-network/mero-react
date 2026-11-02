@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { resolvePolicy, SessionReportingClient } from '../client';
+import { CalimeroClient } from '@calimero-network/mero-js';
+import { reportSessions, resolvePolicy, SessionReportingClient } from '../client';
 import { SESSION } from './fake';
 
 describe('resolvePolicy', () => {
@@ -26,5 +27,20 @@ describe('SessionReportingClient', () => {
     const next = { ...SESSION, refreshToken: 'rt_2' };
     client.useSession(next);
     expect(onSession).toHaveBeenCalledWith(next);
+  });
+});
+
+describe('reportSessions', () => {
+  it('reports the sessions a client built elsewhere takes, but not a restored one', () => {
+    const onSession = vi.fn();
+    const client = new CalimeroClient({ baseUrl: 'https://node.test', policy: { allowMock: true } });
+    const restore = reportSessions(client, onSession);
+    restore(SESSION);
+    expect(onSession).not.toHaveBeenCalled();
+    expect(client.session).toEqual(SESSION);
+    const next = { ...SESSION, refreshToken: 'rt_2' };
+    client.useSession(next);
+    expect(onSession).toHaveBeenCalledWith(next);
+    expect(client.session).toEqual(next);
   });
 });

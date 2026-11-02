@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ConfirmCancelled, errorFrom } from '@calimero-network/mero-js';
+import { ConfirmCancelled, DirectoryError, errorFrom } from '@calimero-network/mero-js';
 import { describeError } from '../errors';
 
 describe('describeError', () => {
@@ -34,6 +34,16 @@ describe('describeError', () => {
   it('says whether an unavailable call may have committed', () => {
     expect(describeError(errorFrom(503, { error: 'TIMEOUT' }))).toMatchObject({ kind: 'unavailable', committed: false, retryable: true });
     expect(describeError(errorFrom(503, { error: 'UNAVAILABLE' }))).toMatchObject({ committed: 'unknown' });
+  });
+
+  it('reads a cluster the directory does not know', () => {
+    expect(describeError(new DirectoryError('eu-x', 'not-found', 'no such cluster', 404))).toMatchObject({
+      kind: 'directory',
+      code: 'not-found',
+      retryable: false,
+      message: 'There is no cluster named eu-x.',
+    });
+    expect(describeError(new DirectoryError('eu-x', 'unreachable', 'down')).retryable).toBe(true);
   });
 
   it('treats a dismissed passkey prompt as cancelled', () => {

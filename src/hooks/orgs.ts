@@ -46,28 +46,33 @@ export function useDeleteOrg(options?: MutationOptions) {
 }
 
 /**
- * Add a member or change their role. Was `useUpdateMemberRole` and, at the org
- * level, `useAddGroupMembers`.
+ * Add a member or change their role (asks for the passkey). Was
+ * `useUpdateMemberRole` and, at the org level, `useAddGroupMembers`.
  */
 export function useSetMember(options?: MutationOptions) {
+  const { passkey } = useMero();
   const { withClient, ...state } = useClientAction(options);
   const setMember = useCallback(
     (orgId: string, account: string, role: OrgRole) =>
       withClient(async (c) => {
-        await c.setMember(orgId, account, role);
+        await c.setMember(orgId, account, role, passkey);
         return true;
       }),
-    [withClient],
+    [withClient, passkey],
   );
   return { setMember, ...state };
 }
 
-/** Remove a member from an organization. */
+/**
+ * Remove a member from an organization, or leave it (`account` your own).
+ * Asks for the passkey.
+ */
 export function useRemoveMember(options?: MutationOptions) {
+  const { passkey } = useMero();
   const { withClient, ...state } = useClientAction(options);
   const removeMember = useCallback(
-    (orgId: string, account: string) => withClient((c) => c.removeMember(orgId, account)),
-    [withClient],
+    (orgId: string, account: string) => withClient((c) => c.removeMember(orgId, account, passkey)),
+    [withClient, passkey],
   );
   return { removeMember, ...state };
 }
@@ -102,17 +107,19 @@ export function useSetMemberMetadata(options?: MutationOptions) {
 
 /**
  * Set capability bits (`ORG_CAPABILITIES`) for an account or a team, or the
- * org's default with neither. Was `useSetDefaultCapabilities`.
+ * org's default with neither. Asks for the passkey. Was
+ * `useSetDefaultCapabilities`.
  */
 export function useSetCapabilities(options?: MutationOptions) {
+  const { passkey } = useMero();
   const { withClient, ...state } = useClientAction(options);
   const setCapabilities = useCallback(
     (orgId: string, capabilities: number, at: { account?: string; team?: string } = {}) =>
       withClient(async (c) => {
-        await c.setCapabilities(orgId, capabilities, at);
+        await c.setCapabilities(orgId, capabilities, passkey, at);
         return true;
       }),
-    [withClient],
+    [withClient, passkey],
   );
   return { setCapabilities, ...state };
 }
@@ -186,8 +193,12 @@ export function useDeleteTeam(options?: MutationOptions) {
   return { deleteTeam, ...state };
 }
 
-/** Add an org member to a team, or change their row. Was `useAddGroupMembers`. */
+/**
+ * Add an org member to a team, or change their row (asks for the passkey).
+ * Was `useAddGroupMembers`.
+ */
 export function useSetTeamMember(options?: MutationOptions) {
+  const { passkey } = useMero();
   const { withClient, ...state } = useClientAction(options);
   const setTeamMember = useCallback(
     (
@@ -197,24 +208,25 @@ export function useSetTeamMember(options?: MutationOptions) {
       row: { role?: TeamRole; lead?: boolean; capabilities?: number } = {},
     ) =>
       withClient(async (c) => {
-        await c.setTeamMember(orgId, teamId, account, row);
+        await c.setTeamMember(orgId, teamId, account, passkey, row);
         return true;
       }),
-    [withClient],
+    [withClient, passkey],
   );
   return { setTeamMember, ...state };
 }
 
-/** Remove someone from a team. Was `useRemoveGroupMembers`. */
+/** Remove someone from a team (asks for the passkey). Was `useRemoveGroupMembers`. */
 export function useRemoveTeamMember(options?: MutationOptions) {
+  const { passkey } = useMero();
   const { withClient, ...state } = useClientAction(options);
   const removeTeamMember = useCallback(
     (orgId: string, teamId: string, account: string) =>
       withClient(async (c) => {
-        await c.removeTeamMember(orgId, teamId, account);
+        await c.removeTeamMember(orgId, teamId, account, passkey);
         return true;
       }),
-    [withClient],
+    [withClient, passkey],
   );
   return { removeTeamMember, ...state };
 }

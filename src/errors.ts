@@ -15,6 +15,7 @@ import {
   ConfirmCancelled,
   ConfirmRequired,
   ConsentStale,
+  DirectoryError,
   IdempotencyMismatch,
   LoginRequired,
   NotFound,
@@ -32,7 +33,11 @@ export type FailureKind =
   | 'trap'
   /** The session is gone and could not be refreshed: sign in again. */
   | 'login'
-  /** The call needs the passkey (`412 CONFIRM_REQUIRED`); use `confirm: true`. */
+  /**
+   * The request needs the passkey (`412 CONFIRM_REQUIRED`) and none answered
+   * it: a call made without `confirm: true`, or a client method called with no
+   * passkey.
+   */
   | 'confirm'
   /** The person dismissed the passkey prompt. Nothing was sent. */
   | 'cancelled'
@@ -58,6 +63,8 @@ export type FailureKind =
   | 'rate-limited'
   /** The node's attestation or the sealed channel failed. */
   | 'attestation'
+  /** The node directory named no node of the cluster (`DirectoryError`). */
+  | 'directory'
   /** Anything else. */
   | 'unknown';
 
@@ -164,6 +171,22 @@ export function describeError(error: unknown): Failure {
     if (error.status === 428) return { ...base, kind: 'operator-signature', message: 'This needs the operator to sign off.', retryable: false };
     if (error.status === 429) return { ...base, kind: 'rate-limited', message: 'The node is at its limit. Try again later.', retryable: true };
     return { ...base, kind: 'unknown', message: messageOf(error), retryable: false };
+  }
+  if (error instanceof DirectoryError) {
+    const message =
+      error.reason === 'not-found'
+        ? `There is no cluster named ${error.cluster}.`
+        : error.reason === 'empty'
+          ? `Cluster ${error.cluster} has no node taking traffic. Try again later.`
+          : `Could not look up cluster ${error.cluster}. Try again.`;
+    return {
+      kind: 'directory',
+      message,
+      retryable: error.reason !== 'not-found',
+      status: error.status,
+      code: error.reason,
+      error,
+    };
   }
   if (error instanceof SealedTransportError) {
     return { kind: 'attestation', message: 'Could not open a verified channel to the node.', retryable: true, error };

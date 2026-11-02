@@ -2,8 +2,8 @@
  * LoginModal: sign in, or create an account, with a passkey.
  *
  * On a page the node serves (`servedByNode`) the node is the page's origin, so
- * the dialog asks nothing but the passkey. Elsewhere it asks for the node's URL
- * first. Creating an account asks for a name (what the passkey is saved
+ * the dialog asks nothing but the passkey. Elsewhere it asks first for the
+ * node's URL or a Calimero Cloud cluster's name (`eu-shared-1`). Creating an account asks for a name (what the passkey is saved
  * under).
  */
 
@@ -13,6 +13,9 @@ import { resolveMeroTheme, themeToCssVars, type MeroTheme } from '../theme';
 import { CalimeroLogo } from './CalimeroLogo';
 
 export type LoginModalTab = 'sign-in' | 'sign-up';
+
+/** A cluster's name as the node directory knows it: no scheme, no dots. */
+const CLUSTER_NAME = /^[a-z0-9][a-z0-9-]{0,62}$/i;
 
 export interface LoginModalProps {
   isOpen: boolean;
@@ -37,9 +40,21 @@ export function LoginModal({
   appName,
   theme,
 }: LoginModalProps) {
-  const { servedByNode, nodeUrl, client, connectToNode, signIn, signUp, isLoading, failure } = useMero();
+  const {
+    servedByNode,
+    nodeUrl,
+    cluster,
+    client,
+    connectToNode,
+    connectToCluster,
+    signIn,
+    signUp,
+    isLoading,
+    isConnecting,
+    failure,
+  } = useMero();
   const [tab, setTab] = useState<LoginModalTab>(initialTab);
-  const [url, setUrl] = useState(nodeUrl ?? '');
+  const [url, setUrl] = useState(cluster ?? nodeUrl ?? '');
   const [name, setName] = useState('');
   const [localError, setLocalError] = useState<string | null>(null);
   // A sign-in waiting for the client of a node just chosen.
@@ -51,7 +66,7 @@ export function LoginModal({
     if (isOpen) {
       setTab(initialTab);
       setLocalError(null);
-      setUrl(nodeUrl ?? '');
+      setUrl(cluster ?? nodeUrl ?? '');
       dialogRef.current?.focus();
     }
     // Reset only when it opens.
@@ -66,11 +81,19 @@ export function LoginModal({
   };
 
   useEffect(() => {
-    if (!queued || !client || client.nodeUrl.replace(/\/+$/, '') !== url.trim().replace(/\/+$/, '')) return;
+    if (!queued || !client) return;
+    const target = url.trim().replace(/\/+$/, '');
+    // A cluster's client exists only once the directory named its nodes.
+    if (cluster ? cluster !== target : client.nodeUrl.replace(/\/+$/, '') !== target) return;
     const which = queued;
     setQueued(null);
     void run(which);
   }, [queued, client]);
+
+  // The directory could not name the cluster's nodes: stop waiting, show why.
+  useEffect(() => {
+    if (queued && failure && !isConnecting) setQueued(null);
+  }, [queued, failure, isConnecting]);
 
   if (!isOpen) return null;
 
@@ -83,17 +106,25 @@ export function LoginModal({
     }
     if (!servedByNode) {
       const target = url.trim();
-      try {
-        const parsed = new URL(target);
-        if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') throw new Error();
-      } catch {
-        setLocalError('Enter the node URL, for example https://node.example.com');
-        return;
-      }
-      if (!client || target.replace(/\/+$/, '') !== nodeUrl) {
-        connectToNode(target);
-        setQueued(tab);
-        return;
+      if (CLUSTER_NAME.test(target)) {
+        if (!client || target !== cluster) {
+          connectToCluster(target);
+          setQueued(tab);
+          return;
+        }
+      } else {
+        try {
+          const parsed = new URL(target);
+          if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') throw new Error();
+        } catch {
+          setLocalError('Enter the node URL (https://node.example.com) or a cluster name (eu-shared-1).');
+          return;
+        }
+        if (!client || cluster || target.replace(/\/+$/, '') !== nodeUrl) {
+          connectToNode(target);
+          setQueued(tab);
+          return;
+        }
       }
     }
     void run(tab);
@@ -139,13 +170,15 @@ export function LoginModal({
         <form onSubmit={submit} noValidate>
           {!servedByNode && (
             <label className="mero-dialog-field">
-              Node URL
+              Node URL or cluster
               <input
                 className="mero-dialog-input"
-                type="url"
+                type="text"
                 inputMode="url"
                 autoComplete="url"
-                placeholder="https://node.example.com"
+                autoCapitalize="none"
+                spellCheck={false}
+                placeholder="https://node.example.com or eu-shared-1"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 disabled={busy}

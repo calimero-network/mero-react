@@ -1,6 +1,6 @@
 /**
- * What mero-react keeps between page loads: the node it talks to, the app
- * instance it opened last, and the passkey session.
+ * What mero-react keeps between page loads: the node or cluster it talks to,
+ * the app instance it opened last, and the passkey session.
  *
  * A Calimero 1.0 session is a short-lived session token (`v2.…`, 15 minutes)
  * plus a single-use refresh token (`rt_…`, 30 days). Both are kept together as
@@ -11,6 +11,7 @@
 import type { CalimeroSession } from '@calimero-network/mero-js';
 
 const NODE_URL_KEY = 'mero:nodeUrl';
+const CLUSTER_KEY = 'mero:cluster';
 const APP_ID_KEY = 'mero:appId';
 const SESSION_KEY = 'mero:session';
 
@@ -113,6 +114,19 @@ export function clearNodeUrl(): void {
   write(NODE_URL_KEY, null);
 }
 
+/** The Calimero Cloud cluster (by name) chosen last, if a cluster was chosen. */
+export function getCluster(): string | null {
+  return read(CLUSTER_KEY);
+}
+
+export function setCluster(name: string): void {
+  write(CLUSTER_KEY, name);
+}
+
+export function clearCluster(): void {
+  write(CLUSTER_KEY, null);
+}
+
 /** The app instance the page opened last (an app id, `SHA-256(app)`, hex). */
 export function getAppId(): string | null {
   return read(APP_ID_KEY);
@@ -126,9 +140,10 @@ export function clearAppId(): void {
   write(APP_ID_KEY, null);
 }
 
-/** Forget the node, the app and the session kept by the default store. */
+/** Forget the node or cluster, the app and the session kept by the default store. */
 export function clearAllStorage(): void {
   clearNodeUrl();
+  clearCluster();
   clearAppId();
   localStorageSessionStore.clear();
 }

@@ -14,14 +14,23 @@ import {
  *
  * Served by the node (`{label}.{apps-domain}`), the page is its own node:
  * `servedByNode`. Run against `merod local` in development with
- * `VITE_NODE_URL=http://127.0.0.1:2501` (mock attestation, dev only).
+ * `VITE_NODE_URL=http://127.0.0.1:2501` (mock attestation, dev only), or
+ * against a Calimero Cloud cluster by name with `VITE_CLUSTER=eu-shared-1`.
  */
 const DEV_NODE = import.meta.env.VITE_NODE_URL as string | undefined;
+const CLUSTER = import.meta.env.VITE_CLUSTER as string | undefined;
 const MIN_RELEASE = (import.meta.env.VITE_MIN_RELEASE as string | undefined) ?? '2.3.109';
 
 export default function App() {
-  return DEV_NODE ? (
-    <MeroProvider nodeUrl={DEV_NODE} allowMock>
+  if (DEV_NODE) {
+    return (
+      <MeroProvider nodeUrl={DEV_NODE} allowMock>
+        <Main />
+      </MeroProvider>
+    );
+  }
+  return CLUSTER ? (
+    <MeroProvider cluster={CLUSTER} minReleaseVersion={MIN_RELEASE}>
       <Main />
     </MeroProvider>
   ) : (

@@ -2,6 +2,7 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppError, errorFrom, upgradeConsent, type CloudEvent } from '@calimero-network/mero-js';
 import {
+  useApiKeys,
   useApp,
   useApps,
   useConsent,
@@ -12,6 +13,12 @@ import {
   useExecute,
   useInviteRedemption,
   useOrg,
+  usePasskeys,
+  useRemoveMember,
+  useRemoveTeamMember,
+  useSetCapabilities,
+  useSetMember,
+  useSetTeamMember,
   useSubscription,
   useUploadBlob,
   useView,
@@ -171,6 +178,62 @@ describe('useSubscription', () => {
   });
 });
 
+describe('passkey step-ups', () => {
+  it('approves membership changes with the passkey', async () => {
+    const client = fakeClient();
+    const { result } = renderHook(
+      () => ({
+        set: useSetMember(),
+        remove: useRemoveMember(),
+        caps: useSetCapabilities(),
+        teamSet: useSetTeamMember(),
+        teamRemove: useRemoveTeamMember(),
+      }),
+      { wrapper: wrapper(client) },
+    );
+    await act(async () => {
+      await result.current.set.setMember('org-1', 'acct-2', 'admin');
+      await result.current.remove.removeMember('org-1', 'acct-3');
+      await result.current.caps.setCapabilities('org-1', 5, { account: 'acct-2' });
+      await result.current.teamSet.setTeamMember('org-1', 'team-1', 'acct-2', { role: 'lead' });
+      await result.current.teamRemove.removeTeamMember('org-1', 'team-1', 'acct-2');
+    });
+    expect(client.setMember).toHaveBeenCalledWith('org-1', 'acct-2', 'admin', passkey);
+    expect(client.removeMember).toHaveBeenCalledWith('org-1', 'acct-3', passkey);
+    expect(client.setCapabilities).toHaveBeenCalledWith('org-1', 5, passkey, { account: 'acct-2' });
+    expect(client.setTeamMember).toHaveBeenCalledWith('org-1', 'team-1', 'acct-2', passkey, { role: 'lead' });
+    expect(client.removeTeamMember).toHaveBeenCalledWith('org-1', 'team-1', 'acct-2', passkey);
+  });
+
+  it('approves adding and removing a passkey with one the account has', async () => {
+    const client = fakeClient();
+    const other = { create: vi.fn(), get: vi.fn() };
+    const { result } = renderHook(() => usePasskeys(), { wrapper: wrapper(client) });
+    await act(async () => {
+      expect(await result.current.add()).toBe('cred-2');
+      await result.current.add({ passkey: other });
+      await result.current.remove('cred-1');
+    });
+    expect(client.addPasskey).toHaveBeenNthCalledWith(1, passkey, passkey);
+    expect(client.addPasskey).toHaveBeenNthCalledWith(2, other, passkey);
+    expect(client.removePasskey).toHaveBeenCalledWith('cred-1', passkey);
+  });
+
+  it('lists, creates (with the passkey) and revokes API keys', async () => {
+    const client = fakeClient();
+    const { result } = renderHook(() => useApiKeys(), { wrapper: wrapper(client) });
+    await waitFor(() => expect(result.current.keys).toEqual([{ keyId: 'k-1' }]));
+    let made: { keyId: string; key: string } | null = null;
+    await act(async () => {
+      made = await result.current.create({ label: 'ci', readOnly: true });
+      await result.current.revoke('k-1');
+    });
+    expect(made).toEqual({ keyId: 'k-2', key: 'ak_secret' });
+    expect(client.createApiKey).toHaveBeenCalledWith({ label: 'ci', readOnly: true }, passkey);
+    expect(client.revokeApiKey).toHaveBeenCalledWith('k-1');
+  });
+});
+
 describe('apps, orgs, teams, invites', () => {
   it('lists and creates apps', async () => {
     const client = fakeClient({ listApps: vi.fn(async () => [{ appId: 'a' }]) });
@@ -204,7 +267,7 @@ describe('apps, orgs, teams, invites', () => {
     await act(async () => {
       made = await result.current.create({ orgId: 'org-1', teams: ['t'], linkBase: 'https://app.test/join' });
     });
-    expect(client.invite).toHaveBeenCalledWith('org-1', 'member', ['t'], { ttlSecs: undefined, uses: undefined });
+    expect(client.invite).toHaveBeenCalledWith('org-1', 'member', passkey, ['t'], { ttlSecs: undefined, uses: undefined });
     expect(made).toEqual({ token: 'tok-1', link: 'https://app.test/join#invite=tok-1' });
   });
 
@@ -252,11 +315,32 @@ describe('consent, blobs, presence', () => {
     });
     expect(navigate).toHaveBeenCalledWith('https://node.test/consent/req-1');
     expect(result.current.started?.requestId).toBe('req-1');
+    expect(result.current.code).toBe('ABC-123');
     await act(async () => {
       await result.current.wait('req-1', { intervalMs: 5 });
     });
     expect(client.waitForConsent).toHaveBeenCalledWith('req-1', expect.objectContaining({ intervalMs: 5, expiresAt: 9e9 }));
     expect(result.current.result?.status).toBe('approved');
+  });
+
+  it('shows the confirmation code before opening the consent page', async () => {
+    const client = fakeClient();
+    const navigate = vi.fn();
+    const seen: string[] = [];
+    const { result } = renderHook(() => useConsent(), { wrapper: wrapper(client) });
+    const req = upgradeConsent('app-1', '1.2.0', 'https://app.test/back');
+    await act(async () => {
+      await result.current.open(req, {
+        navigate,
+        confirm: (started) => {
+          seen.push(started.code ?? '');
+          return false;
+        },
+      });
+    });
+    expect(seen).toEqual(['ABC-123']);
+    expect(navigate).not.toHaveBeenCalled();
+    expect(result.current.code).toBe('ABC-123');
   });
 
   it('uploads a Blob as bytes to the app', async () => {
