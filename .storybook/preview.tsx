@@ -31,8 +31,8 @@ const preview: Preview = {
       return (
         <MockMeroProvider
           isAuthenticated={cfg.isAuthenticated ?? false}
-          isOnline={cfg.isOnline ?? true}
-          nodeUrl={cfg.nodeUrl ?? 'http://node1.127.0.0.1.nip.io'}
+          nodeUrl={cfg.nodeUrl ?? 'https://node.example.com'}
+          servedByNode={cfg.servedByNode ?? false}
         >
           <Story />
         </MockMeroProvider>

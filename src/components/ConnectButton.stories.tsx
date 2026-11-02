@@ -1,13 +1,11 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { ConnectButton } from './ConnectButton';
-import { ConnectionType } from '../types';
 import type { MeroTheme } from '../theme';
 
 /**
  * ConnectButton stories use the `MockMeroProvider` decorator wired in
  * `.storybook/preview.tsx`. Set `parameters.mockMero.isAuthenticated` on a
- * story to flip the rendered state between disconnected, connected, and
- * reconnecting (`{ isAuthenticated: true, isOnline: false }`).
+ * story to flip between signed out and signed in.
  *
  * Theme tokens are exposed as flat top-level args (e.g. `primary`,
  * `radius`) so each one shows up as its own colour-picker / text input in
@@ -29,7 +27,6 @@ interface FlatArgs {
   radius?: string;
   logoOnly?: boolean;
   label?: string;
-  connectionType?: ConnectionType;
 }
 
 const colorArg = { control: 'color' as const };
@@ -59,13 +56,7 @@ const meta: Meta<FlatArgs> = {
     },
     label: {
       control: 'text',
-      description: 'Override the disconnected label (default "Connect")',
-    },
-    connectionType: {
-      control: 'select',
-      options: [ConnectionType.Remote],
-      description:
-        'Connection behaviour — the embedded LoginModal always shows node discovery + manual URL entry; `Custom` (object form) skips the modal',
+      description: 'Override the signed-out label (default "Sign in")',
     },
   },
   render: (args) => {
@@ -92,7 +83,6 @@ const meta: Meta<FlatArgs> = {
         theme={Object.keys(theme).length ? theme : undefined}
         logoOnly={args.logoOnly}
         label={args.label || undefined}
-        connectionType={args.connectionType}
       />
     );
   },
@@ -101,11 +91,7 @@ export default meta;
 
 type Story = StoryObj<FlatArgs>;
 
-export const Default: Story = {
-  args: {
-    connectionType: ConnectionType.Remote,
-  },
-};
+export const Default: Story = { args: {} };
 
 export const Pink: Story = {
   args: {
@@ -150,24 +136,11 @@ export const CustomLabel: Story = {
 export const Connected: Story = {
   args: {},
   parameters: {
-    mockMero: { isAuthenticated: true, isOnline: true },
+    mockMero: { isAuthenticated: true },
     docs: {
       description: {
         story:
-          'Authenticated state. Click to open the dropdown (Dashboard link + Log out).',
-      },
-    },
-  },
-};
-
-export const Reconnecting: Story = {
-  args: {},
-  parameters: {
-    mockMero: { isAuthenticated: true, isOnline: false },
-    docs: {
-      description: {
-        story:
-          'SSE reconnecting state. Disabled button while the SDK retries the connection.',
+          'Authenticated state. Click to open the dropdown (account, Sign out, Sign out everywhere).',
       },
     },
   },
@@ -180,7 +153,7 @@ export const ConnectedThemed: Story = {
     primaryText: '#ffffff',
   },
   parameters: {
-    mockMero: { isAuthenticated: true, isOnline: true },
+    mockMero: { isAuthenticated: true },
     docs: {
       description: {
         story: 'Connected state retains the theme colour — it should NOT go grey.',
