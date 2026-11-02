@@ -1,3 +1,13 @@
+## [11.0.0](https://github.com/calimero-network/mero-react/compare/mero-react-v10.3.0...mero-react-v11.0.0) (2026-11-02)
+
+### ⚠ BREAKING CHANGES
+
+* mero-react on mero-js 28 (Calimero 1.0 CalimeroClient) (#124)
+
+### Features
+
+* mero-react on mero-js 28 (Calimero 1.0 CalimeroClient) ([#124](https://github.com/calimero-network/mero-react/issues/124)) ([6736dc3](https://github.com/calimero-network/mero-react/commit/6736dc37997e9ed0b0277d4d42df5d60c28d9b1e))
+
 ## [10.3.0](https://github.com/calimero-network/mero-react/compare/mero-react-v10.2.1...mero-react-v10.3.0) (2026-10-25)
 
 ### Features
