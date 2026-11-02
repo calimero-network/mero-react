@@ -1,3 +1,9 @@
+## [11.0.3](https://github.com/calimero-network/mero-react/compare/mero-react-v11.0.2...mero-react-v11.0.3) (2026-11-02)
+
+### Bug Fixes
+
+* **deps:** patch critical and high security alerts ([#125](https://github.com/calimero-network/mero-react/issues/125)) ([4442525](https://github.com/calimero-network/mero-react/commit/44425254ebd90b5c99fd180e822bfe24507d7fc6))
+
 ## [11.0.2](https://github.com/calimero-network/mero-react/compare/mero-react-v11.0.1...mero-react-v11.0.2) (2026-11-02)
 
 ## [11.0.1](https://github.com/calimero-network/mero-react/compare/mero-react-v11.0.0...mero-react-v11.0.1) (2026-11-02)
