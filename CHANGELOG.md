@@ -1,3 +1,5 @@
+## [11.0.1](https://github.com/calimero-network/mero-react/compare/mero-react-v11.0.0...mero-react-v11.0.1) (2026-11-02)
+
 ## [11.0.0](https://github.com/calimero-network/mero-react/compare/mero-react-v10.3.0...mero-react-v11.0.0) (2026-11-02)
 
 ### ⚠ BREAKING CHANGES
