@@ -16,10 +16,9 @@
     "dev:full": "concurrently -n registry,web,res -c blue,green,magenta \"pnpm run registry:start\" \"pnpm --dir app dev\" \"pnpm run logic:watch\"",
     "registry:start": "calimero-registry local start --port 8082",
     "registry:sync": "bash ./scripts/registry-sync.sh",
-    "registry:status": "curl -sf http://localhost:8082/healthz > /dev/null && echo '✅ Registry is running' || echo '❌ Registry is not running'"
+    "registry:status": "curl -sf http://localhost:8082/healthz > /dev/null && echo '\u2705 Registry is running' || echo '\u274c Registry is not running'"
   },
   "devDependencies": {
-    "@calimero-network/merobox-js": "^0.0.3",
     "chokidar-cli": "^3.0.0",
     "concurrently": "^9.2.1",
     "husky": "^9.0.11"
@@ -28,5 +27,16 @@
     "@calimero-network/mero-icons": "^0.0.4",
     "@calimero-network/mero-ui": "^0.3.4"
   },
-  "name": "example"
+  "name": "example",
+  "pnpm": {
+    "overrides": {
+      "shell-quote": ">=1.8.4 <2",
+      "elliptic": ">=6.6.1 <7",
+      "pbkdf2": ">=3.1.3 <4",
+      "sha.js": ">=2.4.12 <3",
+      "cipher-base": ">=1.0.5 <2",
+      "form-data@>=4 <5": ">=4.0.4 <5",
+      "fast-xml-parser@>=4 <5": ">=4.5.4 <5"
+    }
+  }
 }
