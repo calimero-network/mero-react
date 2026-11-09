@@ -1,3 +1,9 @@
+## [11.0.4](https://github.com/calimero-network/mero-react/compare/mero-react-v11.0.3...mero-react-v11.0.4) (2026-11-09)
+
+### Bug Fixes
+
+* **fleet:** judge each pnpm catalog on its own line; expand member globs in the consumer ([#126](https://github.com/calimero-network/mero-react/issues/126)) ([3205054](https://github.com/calimero-network/mero-react/commit/3205054e7ed50885eb5d50cc6887b54f44db48bc))
+
 ## [11.0.3](https://github.com/calimero-network/mero-react/compare/mero-react-v11.0.2...mero-react-v11.0.3) (2026-11-02)
 
 ### Bug Fixes
