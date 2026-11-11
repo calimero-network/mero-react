@@ -7,13 +7,13 @@ import { CalimeroClient } from '@calimero-network/mero-js';
 import type {
   CalimeroClientOptions,
   CalimeroSession,
-  CloudPolicy,
+  NodePolicy,
 } from '@calimero-network/mero-js';
 
 /** How the provider decides which nodes to trust. */
 export interface PolicyOptions {
   /** The full policy, as mero-js takes it. Wins over `minReleaseVersion`. */
-  policy?: CloudPolicy;
+  policy?: NodePolicy;
   /**
    * The oldest mero-tee release to trust (e.g. `2.3.109`): shorthand for
    * `policy: { release: { minReleaseVersion } }`.
@@ -30,7 +30,7 @@ export interface PolicyOptions {
  * The policy for {@link PolicyOptions}. Throws when nothing says what to trust:
  * a client that trusted every quote would not be verifying anything.
  */
-export function resolvePolicy({ policy, minReleaseVersion, allowMock }: PolicyOptions): CloudPolicy {
+export function resolvePolicy({ policy, minReleaseVersion, allowMock }: PolicyOptions): NodePolicy {
   if (policy) return allowMock ? { ...policy, allowMock: true } : policy;
   if (minReleaseVersion) return { release: { minReleaseVersion }, ...(allowMock ? { allowMock: true } : {}) };
   if (allowMock) return { allowMock: true };

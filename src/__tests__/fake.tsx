@@ -3,7 +3,7 @@ import { expect, vi } from 'vitest';
 import type {
   CalimeroClient,
   CalimeroSession,
-  CloudEvent,
+  NodeEvent,
   OpenConsentOptions,
   PasskeyProvider,
 } from '@calimero-network/mero-js';
@@ -99,7 +99,7 @@ export function fakeClient(overrides: Record<string, unknown> = {}, groups: Fake
     signUp: vi.fn(async (..._args: unknown[]) => SESSION),
     signOut: vi.fn(async (..._args: unknown[]) => undefined),
     signOutEverywhere: vi.fn(async (..._args: unknown[]) => undefined),
-    events: vi.fn(async function* (): AsyncGenerator<CloudEvent> {}),
+    events: vi.fn(async function* (): AsyncGenerator<NodeEvent> {}),
     addPasskey: vi.fn(async (..._args: unknown[]) => 'cred-2'),
     openConsentPage: vi.fn(async (_req: unknown, how?: ((url: string) => void) | OpenConsentOptions) => {
       const started = { requestId: 'req-1', url: 'https://node.test/consent/req-1', expiresAt: 9e9, code: 'ABC-123' };
@@ -109,7 +109,7 @@ export function fakeClient(overrides: Record<string, unknown> = {}, groups: Fake
       return started;
     }),
     waitForConsent: vi.fn(async (..._args: unknown[]) => ({ requestId: 'req-1', kind: 'upgrade', status: 'approved', decidedAt: 1 })),
-    presenceStream: vi.fn(async function* (): AsyncGenerator<CloudEvent> {}),
+    presenceStream: vi.fn(async function* (): AsyncGenerator<NodeEvent> {}),
     ...overrides,
   };
   return base as typeof base & CalimeroClient;

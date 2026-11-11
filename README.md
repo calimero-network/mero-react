@@ -87,7 +87,7 @@ For local development against `merod local` (three `--dev` nodes with mock attes
 | Prop | Type | What it does |
 | --- | --- | --- |
 | `minReleaseVersion` | `string` | The oldest mero-tee release to trust, for example `2.3.109`. This is shorthand for `policy: { release: { minReleaseVersion } }`. |
-| `policy` | `CloudPolicy` | The full attestation policy (profile, release source, `verifyQuote`, `appHash`). Takes precedence over `minReleaseVersion`. |
+| `policy` | `NodePolicy` | The full attestation policy (profile, release source, `verifyQuote`, `appHash`). Takes precedence over `minReleaseVersion`. |
 | `allowMock` | `boolean` | Accept mock quotes (`merod local`, `--dev` clusters). The provider throws if `minReleaseVersion`, `policy` and `allowMock` are all missing. |
 | `servedByNode` | `boolean` | The node serves this page. The node is then `window.location.origin`, and a passkey ceremony here opens a session bound to this app's package. `ConnectButton` skips the node field. |
 | `nodeUrl` | `string` | The node to use when the page is not node-served. Without it (and without `cluster`), the provider uses the node or cluster kept from the last visit, or waits for `connectToNode` / `connectToCluster`. |

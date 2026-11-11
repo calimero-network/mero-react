@@ -1,6 +1,6 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { AppError, errorFrom, upgradeConsent, type CloudEvent } from '@calimero-network/mero-js';
+import { AppError, errorFrom, upgradeConsent, type NodeEvent } from '@calimero-network/mero-js';
 import {
   useAccount,
   useApiKeys,
@@ -143,7 +143,7 @@ describe('useSubscription', () => {
   it('delivers events and aborts the stream on unmount', async () => {
     let seen: AbortSignal | undefined;
     const client = fakeClient({
-      events: vi.fn(async function* (_app: string, _from: number, signal: AbortSignal): AsyncGenerator<CloudEvent> {
+      events: vi.fn(async function* (_app: string, _from: number, signal: AbortSignal): AsyncGenerator<NodeEvent> {
         seen = signal;
         yield { id: '3:0', kind: 'Added', data: { k: 'a' } };
         await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve()));
@@ -163,7 +163,7 @@ describe('useSubscription', () => {
     try {
       let round = 0;
       const client = fakeClient({
-        events: vi.fn(async function* (_app: string, _from: number, signal: AbortSignal): AsyncGenerator<CloudEvent> {
+        events: vi.fn(async function* (_app: string, _from: number, signal: AbortSignal): AsyncGenerator<NodeEvent> {
           round += 1;
           if (round === 1) {
             yield { id: '5:0', kind: 'A', data: 1 };
@@ -195,7 +195,7 @@ describe('useSubscription', () => {
 
   it('stops and signs out when the session is gone', async () => {
     const client = fakeClient({
-      events: vi.fn(async function* (): AsyncGenerator<CloudEvent> {
+      events: vi.fn(async function* (): AsyncGenerator<NodeEvent> {
         throw errorFrom(401, { error: 'UNAUTHENTICATED' });
       }),
     });
@@ -410,9 +410,9 @@ describe('consent, blobs, presence', () => {
 
   it('presence: follows the snapshot and changes, publishes and retracts', async () => {
     const hex = (v: unknown) => Array.from(new TextEncoder().encode(JSON.stringify(v)), (b) => b.toString(16).padStart(2, '0')).join('');
-    let push: ((e: CloudEvent) => void) | null = null;
+    let push: ((e: NodeEvent) => void) | null = null;
     const client = fakeClient({
-      presenceStream: vi.fn(async function* (_app: string, signal: AbortSignal): AsyncGenerator<CloudEvent> {
+      presenceStream: vi.fn(async function* (_app: string, signal: AbortSignal): AsyncGenerator<NodeEvent> {
         yield {
           id: '',
           kind: 'snapshot',
@@ -421,14 +421,14 @@ describe('consent, blobs, presence', () => {
             { account: SESSION.accountId, device: 'me', state: hex({ cursor: 0 }) },
           ],
         };
-        const queue: CloudEvent[] = [];
+        const queue: NodeEvent[] = [];
         let wake: (() => void) | null = null;
         push = (e) => {
           queue.push(e);
           wake?.();
         };
         while (!signal.aborted) {
-          if (queue.length) yield queue.shift() as CloudEvent;
+          if (queue.length) yield queue.shift() as NodeEvent;
           else await new Promise<void>((r) => (wake = r));
         }
       }),
