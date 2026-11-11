@@ -2,8 +2,24 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppError, errorFrom, upgradeConsent, type CloudEvent } from '@calimero-network/mero-js';
 import {
+  useAccount,
   useApiKeys,
   useApp,
+  useAppAbi,
+  useBlobInfo,
+  useBlobs,
+  useCreateOrg,
+  useDeleteApp,
+  useDeleteBlob,
+  useDeleteOrg,
+  useDeleteTeam,
+  usePackages,
+  useSetAppMetadata,
+  useSetMemberMetadata,
+  useSetOrgMetadata,
+  useTeam,
+  useUpdateTeam,
+  useUpgradeApp,
   useApps,
   useConsent,
   useCreateApp,
@@ -25,7 +41,7 @@ import {
 } from '../hooks';
 import { useMero } from '../context';
 import { memorySessionStore } from '../storage';
-import { fakeClient, passkey, SESSION, wrapper } from './fake';
+import { expectConfirmedBy, fakeClient, passkey, SESSION, wrapper } from './fake';
 
 describe('calls and views', () => {
   it('useApp reads the app and binds call / view to it', async () => {
@@ -33,9 +49,15 @@ describe('calls and views', () => {
     const { result } = renderHook(() => useApp(), { wrapper: wrapper(client) });
     await waitFor(() => expect(result.current.app).toEqual({ appId: 'app-1', name: 'kv' }));
     await result.current.call('set', { key: 'a' });
-    expect(client.call).toHaveBeenCalledWith('app-1', 'set', { key: 'a' }, undefined);
+    expect(client.apps.call).toHaveBeenCalledWith({ app: 'app-1', method: 'set', args: { key: 'a' }, idempotencyKey: undefined }, undefined);
     await result.current.view('get', { key: 'a' }, { stale: true });
-    expect(client.view).toHaveBeenCalledWith('app-1', 'get', { key: 'a' }, { stale: true });
+    expect(client.apps.view).toHaveBeenCalledWith({
+      app: 'app-1',
+      method: 'get',
+      args: { key: 'a' },
+      consistency: 'stale',
+      minIndex: undefined,
+    });
   });
 
   it('useExecute resolves the result and passes an idempotency key', async () => {
@@ -46,7 +68,7 @@ describe('calls and views', () => {
       value = await result.current.execute('set', { key: 'a' }, { idempotencyKey: 'k1' });
     });
     expect(value).toBe('ok');
-    expect(client.call).toHaveBeenCalledWith('app-9', 'set', { key: 'a' }, 'k1');
+    expect(client.apps.call).toHaveBeenCalledWith({ app: 'app-9', method: 'set', args: { key: 'a' }, idempotencyKey: 'k1' }, undefined);
   });
 
   it('useExecute answers a confirm method with the passkey', async () => {
@@ -55,12 +77,14 @@ describe('calls and views', () => {
     await act(async () => {
       await result.current.execute('clear', {}, { confirm: true });
     });
-    expect(client.callConfirmed).toHaveBeenCalledWith('app-1', 'clear', {}, passkey, undefined);
+    const [args, options] = client.apps.call.mock.calls[0] as unknown as [unknown, unknown];
+    expect(args).toEqual({ app: 'app-1', method: 'clear', args: {}, idempotencyKey: undefined });
+    await expectConfirmedBy(options, passkey);
   });
 
   it('useExecute surfaces the app error, typed', async () => {
     const refusal = errorFrom(422, { error: 'APP_ERROR', details: { code: 'Taken', fields: { key: 'a' } } });
-    const client = fakeClient({ call: vi.fn(async () => Promise.reject(refusal)) });
+    const client = fakeClient({}, { apps: { call: vi.fn(async () => Promise.reject(refusal)) } });
     const { result } = renderHook(() => useExecute(), { wrapper: wrapper(client) });
     await act(async () => {
       expect(await result.current.execute('set')).toBeNull();
@@ -70,7 +94,7 @@ describe('calls and views', () => {
   });
 
   it('useExecute rethrows with throwOnError', async () => {
-    const client = fakeClient({ call: vi.fn(async () => Promise.reject(errorFrom(404, { error: 'NOT_FOUND' }))) });
+    const client = fakeClient({}, { apps: { call: vi.fn(async () => Promise.reject(errorFrom(404, { error: 'NOT_FOUND' }))) } });
     const { result } = renderHook(() => useExecute(undefined, { throwOnError: true }), { wrapper: wrapper(client) });
     await act(async () => {
       await expect(result.current.execute('x')).rejects.toMatchObject({ status: 404 });
@@ -78,7 +102,7 @@ describe('calls and views', () => {
   });
 
   it('a refused refresh during a call signs the page out', async () => {
-    const client = fakeClient({ call: vi.fn(async () => Promise.reject(errorFrom(401, { error: 'UNAUTHENTICATED' }))) });
+    const client = fakeClient({}, { apps: { call: vi.fn(async () => Promise.reject(errorFrom(401, { error: 'UNAUTHENTICATED' }))) } });
     const { result } = renderHook(() => ({ exec: useExecute(), mero: useMero() }), { wrapper: wrapper(client) });
     await act(async () => {
       await result.current.exec.execute('x');
@@ -95,14 +119,22 @@ describe('calls and views', () => {
     await waitFor(() => expect(result.current.data).toEqual({ value: 1 }));
     expect(result.current.index).toBe(7);
     rerender({ key: 'b' });
-    await waitFor(() => expect(client.view).toHaveBeenLastCalledWith('app-1', 'get', { key: 'b' }, { stale: undefined, minIndex: undefined }));
+    await waitFor(() =>
+      expect(client.apps.view).toHaveBeenLastCalledWith({
+        app: 'app-1',
+        method: 'get',
+        args: { key: 'b' },
+        consistency: undefined,
+        minIndex: undefined,
+      }),
+    );
   });
 
   it('nothing reads while signed out', async () => {
     const client = fakeClient();
     const { result } = renderHook(() => useView('get'), { wrapper: wrapper(client, { store: memorySessionStore() }) });
     await new Promise((r) => setTimeout(r, 10));
-    expect(client.view).not.toHaveBeenCalled();
+    expect(client.apps.view).not.toHaveBeenCalled();
     expect(result.current.data).toBeUndefined();
   });
 });
@@ -198,11 +230,18 @@ describe('passkey step-ups', () => {
       await result.current.teamSet.setTeamMember('org-1', 'team-1', 'acct-2', { role: 'lead' });
       await result.current.teamRemove.removeTeamMember('org-1', 'team-1', 'acct-2');
     });
-    expect(client.setMember).toHaveBeenCalledWith('org-1', 'acct-2', 'admin', passkey);
-    expect(client.removeMember).toHaveBeenCalledWith('org-1', 'acct-3', passkey);
-    expect(client.setCapabilities).toHaveBeenCalledWith('org-1', 5, passkey, { account: 'acct-2' });
-    expect(client.setTeamMember).toHaveBeenCalledWith('org-1', 'team-1', 'acct-2', passkey, { role: 'lead' });
-    expect(client.removeTeamMember).toHaveBeenCalledWith('org-1', 'team-1', 'acct-2', passkey);
+    const steps: Array<[{ mock: { calls: unknown[][] } }, unknown]> = [
+      [client.orgs.setMember, { org: 'org-1', account: 'acct-2', role: 'admin' }],
+      [client.orgs.removeMember, { org: 'org-1', account: 'acct-3' }],
+      [client.orgs.capabilities, { org: 'org-1', capabilities: 5, account: 'acct-2' }],
+      [client.orgs.teamSetMember, { org: 'org-1', team: 'team-1', account: 'acct-2', role: 'lead' }],
+      [client.orgs.teamRemoveMember, { org: 'org-1', team: 'team-1', account: 'acct-2' }],
+    ];
+    for (const [spy, args] of steps) {
+      expect(spy.mock.calls).toHaveLength(1);
+      expect(spy.mock.calls[0][0]).toEqual(args);
+      await expectConfirmedBy(spy.mock.calls[0][1], passkey);
+    }
   });
 
   it('approves adding and removing a passkey with one the account has', async () => {
@@ -216,7 +255,8 @@ describe('passkey step-ups', () => {
     });
     expect(client.addPasskey).toHaveBeenNthCalledWith(1, passkey, passkey);
     expect(client.addPasskey).toHaveBeenNthCalledWith(2, other, passkey);
-    expect(client.removePasskey).toHaveBeenCalledWith('cred-1', passkey);
+    expect(client.auth.passkeyRemove.mock.calls[0][0]).toEqual({ cred: 'cred-1' });
+    await expectConfirmedBy(client.auth.passkeyRemove.mock.calls[0][1], passkey);
   });
 
   it('lists, creates (with the passkey) and revokes API keys', async () => {
@@ -229,25 +269,27 @@ describe('passkey step-ups', () => {
       await result.current.revoke('k-1');
     });
     expect(made).toEqual({ keyId: 'k-2', key: 'ak_secret' });
-    expect(client.createApiKey).toHaveBeenCalledWith({ label: 'ci', readOnly: true }, passkey);
-    expect(client.revokeApiKey).toHaveBeenCalledWith('k-1');
+    expect(client.auth.apikeyCreate.mock.calls[0][0]).toEqual({ label: 'ci', readOnly: true });
+    await expectConfirmedBy(client.auth.apikeyCreate.mock.calls[0][1], passkey);
+    expect(client.auth.apikeyRevoke.mock.calls[0][0]).toEqual({ key: 'k-1' });
+    await expectConfirmedBy(client.auth.apikeyRevoke.mock.calls[0][1], passkey);
   });
 });
 
 describe('apps, orgs, teams, invites', () => {
   it('lists and creates apps', async () => {
-    const client = fakeClient({ listApps: vi.fn(async () => [{ appId: 'a' }]) });
+    const client = fakeClient({}, { apps: { list: vi.fn(async () => ({ apps: [{ appId: 'a' }] })) } });
     const { result } = renderHook(() => ({ list: useApps({ package: 'com.x' }), create: useCreateApp() }), {
       wrapper: wrapper(client),
     });
     await waitFor(() => expect(result.current.list.data).toEqual([{ appId: 'a' }]));
-    expect(client.listApps).toHaveBeenCalledWith({ package: 'com.x', bundle: undefined });
+    expect(client.apps.list).toHaveBeenCalledWith({ package: 'com.x', bundle: undefined });
     let id: string | null = null;
     await act(async () => {
       id = await result.current.create.create({ name: 'kv', bundle: { package: 'com.x' }, org: 'org-1' });
     });
     expect(id).toBe('app-new');
-    expect(client.createApp).toHaveBeenCalledWith('kv', { package: 'com.x' }, { org: 'org-1' });
+    expect(client.apps.create).toHaveBeenCalledWith({ name: 'kv', package: 'com.x', org: 'org-1', access: undefined });
   });
 
   it('reads an org and creates a team', async () => {
@@ -257,7 +299,7 @@ describe('apps, orgs, teams, invites', () => {
     await act(async () => {
       await result.current.team.create({ orgId: 'org-1', name: 'design' });
     });
-    expect(client.createTeam).toHaveBeenCalledWith('org-1', 'design', 'invite', undefined);
+    expect(client.orgs.teamCreate).toHaveBeenCalledWith({ org: 'org-1', name: 'design', join: 'invite', parent: undefined });
   });
 
   it('mints an invite link that carries the token in the fragment', async () => {
@@ -267,7 +309,14 @@ describe('apps, orgs, teams, invites', () => {
     await act(async () => {
       made = await result.current.create({ orgId: 'org-1', teams: ['t'], linkBase: 'https://app.test/join' });
     });
-    expect(client.invite).toHaveBeenCalledWith('org-1', 'member', passkey, ['t'], { ttlSecs: undefined, uses: undefined });
+    expect(client.orgs.inviteCreate.mock.calls[0][0]).toEqual({
+      org: 'org-1',
+      role: 'member',
+      teams: ['t'],
+      ttlSecs: undefined,
+      uses: undefined,
+    });
+    await expectConfirmedBy(client.orgs.inviteCreate.mock.calls[0][1], passkey);
     expect(made).toEqual({ token: 'tok-1', link: 'https://app.test/join#invite=tok-1' });
   });
 
@@ -290,13 +339,16 @@ describe('apps, orgs, teams, invites', () => {
         await result.current.mero.signIn();
       });
       await waitFor(() => expect(result.current.inv.status).toBe('redeemed'));
-      expect(client.redeemInvite).toHaveBeenCalledTimes(1);
-      expect(client.redeemInvite).toHaveBeenCalledWith('tok-9');
+      expect(client.orgs.inviteRedeem).toHaveBeenCalledTimes(1);
+      expect(client.orgs.inviteRedeem).toHaveBeenCalledWith({ token: 'tok-9' });
       expect(sessionStorage.getItem('mero:pendingInvite')).toBeNull();
     });
 
     it('reports a refused invite', async () => {
-      const client = fakeClient({ redeemInvite: vi.fn(async () => Promise.reject(errorFrom(404, { error: 'NOT_FOUND' }))) });
+      const client = fakeClient(
+        {},
+        { orgs: { inviteRedeem: vi.fn(async () => Promise.reject(errorFrom(404, { error: 'NOT_FOUND' }))) } },
+      );
       const { result } = renderHook(() => useInviteRedemption(), { wrapper: wrapper(client) });
       await waitFor(() => expect(result.current.status).toBe('failed'));
       expect(result.current.failure?.kind).toBe('not-found');
@@ -349,7 +401,11 @@ describe('consent, blobs, presence', () => {
     await act(async () => {
       await result.current.upload(new Uint8Array([1, 2, 3]));
     });
-    expect(client.uploadBlob).toHaveBeenCalledWith('app-1', new Uint8Array([1, 2, 3]));
+    expect(client.apps.blobUpload).toHaveBeenCalledWith({
+      app: 'app-1',
+      body: new Uint8Array([1, 2, 3]),
+      contentType: 'application/octet-stream',
+    });
   });
 
   it('presence: follows the snapshot and changes, publishes and retracts', async () => {
@@ -386,11 +442,126 @@ describe('consent, blobs, presence', () => {
     await waitFor(() => expect(result.current.peers.size).toBe(0));
 
     act(() => result.current.setPresence({ cursor: 4 }));
-    await waitFor(() => expect(client.publishPresence).toHaveBeenCalledTimes(1));
-    const [app, , bytes] = client.publishPresence.mock.calls[0] as unknown as [string, number, Uint8Array];
-    expect(app).toBe('app-1');
-    expect(JSON.parse(new TextDecoder().decode(bytes))).toEqual({ cursor: 4 });
+    await waitFor(() => expect(client.apps.presencePublish).toHaveBeenCalledTimes(1));
+    const [published] = client.apps.presencePublish.mock.calls[0] as unknown as [{ app: string; seq: number; state: string }];
+    expect(published.app).toBe('app-1');
+    expect(published.state).toBe(hex({ cursor: 4 }));
     unmount();
-    expect(client.publishPresence).toHaveBeenLastCalledWith('app-1', expect.any(Number), null);
+    expect(client.apps.presencePublish).toHaveBeenLastCalledWith({ app: 'app-1', seq: expect.any(Number), state: null });
+  });
+});
+
+describe('the generated method groups', () => {
+  it('reads through them: account, ABI, team, blobs, packages', async () => {
+    const client = fakeClient(
+      {},
+      {
+        apps: {
+          abi: vi.fn(async () => ({ bundle: 'b', abi: {} })),
+          blobList: vi.fn(async () => ({ blobs: [{ blobId: 'b1', id: 'h1', size: 1 }] })),
+        },
+        orgs: { teamGet: vi.fn(async () => ({ teamId: 'team-1' })) },
+        packages: { list: vi.fn(async () => ({ packages: [{ package: 'com.x' }] })) },
+      },
+    );
+    const { result } = renderHook(
+      () => ({
+        account: useAccount(),
+        abi: useAppAbi(),
+        team: useTeam('org-1', 'team-1'),
+        blobs: useBlobs(),
+        blob: useBlobInfo('b58'),
+        packages: usePackages(),
+      }),
+      { wrapper: wrapper(client) },
+    );
+    await waitFor(() => {
+      expect(result.current.account.data).toEqual({ accountId: SESSION.accountId });
+      expect(result.current.abi.data).toEqual({ bundle: 'b', abi: {} });
+      expect(result.current.team.data).toEqual({ teamId: 'team-1' });
+      expect(result.current.blobs.data).toEqual([{ blobId: 'b1', id: 'h1', size: 1 }]);
+      expect(result.current.blob.data).toEqual({ blobId: 'b58', id: 'hex', size: 3 });
+      expect(result.current.packages.data).toEqual([{ package: 'com.x' }]);
+    });
+    expect(client.apps.abi).toHaveBeenCalledWith({ app: 'app-1' });
+    expect(client.orgs.teamGet).toHaveBeenCalledWith({ org: 'org-1', team: 'team-1' });
+    expect(client.apps.blobList).toHaveBeenCalledWith({ app: 'app-1' });
+    expect(client.apps.blobInfo).toHaveBeenCalledWith({ app: 'app-1', id: 'b58' });
+  });
+
+  it('writes through them, with the passkey where the node asks for it', async () => {
+    const client = fakeClient();
+    const { result } = renderHook(
+      () => ({
+        createOrg: useCreateOrg(),
+        deleteOrg: useDeleteOrg(),
+        orgMeta: useSetOrgMetadata(),
+        memberMeta: useSetMemberMetadata(),
+        updateTeam: useUpdateTeam(),
+        deleteTeam: useDeleteTeam(),
+        appMeta: useSetAppMetadata(),
+        deleteApp: useDeleteApp(),
+        upgrade: useUpgradeApp(),
+        deleteBlob: useDeleteBlob(),
+        passkeys: usePasskeys(),
+      }),
+      { wrapper: wrapper(client) },
+    );
+    let orgId: string | null = null;
+    let upgraded: unknown = null;
+    await act(async () => {
+      orgId = await result.current.createOrg.create('acme');
+      await result.current.deleteOrg.deleteOrg('org-1');
+      await result.current.orgMeta.setMetadata('org-1', { a: 1 });
+      await result.current.memberMeta.setMetadata('org-1', 'acct-2', { name: 'Ada' });
+      await result.current.updateTeam.update('org-1', 'team-1', { parent: null });
+      await result.current.deleteTeam.deleteTeam('org-1', 'team-1');
+      await result.current.appMeta.setMetadata('app-1', { title: 'x' });
+      await result.current.deleteApp.deleteApp('app-1');
+      upgraded = await result.current.upgrade.upgrade({ version: '1.2.0' });
+      await result.current.deleteBlob.deleteBlob('b58');
+      await result.current.passkeys.label('cred-1', 'laptop');
+    });
+    expect(orgId).toBe('org-1');
+    expect(upgraded).toEqual({ index: 1, status: 'ok', error: null });
+    expect(client.orgs.create).toHaveBeenCalledWith({ name: 'acme' });
+    expect(client.orgs.delete.mock.calls[0][0]).toEqual({ org: 'org-1' });
+    await expectConfirmedBy(client.orgs.delete.mock.calls[0][1], passkey);
+    expect(client.orgs.metadata).toHaveBeenCalledWith({ org: 'org-1', metadata: { a: 1 } });
+    expect(client.orgs.memberMetadata).toHaveBeenCalledWith({ org: 'org-1', account: 'acct-2', metadata: { name: 'Ada' } });
+    expect(client.orgs.teamUpdate).toHaveBeenCalledWith({ org: 'org-1', team: 'team-1', parent: null });
+    expect(client.orgs.teamDelete.mock.calls[0][0]).toEqual({ org: 'org-1', team: 'team-1' });
+    await expectConfirmedBy(client.orgs.teamDelete.mock.calls[0][1], passkey);
+    expect(client.apps.metadata).toHaveBeenCalledWith({ app: 'app-1', metadata: { title: 'x' } });
+    expect(client.apps.delete).toHaveBeenCalledWith({ app: 'app-1' });
+    expect(client.apps.upgrade.mock.calls[0][0]).toEqual({ app: 'app-1', version: '1.2.0' });
+    await expectConfirmedBy(client.apps.upgrade.mock.calls[0][1], passkey);
+    expect(client.apps.blobDelete).toHaveBeenCalledWith({ app: 'app-1', id: 'b58' });
+    expect(client.auth.passkeyLabel).toHaveBeenCalledWith({ cred: 'cred-1', label: 'laptop' });
+  });
+
+  it('creates an app from a bundle hash', async () => {
+    const client = fakeClient();
+    const { result } = renderHook(() => useCreateApp(), { wrapper: wrapper(client) });
+    await act(async () => {
+      await result.current.create({ name: 'kv', bundle: 'abc', initArgs: { n: 1 } });
+    });
+    expect(client.apps.create).toHaveBeenCalledWith({ name: 'kv', bundle: 'abc', initArgs: { n: 1 }, access: undefined });
+  });
+
+  it('requests consent and checks its result', async () => {
+    const client = fakeClient();
+    const { result } = renderHook(() => useConsent(), { wrapper: wrapper(client) });
+    const req = upgradeConsent('app-1', '1.2.0', 'https://app.test/back');
+    await act(async () => {
+      await result.current.request(req);
+    });
+    expect(client.consent.pageCreate).toHaveBeenCalledWith({ body: req });
+    expect(result.current.code).toBe('ABC-123');
+    await act(async () => {
+      await result.current.check('req-1');
+    });
+    expect(client.consent.pageResult).toHaveBeenCalledWith({ request: 'req-1' });
+    expect(result.current.result?.status).toBe('approved');
   });
 });

@@ -6,6 +6,7 @@ export { useApp, useExecute, useView, useAppAbi } from './app';
 export type { CallOptions, ViewOptions, UseViewOptions, UseViewResult } from './app';
 
 export { useSubscription, followEvents } from './events';
+// eslint-disable-next-line @typescript-eslint/no-deprecated -- mero-react's own 0.x alias, kept for compatibility
 export type { AppEvent, SubscriptionEventData, SubscriptionOptions } from './events';
 
 export { useApps, useCreateApp, useDeleteApp, useSetAppMetadata, useUpgradeApp, usePackages } from './apps';

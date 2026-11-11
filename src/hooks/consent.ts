@@ -60,7 +60,8 @@ export function useConsent(options?: MutationOptions) {
   const request = useCallback(
     (req: ConsentRequest) =>
       withClient(async (c) => {
-        const answer = await c.requestConsent(req);
+        // The document types this body as a string (`Body::RawJson`); it is the request's JSON.
+        const answer: ConsentStarted = await c.consent.pageCreate({ body: req as unknown as string });
         setStarted(answer);
         setResult(null);
         return answer;
@@ -90,7 +91,7 @@ export function useConsent(options?: MutationOptions) {
   const check = useCallback(
     (requestId: string) =>
       withClient(async (c) => {
-        const answer = await c.consentResult(requestId);
+        const answer = (await c.consent.pageResult({ request: requestId })) as unknown as ConsentResult;
         setResult(answer);
         return answer;
       }),

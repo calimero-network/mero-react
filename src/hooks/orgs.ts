@@ -9,7 +9,7 @@
 import { useCallback } from 'react';
 import type { OrgInfo } from '@calimero-network/mero-js';
 import { useMero } from '../context';
-import { useClientAction, useResource, useSignedInClient, type MutationOptions } from './internal';
+import { confirmWith, useClientAction, useResource, useSignedInClient, type MutationOptions } from './internal';
 
 export type OrgRole = 'guest' | 'member' | 'admin' | 'owner';
 export type TeamJoin = 'everyone' | 'invite';
@@ -20,13 +20,22 @@ export type TeamRole = 'lead' | 'member' | 'readOnly';
 /** An organization: members, teams, metadata, release approvers. Was `useNamespace`. */
 export function useOrg(orgId?: string | null) {
   const client = useSignedInClient();
-  return useResource<OrgInfo | null>(client && orgId ? () => client.getOrg(orgId) : null, null, [client, orgId]);
+  // The document's org answer has no `releaseApprovers`, `publishes` or
+  // `newWorkStopped`, which `OrgInfo` (and the node's answer) carry.
+  return useResource<OrgInfo | null>(
+    client && orgId ? async () => (await client.orgs.get({ org: orgId })) as unknown as OrgInfo : null,
+    null,
+    [client, orgId],
+  );
 }
 
 /** Create an organization; resolves its id. Was `useCreateNamespace`. */
 export function useCreateOrg(options?: MutationOptions) {
   const { withClient, ...state } = useClientAction(options);
-  const create = useCallback((name: string) => withClient((c) => c.createOrg(name)), [withClient]);
+  const create = useCallback(
+    (name: string) => withClient(async (c) => (await c.orgs.create({ name })).orgId),
+    [withClient],
+  );
   return { create, ...state };
 }
 
@@ -37,7 +46,7 @@ export function useDeleteOrg(options?: MutationOptions) {
   const deleteOrg = useCallback(
     (orgId: string) =>
       withClient(async (c) => {
-        await c.deleteOrg(orgId, passkey);
+        await c.orgs.delete({ org: orgId }, confirmWith(passkey));
         return true;
       }),
     [withClient, passkey],
@@ -55,7 +64,7 @@ export function useSetMember(options?: MutationOptions) {
   const setMember = useCallback(
     (orgId: string, account: string, role: OrgRole) =>
       withClient(async (c) => {
-        await c.setMember(orgId, account, role, passkey);
+        await c.orgs.setMember({ org: orgId, account, role }, confirmWith(passkey));
         return true;
       }),
     [withClient, passkey],
@@ -71,7 +80,11 @@ export function useRemoveMember(options?: MutationOptions) {
   const { passkey } = useMero();
   const { withClient, ...state } = useClientAction(options);
   const removeMember = useCallback(
-    (orgId: string, account: string) => withClient((c) => c.removeMember(orgId, account, passkey)),
+    (orgId: string, account: string) =>
+      withClient(
+        async (c) =>
+          (await c.orgs.removeMember({ org: orgId, account }, confirmWith(passkey))) as Record<string, unknown>,
+      ),
     [withClient, passkey],
   );
   return { removeMember, ...state };
@@ -83,7 +96,7 @@ export function useSetOrgMetadata(options?: MutationOptions) {
   const setMetadata = useCallback(
     (orgId: string, metadata: unknown) =>
       withClient(async (c) => {
-        await c.setOrgMetadata(orgId, metadata);
+        await c.orgs.metadata({ org: orgId, metadata });
         return true;
       }),
     [withClient],
@@ -97,7 +110,7 @@ export function useSetMemberMetadata(options?: MutationOptions) {
   const setMetadata = useCallback(
     (orgId: string, account: string, metadata: unknown) =>
       withClient(async (c) => {
-        await c.setMemberMetadata(orgId, account, metadata);
+        await c.orgs.memberMetadata({ org: orgId, account, metadata });
         return true;
       }),
     [withClient],
@@ -116,7 +129,7 @@ export function useSetCapabilities(options?: MutationOptions) {
   const setCapabilities = useCallback(
     (orgId: string, capabilities: number, at: { account?: string; team?: string } = {}) =>
       withClient(async (c) => {
-        await c.setCapabilities(orgId, capabilities, passkey, at);
+        await c.orgs.capabilities({ org: orgId, capabilities, ...at }, confirmWith(passkey));
         return true;
       }),
     [withClient, passkey],
@@ -130,7 +143,7 @@ export function useSetCapabilities(options?: MutationOptions) {
 export function useTeam(orgId?: string | null, teamId?: string | null) {
   const client = useSignedInClient();
   return useResource<Record<string, unknown> | null>(
-    client && orgId && teamId ? () => client.getTeam(orgId, teamId) : null,
+    client && orgId && teamId ? () => client.orgs.teamGet({ org: orgId, team: teamId }) : null,
     null,
     [client, orgId, teamId],
   );
@@ -148,7 +161,8 @@ export interface CreateTeamInput {
 export function useCreateTeam(options?: MutationOptions) {
   const { withClient, ...state } = useClientAction(options);
   const create = useCallback(
-    ({ orgId, name, join = 'invite', parent }: CreateTeamInput) => withClient((c) => c.createTeam(orgId, name, join, parent)),
+    ({ orgId, name, join = 'invite', parent }: CreateTeamInput) =>
+      withClient(async (c) => (await c.orgs.teamCreate({ org: orgId, name, join, parent })).teamId),
     [withClient],
   );
   return { create, ...state };
@@ -171,7 +185,7 @@ export function useUpdateTeam(options?: MutationOptions) {
   const update = useCallback(
     (orgId: string, teamId: string, change: TeamUpdate) =>
       withClient(async (c) => {
-        await c.updateTeam(orgId, teamId, change);
+        await c.orgs.teamUpdate({ org: orgId, team: teamId, ...change });
         return true;
       }),
     [withClient],
@@ -179,16 +193,21 @@ export function useUpdateTeam(options?: MutationOptions) {
   return { update, ...state };
 }
 
-/** Delete a team. Was `useDeleteGroup`. */
+/**
+ * Delete a team, the teams below it and their apps. Was `useDeleteGroup`.
+ * Asks for the passkey only when one of those teams holds apps (the node
+ * answers `412 CONFIRM_REQUIRED`); a team with no apps goes without one.
+ */
 export function useDeleteTeam(options?: MutationOptions) {
+  const { passkey } = useMero();
   const { withClient, ...state } = useClientAction(options);
   const deleteTeam = useCallback(
     (orgId: string, teamId: string) =>
       withClient(async (c) => {
-        await c.deleteTeam(orgId, teamId);
+        await c.orgs.teamDelete({ org: orgId, team: teamId }, confirmWith(passkey));
         return true;
       }),
-    [withClient],
+    [withClient, passkey],
   );
   return { deleteTeam, ...state };
 }
@@ -208,7 +227,7 @@ export function useSetTeamMember(options?: MutationOptions) {
       row: { role?: TeamRole; lead?: boolean; capabilities?: number } = {},
     ) =>
       withClient(async (c) => {
-        await c.setTeamMember(orgId, teamId, account, passkey, row);
+        await c.orgs.teamSetMember({ org: orgId, team: teamId, account, ...row }, confirmWith(passkey));
         return true;
       }),
     [withClient, passkey],
@@ -223,7 +242,7 @@ export function useRemoveTeamMember(options?: MutationOptions) {
   const removeTeamMember = useCallback(
     (orgId: string, teamId: string, account: string) =>
       withClient(async (c) => {
-        await c.removeTeamMember(orgId, teamId, account, passkey);
+        await c.orgs.teamRemoveMember({ org: orgId, team: teamId, account }, confirmWith(passkey));
         return true;
       }),
     [withClient, passkey],

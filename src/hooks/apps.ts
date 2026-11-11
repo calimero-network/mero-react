@@ -5,15 +5,33 @@
  */
 
 import { useCallback } from 'react';
-import type { AppInfo } from '@calimero-network/mero-js';
+import type { ApiComponents, AppInfo, PackageInfo } from '@calimero-network/mero-js';
 import { useMero } from '../context';
-import { NotConnectedError, useAppId, useAsyncAction, useResource, useSignedInClient, type MutationOptions } from './internal';
+import { confirmWith, NotConnectedError, useAppId, useAsyncAction, useResource, useSignedInClient, type MutationOptions } from './internal';
+
+type AppAccess = ApiComponents['schemas']['Access'];
+
+/** What `useUpgradeApp().upgrade` resolves: the upgrade's log index and outcome. */
+interface AppUpgradeResult {
+  index: number;
+  status: string;
+  error: unknown;
+}
 
 /** The app instances this account can see. Was `useContexts`. */
 export function useApps(filter: { package?: string; bundle?: string } = {}) {
   const client = useSignedInClient();
   const { package: pkg, bundle } = filter;
-  return useResource<AppInfo[]>(client ? () => client.listApps({ package: pkg, bundle }) : null, [], [client, pkg, bundle]);
+  // The document's `App` has no `package` / `version`, which `AppInfo` (and
+  // the node's answer) carry.
+  return useResource<AppInfo[]>(
+    client
+      ? async () =>
+          (await client.apps.list({ package: pkg || undefined, bundle: bundle || undefined })).apps as unknown as AppInfo[]
+      : null,
+    [],
+    [client, pkg, bundle],
+  );
 }
 
 export interface CreateAppInput {
@@ -34,10 +52,17 @@ export function useCreateApp(options?: MutationOptions) {
   const action = useAsyncAction(options);
   const create = useCallback(
     (input: CreateAppInput) =>
-      action.run(() => {
+      action.run(async () => {
         if (!client) throw new NotConnectedError();
         const { name, bundle, ...rest } = input;
-        return client.createApp(name, bundle, rest);
+        const target = typeof bundle === 'string' ? { bundle } : bundle;
+        const { appId } = await client.apps.create({
+          name,
+          ...target,
+          ...rest,
+          access: rest.access as AppAccess | undefined,
+        });
+        return appId;
       }),
     [client, action.run],
   );
@@ -52,7 +77,7 @@ export function useDeleteApp(options?: MutationOptions) {
     (appId: string) =>
       action.run(async () => {
         if (!client) throw new NotConnectedError();
-        await client.deleteApp(appId);
+        await client.apps.delete({ app: appId });
         return true;
       }),
     [client, action.run],
@@ -68,7 +93,7 @@ export function useSetAppMetadata(options?: MutationOptions) {
     (appId: string, metadata: unknown) =>
       action.run(async () => {
         if (!client) throw new NotConnectedError();
-        await client.setAppMetadata(appId, metadata);
+        await client.apps.metadata({ app: appId, metadata });
         return true;
       }),
     [client, action.run],
@@ -97,10 +122,10 @@ export function useUpgradeApp(appId?: string | null, options?: MutationOptions) 
   const action = useAsyncAction(options);
   const upgrade = useCallback(
     (target: UpgradeTarget) =>
-      action.run(() => {
+      action.run(async () => {
         if (!client) throw new NotConnectedError();
         if (!id) throw new Error('No app to upgrade.');
-        return client.upgradeApp(id, target, passkey);
+        return (await client.apps.upgrade({ app: id, ...target }, confirmWith(passkey))) as AppUpgradeResult;
       }),
     [client, id, passkey, action.run],
   );
@@ -110,5 +135,9 @@ export function useUpgradeApp(appId?: string | null, options?: MutationOptions) 
 /** The installed package releases. */
 export function usePackages() {
   const client = useSignedInClient();
-  return useResource(client ? () => client.packages() : null, [], [client]);
+  return useResource<PackageInfo[]>(
+    client ? async () => (await client.packages.list()).packages as unknown as PackageInfo[] : null,
+    [],
+    [client],
+  );
 }

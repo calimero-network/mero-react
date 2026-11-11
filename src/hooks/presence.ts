@@ -67,6 +67,12 @@ function hexToBytes(hex: string): Uint8Array {
   return out;
 }
 
+function bytesToHex(bytes: Uint8Array): string {
+  let out = '';
+  for (const b of bytes) out += b.toString(16).padStart(2, '0');
+  return out;
+}
+
 interface Diff {
   account: string;
   device: string;
@@ -157,7 +163,10 @@ export function useEphemeral<T extends object = Record<string, unknown>>(
       seq.current += 1;
       const bytes = value === null ? null : codecRef.current.encode(value);
       lastSent.current = Date.now();
-      client.publishPresence(id, seq.current, bytes).then(
+      // `state: null` retracts. The document types `state` as an optional
+      // string only; the node takes `null`, which is what mero-js sent.
+      const state = (bytes === null ? null : bytesToHex(bytes)) as string | undefined;
+      client.apps.presencePublish({ app: id, seq: seq.current, state }).then(
         () => setError(null),
         (e: unknown) => setError(e instanceof Error ? e : new Error(String(e))),
       );
