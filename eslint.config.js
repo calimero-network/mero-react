@@ -22,6 +22,21 @@ export default [
     },
   },
   {
+    // The library itself uses no deprecated API (mero-js's compatibility
+    // wrappers included): it calls the generated method groups.
+    files: ['src/**/*.ts', 'src/**/*.tsx'],
+    ignores: ['src/__tests__/**', 'src/**/*.stories.tsx'],
+    languageOptions: {
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+    rules: {
+      '@typescript-eslint/no-deprecated': 'error',
+    },
+  },
+  {
     ignores: ['dist/', 'node_modules/', 'example/'],
   },
 ];

@@ -10,9 +10,10 @@
  */
 
 import { useCallback } from 'react';
-import type { CallResult, ViewResult } from '@calimero-network/mero-js';
+import type { CalimeroClient, CallResult, ViewResult } from '@calimero-network/mero-js';
 import { useMero } from '../context';
 import {
+  confirmWith,
   NoAppError,
   NotConnectedError,
   useAppId,
@@ -38,6 +39,20 @@ export interface ViewOptions {
 }
 
 /**
+ * `POST /apps/{app}/views`: strong unless `stale`. Strong is what the node
+ * reads for any `consistency` but `stale`, so it is sent as no `consistency`.
+ */
+function viewOf(client: CalimeroClient, app: string, method: string, args: unknown, options: ViewOptions): Promise<ViewResult> {
+  return client.apps.view({
+    app,
+    method,
+    args,
+    consistency: options.stale ? 'stale' : undefined,
+    minIndex: options.minIndex,
+  });
+}
+
+/**
  * The app the page works on, with its record and bound `call` / `view`.
  *
  * `call` and `view` throw the client's typed errors as they are; for loading
@@ -49,7 +64,7 @@ export function useApp(appId?: string | null) {
   const id = useAppId(appId);
 
   const info = useResource<Record<string, unknown> | null>(
-    client && id ? () => client.getApp(id) : null,
+    client && id ? () => client.apps.get({ app: id }) : null,
     null,
     [client, id],
   );
@@ -58,9 +73,13 @@ export function useApp(appId?: string | null) {
     (method: string, args: unknown = {}, options: CallOptions = {}): Promise<CallResult> => {
       if (!anyClient) return Promise.reject(new NotConnectedError('connected'));
       if (!id) return Promise.reject(new NoAppError());
-      return options.confirm
-        ? anyClient.callConfirmed(id, method, args, passkey, options.idempotencyKey)
-        : anyClient.call(id, method, args, options.idempotencyKey);
+      // Without `idempotencyKey` the client mints one, so its own retries of a
+      // `503` share it. A confirmed call goes out once: its challenge is
+      // single-use.
+      return anyClient.apps.call(
+        { app: id, method, args, idempotencyKey: options.idempotencyKey },
+        options.confirm ? confirmWith(passkey) : undefined,
+      );
     },
     [anyClient, id, passkey],
   );
@@ -69,7 +88,7 @@ export function useApp(appId?: string | null) {
     (method: string, args: unknown = {}, options: ViewOptions = {}): Promise<ViewResult> => {
       if (!anyClient) return Promise.reject(new NotConnectedError('connected'));
       if (!id) return Promise.reject(new NoAppError());
-      return anyClient.view(id, method, args, options);
+      return viewOf(anyClient, id, method, args, options);
     },
     [anyClient, id],
   );
@@ -128,7 +147,7 @@ export function useView<T = unknown>(method: string, args: unknown = {}, options
   const { stale, minIndex, enabled = true } = options;
 
   const resource = useResource<ViewResult | null>(
-    client && id && enabled ? () => client.view(id, method, JSON.parse(argsKey), { stale, minIndex }) : null,
+    client && id && enabled ? () => viewOf(client, id, method, JSON.parse(argsKey), { stale, minIndex }) : null,
     null,
     [client, id, method, argsKey, stale, minIndex, enabled],
   );
@@ -144,5 +163,9 @@ export function useView<T = unknown>(method: string, args: unknown = {}, options
 export function useAppAbi(appId?: string | null) {
   const client = useSignedInClient();
   const id = useAppId(appId);
-  return useResource<Record<string, unknown> | null>(client && id ? () => client.appAbi(id) : null, null, [client, id]);
+  return useResource<Record<string, unknown> | null>(
+    client && id ? () => client.apps.abi({ app: id }) : null,
+    null,
+    [client, id],
+  );
 }

@@ -13,7 +13,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { LoginRequired } from '@calimero-network/mero-js';
+import { LoginRequired, presenceState } from '@calimero-network/mero-js';
 import { useMero } from '../context';
 import { useAppId, useSignedInClient } from './internal';
 
@@ -157,7 +157,9 @@ export function useEphemeral<T extends object = Record<string, unknown>>(
       seq.current += 1;
       const bytes = value === null ? null : codecRef.current.encode(value);
       lastSent.current = Date.now();
-      client.publishPresence(id, seq.current, bytes).then(
+      // `state: null` retracts.
+      const state = presenceState(bytes);
+      client.apps.presencePublish({ app: id, seq: seq.current, state }).then(
         () => setError(null),
         (e: unknown) => setError(e instanceof Error ? e : new Error(String(e))),
       );

@@ -6,13 +6,13 @@
 import { useCallback } from 'react';
 import type { PasskeyProvider } from '@calimero-network/mero-js';
 import { useMero } from '../context';
-import { useClientAction, useResource, useSignedInClient, type MutationOptions } from './internal';
+import { confirmWith, useClientAction, useResource, useSignedInClient, type MutationOptions } from './internal';
 
 /** `GET /auth/me`: the account, its passkeys, its orgs. */
 export function useAccount() {
   const client = useSignedInClient();
   const { accountId } = useMero();
-  const me = useResource<Record<string, unknown> | null>(client ? () => client.me() : null, null, [client, accountId]);
+  const me = useResource<Record<string, unknown> | null>(client ? () => client.auth.me() : null, null, [client, accountId]);
   return { accountId, ...me };
 }
 
@@ -37,7 +37,7 @@ export function usePasskeys(options?: MutationOptions) {
   const remove = useCallback(
     (credentialId: string) =>
       withClient(async (c) => {
-        await c.removePasskey(credentialId, passkey);
+        await c.auth.passkeyRemove({ cred: credentialId }, confirmWith(passkey));
         return true;
       }),
     [withClient, passkey],
@@ -45,7 +45,7 @@ export function usePasskeys(options?: MutationOptions) {
   const label = useCallback(
     (credentialId: string, name: string) =>
       withClient(async (c) => {
-        await c.labelPasskey(credentialId, name);
+        await c.auth.passkeyLabel({ cred: credentialId, label: name });
         return true;
       }),
     [withClient],
@@ -69,21 +69,23 @@ export interface CreateApiKeyInput {
 /**
  * The account's API keys, for agents and servers: list them, create one
  * (approved with the passkey; needs a passkey session, not an API key) and
- * revoke one. `create` resolves `{ keyId, key }`, and the key is shown once.
+ * revoke one (also approved with the passkey). `create` resolves
+ * `{ keyId, key }`, and the key is shown once.
  */
 export function useApiKeys(options?: MutationOptions) {
   const client = useSignedInClient();
   const { passkey, accountId } = useMero();
-  const keys = useResource<Array<Record<string, unknown>>>(client ? () => client.listApiKeys() : null, [], [
-    client,
-    accountId,
-  ]);
+  const keys = useResource<Array<Record<string, unknown>>>(
+    client ? async () => (await client.auth.apikeyList()).keys : null,
+    [],
+    [client, accountId],
+  );
   const { refetch } = keys;
   const { withClient, ...state } = useClientAction(options);
   const create = useCallback(
     (input: CreateApiKeyInput = {}) =>
       withClient(async (c) => {
-        const created = await c.createApiKey(input, passkey);
+        const created = await c.auth.apikeyCreate({ ...input }, confirmWith(passkey));
         void refetch();
         return created;
       }),
@@ -92,11 +94,11 @@ export function useApiKeys(options?: MutationOptions) {
   const revoke = useCallback(
     (keyId: string) =>
       withClient(async (c) => {
-        await c.revokeApiKey(keyId);
+        await c.auth.apikeyRevoke({ key: keyId }, confirmWith(passkey));
         void refetch();
         return true;
       }),
-    [withClient, refetch],
+    [withClient, passkey, refetch],
   );
   return {
     keys: keys.data,

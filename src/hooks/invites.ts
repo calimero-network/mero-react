@@ -13,7 +13,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMero } from '../context';
 import { describeError, type Failure } from '../errors';
-import { useClientAction, type MutationOptions } from './internal';
+import { confirmWith, useClientAction, type MutationOptions } from './internal';
 import type { OrgRole } from './orgs';
 
 const PARAM = 'invite';
@@ -80,7 +80,7 @@ export function useCreateInvite(options?: MutationOptions) {
   const create = useCallback(
     ({ orgId, role = 'member', teams = [], ttlSecs, uses, linkBase }: CreateInviteInput) =>
       withClient(async (c) => {
-        const token = await c.invite(orgId, role, passkey, teams, { ttlSecs, uses });
+        const { token } = await c.orgs.inviteCreate({ org: orgId, role, teams, ttlSecs, uses }, confirmWith(passkey));
         return { token, link: inviteLink(token, linkBase) };
       }),
     [withClient, passkey],
@@ -91,7 +91,10 @@ export function useCreateInvite(options?: MutationOptions) {
 /** Redeem a token. Was `useRedeemInvitation` / `useJoinNamespace` / `useJoinGroup`. */
 export function useRedeemInvite(options?: MutationOptions) {
   const { withClient, ...state } = useClientAction(options);
-  const redeem = useCallback((token: string) => withClient((c) => c.redeemInvite(token)), [withClient]);
+  const redeem = useCallback(
+    (token: string) => withClient(async (c) => (await c.orgs.inviteRedeem({ token })) as Record<string, unknown>),
+    [withClient],
+  );
   return { redeem, ...state };
 }
 
@@ -146,7 +149,7 @@ export function useInviteRedemption({ autoRedeem = true }: { autoRedeem?: boolea
     setStatus('redeeming');
     setFailure(null);
     try {
-      const answer = await client.redeemInvite(token);
+      const answer = (await client.orgs.inviteRedeem({ token })) as Record<string, unknown>;
       setResult(answer);
       setStatus('redeemed');
       session()?.removeItem(STASH_KEY);

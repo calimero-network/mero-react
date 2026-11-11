@@ -1,6 +1,6 @@
 # @calimero-network/mero-react
 
-React bindings for **Calimero 1.0**, on the mero-js 28 client (`CalimeroClient`).
+React bindings for **Calimero 1.0**, on the mero-js client (`CalimeroClient`) and its generated method groups (`client.apps`, `client.orgs`, `client.auth`, ...).
 
 A 1.0 node runs in an attested TDX cluster. The client verifies the node's attestation, seals every request to the node's attested key, and signs people in with **passkeys**. mero-react puts one client in context and builds the hooks on top of it:
 
@@ -20,7 +20,7 @@ A 1.0 node runs in an attested TDX cluster. The client verifies the node's attes
 pnpm add @calimero-network/mero-react
 ```
 
-`@calimero-network/mero-js` (^28.0) comes with it, and every mero-js export is re-exported, so apps need only this import. React 18 or 19 is a peer dependency.
+`@calimero-network/mero-js` (^29.17) comes with it, and every mero-js export is re-exported, so apps need only this import. React 18 or 19 is a peer dependency.
 
 ## Quick start
 
@@ -180,9 +180,9 @@ How `useSubscription` behaves:
 | `useTeam(org, team)` | `useGroupInfo` |
 | `useCreateTeam().create({ orgId, name, join?, parent? })` | `useCreateGroupInNamespace` |
 | `useUpdateTeam().update(org, team, { name?, join?, parent?, metadata? })` | `useSetGroupMetadata`, `useReparentGroup`, `useSetSubgroupVisibility` |
-| `useDeleteTeam()`, `useSetTeamMember()`, `useRemoveTeamMember()` | `useDeleteGroup`, `useAddGroupMembers`, `useRemoveGroupMembers`. Setting and removing a team member ask for the passkey. |
+| `useDeleteTeam()`, `useSetTeamMember()`, `useRemoveTeamMember()` | `useDeleteGroup`, `useAddGroupMembers`, `useRemoveGroupMembers`. Setting and removing a team member ask for the passkey; deleting a team asks for it when the team (or one below it) holds apps. |
 
-**Passkey step-ups.** Since mero-js 28 the node approves membership changes, capabilities, invites, passkeys and API keys with the caller's passkey: it answers `412 CONFIRM_REQUIRED` and the client answers that with the provider's `passkey` (`browserPasskey()` by default), so the person sees a passkey prompt. A dismissed prompt fails the action with `failure.kind = 'cancelled'`.
+**Passkey step-ups.** Since mero-js 28 the node approves membership changes, capabilities, invites, passkeys and API keys (creating and revoking) with the caller's passkey: it answers `412 CONFIRM_REQUIRED` and the hook answers that with the provider's `passkey` (`browserPasskey()` by default, through mero-js `passkeyConfirm`), so the person sees a passkey prompt. A dismissed prompt fails the action with `failure.kind = 'cancelled'`.
 
 ### Invites
 
@@ -290,7 +290,7 @@ core 1.0 is a different node, and mero-js 28 is a different client, so 11.0 is a
    - Keep `servedByNode`. Pass `appId` if the app works on one instance.
 2. **Client.**
    - `useMero().mero` (a `MeroJs` or relay client) is now `useMero().client` (a `CalimeroClient`).
-   - `mero.rpc.execute({ contextId, method, argsJson, executorPublicKey })` is now `client.call(appId, method, args)`, or `client.view(…)` for reads.
+   - `mero.rpc.execute({ contextId, method, argsJson, executorPublicKey })` is now `client.apps.call({ app, method, args })`, or `client.apps.view({ app, method, args })` for reads (or `useApp(appId).call` / `.view`).
 3. **Vocabulary.**
    - context is now app instance (`appId`);
    - namespace is now organization;
@@ -326,7 +326,7 @@ core 1.0 is a different node, and mero-js 28 is a different client, so 11.0 is a
 | `useRedeemInvitation`, `useJoinNamespace`, `useJoinGroup`, `useJoinContext` | `useRedeemInvite` |
 | `useInviteRedemption`, `useJoinInvitation` | `useInviteRedemption` (no relay or sync step) |
 | `useUpgradeGroup`, `useInstallFromRegistry` | `useUpgradeApp`, or `useConsent` + `upgradeConsent` from an app frontend |
-| `useGroupUpgradeStatus`, `useRetryGroupUpgrade` | mero-js `client.upgradeRun` / `retryUpgradeRun` (org upgrade runs) |
+| `useGroupUpgradeStatus`, `useRetryGroupUpgrade` | mero-js `client.orgs.upgradeStatus({ org, run })` / `client.orgs.upgradeRetry({ org, run }, { confirm })` (org upgrade runs) |
 | `useUploadBlob`, `useBlobInfo`, `useBlobUrl` | Same names, now per app (`{ appId }`) |
 | `useEphemeral(contextId, opts)` | `useEphemeral(appId, opts)`: peers keyed by account |
 | `useNodeIdentity` | `useAccount` |

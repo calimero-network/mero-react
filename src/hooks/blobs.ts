@@ -29,9 +29,9 @@ export function useUploadBlob(options: BlobHookOptions & MutationOptions = {}) {
   const { withClient, ...state } = useClientAction(options);
   const upload = useCallback(
     (data: Uint8Array | Blob | ArrayBuffer) =>
-      withClient(async (c) => {
+      withClient(async (c): Promise<{ blobId: string; id: string; size: number }> => {
         if (!id) throw new Error('No app to store the blob in.');
-        return c.uploadBlob(id, await bytesOf(data));
+        return c.apps.blobUpload({ app: id, body: await bytesOf(data), contentType: 'application/octet-stream' });
       }),
     [withClient, id],
   );
@@ -43,7 +43,7 @@ export function useBlobInfo(blobId?: string | null, options: BlobHookOptions = {
   const client = useSignedInClient();
   const id = useAppId(options.appId);
   return useResource<BlobInfo | null>(
-    client && id && blobId ? () => client.blobInfo(id, blobId) : null,
+    client && id && blobId ? () => client.apps.blobInfo({ app: id, id: blobId }) : null,
     null,
     [client, id, blobId],
   );
@@ -53,7 +53,11 @@ export function useBlobInfo(blobId?: string | null, options: BlobHookOptions = {
 export function useBlobs(appId?: string | null) {
   const client = useSignedInClient();
   const id = useAppId(appId);
-  return useResource<BlobInfo[]>(client && id ? () => client.listBlobs(id) : null, [], [client, id]);
+  return useResource<BlobInfo[]>(
+    client && id ? async () => (await client.apps.blobList({ app: id })).blobs : null,
+    [],
+    [client, id],
+  );
 }
 
 /**
@@ -91,7 +95,7 @@ export function useDeleteBlob(options: BlobHookOptions & MutationOptions = {}) {
     (blobId: string) =>
       withClient(async (c) => {
         if (!id) throw new Error('No app.');
-        await c.deleteBlob(id, blobId);
+        await c.apps.blobDelete({ app: id, id: blobId });
         return true;
       }),
     [withClient, id],

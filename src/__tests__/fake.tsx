@@ -1,5 +1,5 @@
 import React from 'react';
-import { vi } from 'vitest';
+import { expect, vi } from 'vitest';
 import type {
   CalimeroClient,
   CalimeroSession,
@@ -18,51 +18,89 @@ export const SESSION: CalimeroSession = {
 };
 
 export const passkey: PasskeyProvider = {
-  create: vi.fn(async () => ({}) as never),
-  get: vi.fn(async () => ({}) as never),
+  create: vi.fn(async (..._args: unknown[]) => ({}) as never),
+  get: vi.fn(async (..._args: unknown[]) => ({}) as never),
 };
 
-/** A stand-in for CalimeroClient: only what the hooks use, each a spy. */
-export function fakeClient(overrides: Record<string, unknown> = {}) {
-  const base = {
-    nodeUrl: 'https://node.test',
-    session: SESSION as CalimeroSession | undefined,
-    signIn: vi.fn(async () => SESSION),
-    signUp: vi.fn(async () => SESSION),
-    signOut: vi.fn(async () => undefined),
-    signOutEverywhere: vi.fn(async () => undefined),
-    me: vi.fn(async () => ({ accountId: SESSION.accountId })),
-    getApp: vi.fn(async (app: string) => ({ appId: app, name: 'kv' })),
-    call: vi.fn(async () => ({ index: 7, result: 'ok', events: [] })),
-    callConfirmed: vi.fn(async () => ({ index: 8, result: 'confirmed', events: [] })),
-    view: vi.fn(async () => ({ index: 7, result: { value: 1 } })),
-    appAbi: vi.fn(async () => ({})),
-    events: vi.fn(async function* (): AsyncGenerator<CloudEvent> {}),
-    listApps: vi.fn(async () => []),
-    createApp: vi.fn(async () => 'app-new'),
-    deleteApp: vi.fn(async () => undefined),
-    upgradeApp: vi.fn(async () => ({ index: 1, status: 'ok', error: null })),
-    getOrg: vi.fn(async () => ({ releaseApprovers: [], publishes: [], newWorkStopped: null })),
-    createOrg: vi.fn(async () => 'org-1'),
-    createTeam: vi.fn(async () => 'team-1'),
-    invite: vi.fn(async () => 'tok-1'),
-    setMember: vi.fn(async () => undefined),
-    removeMember: vi.fn(async () => ({})),
-    setCapabilities: vi.fn(async () => undefined),
-    setTeamMember: vi.fn(async () => undefined),
-    removeTeamMember: vi.fn(async () => undefined),
-    addPasskey: vi.fn(async () => 'cred-2'),
-    removePasskey: vi.fn(async () => undefined),
-    listApiKeys: vi.fn(async () => [{ keyId: 'k-1' }]),
-    createApiKey: vi.fn(async () => ({ keyId: 'k-2', key: 'ak_secret' })),
-    revokeApiKey: vi.fn(async () => undefined),
-    redeemInvite: vi.fn(async () => ({ org: 'org-1' })),
-    requestConsent: vi.fn(async () => ({
+/**
+ * A stand-in for CalimeroClient: only what the hooks use, each a spy. The
+ * routes are the generated method groups (`client.apps.call`, ...); the rest
+ * are the hand-written flows and streams.
+ */
+export function fakeClient(overrides: Record<string, unknown> = {}, groups: FakeGroupOverrides = {}) {
+  const apps = {
+    get: vi.fn(async ({ app }: { app: string }) => ({ appId: app, name: 'kv' })),
+    call: vi.fn(async (..._args: unknown[]) => ({ index: 7, result: 'ok', events: [] })),
+    view: vi.fn(async (..._args: unknown[]) => ({ index: 7, result: { value: 1 } })),
+    abi: vi.fn(async (..._args: unknown[]) => ({})),
+    list: vi.fn(async (..._args: unknown[]) => ({ apps: [] as unknown[] })),
+    create: vi.fn(async (..._args: unknown[]) => ({ appId: 'app-new' })),
+    delete: vi.fn(async (..._args: unknown[]) => ({})),
+    metadata: vi.fn(async (..._args: unknown[]) => ({})),
+    upgrade: vi.fn(async (..._args: unknown[]) => ({ index: 1, status: 'ok', error: null })),
+    blobUpload: vi.fn(async (..._args: unknown[]) => ({ blobId: 'b58', id: 'hex', size: 3 })),
+    blobInfo: vi.fn(async (..._args: unknown[]) => ({ blobId: 'b58', id: 'hex', size: 3 })),
+    blobList: vi.fn(async (..._args: unknown[]) => ({ blobs: [] as unknown[] })),
+    blobDelete: vi.fn(async (..._args: unknown[]) => ({})),
+    presencePublish: vi.fn(async (..._args: unknown[]) => ({})),
+    ...groups.apps,
+  };
+  const orgs = {
+    get: vi.fn(async (..._args: unknown[]) => ({ releaseApprovers: [], publishes: [], newWorkStopped: null })),
+    create: vi.fn(async (..._args: unknown[]) => ({ orgId: 'org-1' })),
+    delete: vi.fn(async (..._args: unknown[]) => ({})),
+    setMember: vi.fn(async (..._args: unknown[]) => ({})),
+    removeMember: vi.fn(async (..._args: unknown[]) => ({})),
+    metadata: vi.fn(async (..._args: unknown[]) => ({})),
+    memberMetadata: vi.fn(async (..._args: unknown[]) => ({})),
+    capabilities: vi.fn(async (..._args: unknown[]) => ({})),
+    teamGet: vi.fn(async (..._args: unknown[]) => ({})),
+    teamCreate: vi.fn(async (..._args: unknown[]) => ({ teamId: 'team-1' })),
+    teamUpdate: vi.fn(async (..._args: unknown[]) => ({})),
+    teamDelete: vi.fn(async (..._args: unknown[]) => ({})),
+    teamSetMember: vi.fn(async (..._args: unknown[]) => ({})),
+    teamRemoveMember: vi.fn(async (..._args: unknown[]) => ({})),
+    inviteCreate: vi.fn(async (..._args: unknown[]) => ({ token: 'tok-1' })),
+    inviteRedeem: vi.fn(async (..._args: unknown[]) => ({ org: 'org-1' })),
+    ...groups.orgs,
+  };
+  const auth = {
+    me: vi.fn(async (..._args: unknown[]) => ({ accountId: SESSION.accountId })),
+    passkeyRemove: vi.fn(async (..._args: unknown[]) => ({})),
+    passkeyLabel: vi.fn(async (..._args: unknown[]) => ({})),
+    apikeyList: vi.fn(async (..._args: unknown[]) => ({ keys: [{ keyId: 'k-1' }] })),
+    apikeyCreate: vi.fn(async (..._args: unknown[]) => ({ keyId: 'k-2', key: 'ak_secret' })),
+    apikeyRevoke: vi.fn(async (..._args: unknown[]) => ({})),
+    ...groups.auth,
+  };
+  const consent = {
+    pageCreate: vi.fn(async (..._args: unknown[]) => ({
       requestId: 'req-1',
       url: 'https://node.test/consent/req-1',
       expiresAt: 9e9,
       code: 'ABC-123',
     })),
+    pageResult: vi.fn(async (..._args: unknown[]) => ({ requestId: 'req-1', kind: 'upgrade', status: 'approved', decidedAt: 1 })),
+    ...groups.consent,
+  };
+  const packages = {
+    list: vi.fn(async (..._args: unknown[]) => ({ packages: [] as unknown[] })),
+    ...groups.packages,
+  };
+  const base = {
+    nodeUrl: 'https://node.test',
+    session: SESSION as CalimeroSession | undefined,
+    apps,
+    orgs,
+    auth,
+    consent,
+    packages,
+    signIn: vi.fn(async (..._args: unknown[]) => SESSION),
+    signUp: vi.fn(async (..._args: unknown[]) => SESSION),
+    signOut: vi.fn(async (..._args: unknown[]) => undefined),
+    signOutEverywhere: vi.fn(async (..._args: unknown[]) => undefined),
+    events: vi.fn(async function* (): AsyncGenerator<CloudEvent> {}),
+    addPasskey: vi.fn(async (..._args: unknown[]) => 'cred-2'),
     openConsentPage: vi.fn(async (_req: unknown, how?: ((url: string) => void) | OpenConsentOptions) => {
       const started = { requestId: 'req-1', url: 'https://node.test/consent/req-1', expiresAt: 9e9, code: 'ABC-123' };
       const options = typeof how === 'function' ? { navigate: how } : (how ?? {});
@@ -70,14 +108,40 @@ export function fakeClient(overrides: Record<string, unknown> = {}) {
       options.navigate?.(started.url);
       return started;
     }),
-    consentResult: vi.fn(async () => ({ requestId: 'req-1', kind: 'upgrade', status: 'approved', decidedAt: 1 })),
-    waitForConsent: vi.fn(async () => ({ requestId: 'req-1', kind: 'upgrade', status: 'approved', decidedAt: 1 })),
-    uploadBlob: vi.fn(async () => ({ blobId: 'b58', id: 'hex', size: 3 })),
-    publishPresence: vi.fn(async () => undefined),
+    waitForConsent: vi.fn(async (..._args: unknown[]) => ({ requestId: 'req-1', kind: 'upgrade', status: 'approved', decidedAt: 1 })),
     presenceStream: vi.fn(async function* (): AsyncGenerator<CloudEvent> {}),
     ...overrides,
   };
   return base as typeof base & CalimeroClient;
+}
+
+type Spy = ReturnType<typeof vi.fn>;
+
+/** Replacements for some of a generated group's methods. */
+export interface FakeGroupOverrides {
+  apps?: Record<string, Spy>;
+  orgs?: Record<string, Spy>;
+  auth?: Record<string, Spy>;
+  consent?: Record<string, Spy>;
+  packages?: Record<string, Spy>;
+}
+
+/** The `412 CONFIRM_REQUIRED` challenge `expectConfirmedBy` answers. */
+const CHALLENGE = { challengeId: 'ch-1', challenge: 'AAAA', rpId: 'node.test', allowCredentials: [] as string[] };
+
+/**
+ * Assert that a generated method's per-call options answer a `412` with
+ * `provider`: their `confirm` signs the challenge with it.
+ */
+export async function expectConfirmedBy(options: unknown, provider: PasskeyProvider): Promise<void> {
+  const confirm = (options as { confirm?: (c: typeof CHALLENGE, ctx: { request: Request }) => Promise<unknown> } | undefined)
+    ?.confirm;
+  expect(typeof confirm).toBe('function');
+  const get = provider.get as unknown as Spy;
+  get.mockClear();
+  await confirm!(CHALLENGE, { request: new Request('https://node.test/') });
+  expect(get).toHaveBeenCalledTimes(1);
+  expect(get.mock.calls[0][1]).toBe('node.test');
 }
 
 export function wrapper(

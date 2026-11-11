@@ -14,13 +14,13 @@
 <div class="breadcrumb"><a href="index.html">Home</a><span class="sep">/</span><span>mero-react</span></div>
 <h1>mero-react</h1>
 <p class="page-subtitle">React bindings for Calimero 1.0</p>
-<p>React bindings for <strong>Calimero 1.0</strong>, on the mero-js 28 client (<span class="code">CalimeroClient</span>).</p>
+<p>React bindings for <strong>Calimero 1.0</strong>, on the mero-js client (<span class="code">CalimeroClient</span>) and its generated method groups (<span class="code">client.apps</span>, <span class="code">client.orgs</span>, <span class="code">client.auth</span>, ...).</p>
 <p>A 1.0 node runs in an attested TDX cluster. The client verifies the node's attestation, seals every request to the node's attested key, and signs people in with <strong>passkeys</strong>. mero-react puts one client in context and builds the hooks on top of it:</p>
 <ul><li>passkey sign-in and sign-up;</li><li>sessions that refresh by themselves;</li><li>calls, views and live events on an app instance;</li><li>organizations, teams and invites;</li><li>the node's consent page for approvals;</li><li>blobs and presence;</li><li>typed errors your UI can switch on.</li></ul>
 <div class="callout"><strong>Upgrading from 10.x?</strong> 11.0 is a rewrite for core 1.0, which removed <span class="code">/admin-api</span>, <span class="code">/jsonrpc</span>, <span class="code">/ws</span>, <span class="code">/sse</span>, mero-auth and <span class="code">/auth/token</span>. Read <a href="migration.html">Migrating from 10.x</a> below.</div>
 <h2>Installation</h2>
 <pre class="typedef">pnpm add @calimero-network/mero-react</pre>
-<p><span class="code">@calimero-network/mero-js</span> (^28.0) comes with it, and every mero-js export is re-exported, so apps need only this import. React 18 or 19 is a peer dependency.</p>
+<p><span class="code">@calimero-network/mero-js</span> (^29.17) comes with it, and every mero-js export is re-exported, so apps need only this import. React 18 or 19 is a peer dependency.</p>
 <h2>Quick start</h2>
 <pre class="typedef">import {
   MeroProvider,

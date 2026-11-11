@@ -60,7 +60,7 @@ export function useConsent(options?: MutationOptions) {
   const request = useCallback(
     (req: ConsentRequest) =>
       withClient(async (c) => {
-        const answer = await c.requestConsent(req);
+        const answer: ConsentStarted = await c.consent.pageCreate({ body: req });
         setStarted(answer);
         setResult(null);
         return answer;
@@ -90,7 +90,7 @@ export function useConsent(options?: MutationOptions) {
   const check = useCallback(
     (requestId: string) =>
       withClient(async (c) => {
-        const answer = await c.consentResult(requestId);
+        const answer = (await c.consent.pageResult({ request: requestId }));
         setResult(answer);
         return answer;
       }),
