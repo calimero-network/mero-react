@@ -1,7 +1,7 @@
 import type {
   CalimeroClient,
   CalimeroSession,
-  CloudRetryOptions,
+  RetryOptions,
   PasskeyProvider,
 } from '@calimero-network/mero-js';
 import type { PolicyOptions } from './client';
@@ -51,7 +51,7 @@ export interface MeroProviderConfig extends PolicyOptions {
   /** The `fetch` the client sends attestation and sealed envelopes with. */
   fetch?: typeof fetch;
   /** How calls and views retry a `503` or a dropped connection. */
-  retry?: CloudRetryOptions;
+  retry?: RetryOptions;
   /**
    * Use this client instead of building one (tests, or an app that needs a
    * client configured beyond these props). Session reporting is then the
