@@ -1,3 +1,9 @@
+## [11.1.0](https://github.com/calimero-network/mero-react/compare/mero-react-v11.0.4...mero-react-v11.1.0) (2026-11-11)
+
+### Features
+
+* call mero-js generated method groups instead of its deprecated wrappers ([#127](https://github.com/calimero-network/mero-react/issues/127)) ([e111621](https://github.com/calimero-network/mero-react/commit/e1116212c95142149521f4c5797e6412a0c00e2e))
+
 ## [11.0.4](https://github.com/calimero-network/mero-react/compare/mero-react-v11.0.3...mero-react-v11.0.4) (2026-11-09)
 
 ### Bug Fixes
