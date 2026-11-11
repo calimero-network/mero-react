@@ -22,12 +22,10 @@ interface AppUpgradeResult {
 export function useApps(filter: { package?: string; bundle?: string } = {}) {
   const client = useSignedInClient();
   const { package: pkg, bundle } = filter;
-  // The document's `App` has no `package` / `version`, which `AppInfo` (and
-  // the node's answer) carry.
   return useResource<AppInfo[]>(
     client
       ? async () =>
-          (await client.apps.list({ package: pkg || undefined, bundle: bundle || undefined })).apps as unknown as AppInfo[]
+          (await client.apps.list({ package: pkg || undefined, bundle: bundle || undefined })).apps
       : null,
     [],
     [client, pkg, bundle],
@@ -136,7 +134,7 @@ export function useUpgradeApp(appId?: string | null, options?: MutationOptions) 
 export function usePackages() {
   const client = useSignedInClient();
   return useResource<PackageInfo[]>(
-    client ? async () => (await client.packages.list()).packages as unknown as PackageInfo[] : null,
+    client ? async () => (await client.packages.list()).packages : null,
     [],
     [client],
   );

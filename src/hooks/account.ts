@@ -76,7 +76,7 @@ export function useApiKeys(options?: MutationOptions) {
   const client = useSignedInClient();
   const { passkey, accountId } = useMero();
   const keys = useResource<Array<Record<string, unknown>>>(
-    client ? async () => (await client.auth.apikeyList()).keys as Array<Record<string, unknown>> : null,
+    client ? async () => (await client.auth.apikeyList()).keys : null,
     [],
     [client, accountId],
   );

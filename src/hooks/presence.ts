@@ -157,10 +157,8 @@ export function useEphemeral<T extends object = Record<string, unknown>>(
       seq.current += 1;
       const bytes = value === null ? null : codecRef.current.encode(value);
       lastSent.current = Date.now();
-      // `state: null` retracts. The document still types `state` as
-      // `string | undefined` (mero-js builds with `strict: false`, so it does
-      // not see that `presenceState`'s `null` does not fit).
-      const state = presenceState(bytes) as string | undefined;
+      // `state: null` retracts.
+      const state = presenceState(bytes);
       client.apps.presencePublish({ app: id, seq: seq.current, state }).then(
         () => setError(null),
         (e: unknown) => setError(e instanceof Error ? e : new Error(String(e))),

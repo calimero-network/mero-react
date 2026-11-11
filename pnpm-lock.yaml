@@ -27,8 +27,8 @@ importers:
   .:
     dependencies:
       '@calimero-network/mero-js':
-        specifier: github:calimero-network/mero-js#62d45febb259d6d5896f16d2f142c27832ffdd87
-        version: https://codeload.github.com/calimero-network/mero-js/tar.gz/62d45febb259d6d5896f16d2f142c27832ffdd87
+        specifier: ^29.17.0
+        version: 29.17.0
     devDependencies:
       '@semantic-release/changelog':
         specifier: ^6.0.3
@@ -275,9 +275,8 @@ packages:
     resolution: {integrity: sha512-ctxtJ/eA+t+6q2++vj5j7FYX3nRu311q1wfYH3xjlLOsczhlhxAg2FWNUXhpGvAw3BWo1xBcvOV6/YLc2r5FJw==}
     hasBin: true
 
-  '@calimero-network/mero-js@https://codeload.github.com/calimero-network/mero-js/tar.gz/62d45febb259d6d5896f16d2f142c27832ffdd87':
-    resolution: {tarball: https://codeload.github.com/calimero-network/mero-js/tar.gz/62d45febb259d6d5896f16d2f142c27832ffdd87}
-    version: 29.16.0
+  '@calimero-network/mero-js@29.17.0':
+    resolution: {integrity: sha512-IeZBMPVFZuxlw4dW3LqnTwS+TRS/b0WhzSHPsWKo95iPFC99g+oDVNVP6jafo/SByfJqgy3o1O75XaVcqkoTXg==}
     engines: {node: '>=18.0.0'}
 
   '@colors/colors@1.5.0':
@@ -3950,7 +3949,7 @@ snapshots:
     dependencies:
       css-tree: 3.2.1
 
-  '@calimero-network/mero-js@https://codeload.github.com/calimero-network/mero-js/tar.gz/62d45febb259d6d5896f16d2f142c27832ffdd87':
+  '@calimero-network/mero-js@29.17.0':
     dependencies:
       '@phala/dcap-qvl': 0.5.3
       openapi-fetch: 0.17.0

@@ -20,7 +20,7 @@ A 1.0 node runs in an attested TDX cluster. The client verifies the node's attes
 pnpm add @calimero-network/mero-react
 ```
 
-`@calimero-network/mero-js` (^28.0) comes with it, and every mero-js export is re-exported, so apps need only this import. React 18 or 19 is a peer dependency.
+`@calimero-network/mero-js` (^29.17) comes with it, and every mero-js export is re-exported, so apps need only this import. React 18 or 19 is a peer dependency.
 
 ## Quick start
 

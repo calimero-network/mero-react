@@ -20,10 +20,10 @@ export type TeamRole = 'lead' | 'member' | 'readOnly';
 /** An organization: members, teams, metadata, release approvers. Was `useNamespace`. */
 export function useOrg(orgId?: string | null) {
   const client = useSignedInClient();
-  // The document's org answer has no `releaseApprovers`, `publishes` or
-  // `newWorkStopped`, which `OrgInfo` (and the node's answer) carry.
+  // The document marks `releaseApprovers`, `publishes` and `newWorkStopped`
+  // optional (absent from older nodes); `OrgInfo` declares them present.
   return useResource<OrgInfo | null>(
-    client && orgId ? async () => (await client.orgs.get({ org: orgId })) as unknown as OrgInfo : null,
+    client && orgId ? async () => (await client.orgs.get({ org: orgId })) as OrgInfo : null,
     null,
     [client, orgId],
   );
