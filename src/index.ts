@@ -22,11 +22,6 @@ export type { Failure, FailureKind } from './errors';
 
 // Hooks
 export * from './hooks';
-// mero-js now exports a `CallOptions` too (a generated method's per-call
-// `{ confirm, operatorProof, signal }`); mero-react's own (`useApp().call`'s)
-// keeps the name, and mero-js's is here as `RouteCallOptions`.
-export type { CallOptions } from './hooks';
-export type { CallOptions as RouteCallOptions } from '@calimero-network/mero-js';
 
 // Components
 export { ConnectButton, LoginModal, CalimeroLogo, shortAccount } from './components';

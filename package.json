@@ -28,7 +28,7 @@
     "prepublishOnly": "pnpm build && pnpm typecheck"
   },
   "dependencies": {
-    "@calimero-network/mero-js": "github:calimero-network/mero-js#affdc87421599b75991479137b2708c76c441d11"
+    "@calimero-network/mero-js": "github:calimero-network/mero-js#62d45febb259d6d5896f16d2f142c27832ffdd87"
   },
   "peerDependencies": {
     "react": "^18.0.0 || ^19.0.0",

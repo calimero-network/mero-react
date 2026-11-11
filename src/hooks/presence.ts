@@ -13,7 +13,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { LoginRequired } from '@calimero-network/mero-js';
+import { LoginRequired, presenceState } from '@calimero-network/mero-js';
 import { useMero } from '../context';
 import { useAppId, useSignedInClient } from './internal';
 
@@ -64,12 +64,6 @@ const HEARTBEAT_MS = 5000;
 function hexToBytes(hex: string): Uint8Array {
   const out = new Uint8Array(hex.length / 2);
   for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-  return out;
-}
-
-function bytesToHex(bytes: Uint8Array): string {
-  let out = '';
-  for (const b of bytes) out += b.toString(16).padStart(2, '0');
   return out;
 }
 
@@ -163,9 +157,10 @@ export function useEphemeral<T extends object = Record<string, unknown>>(
       seq.current += 1;
       const bytes = value === null ? null : codecRef.current.encode(value);
       lastSent.current = Date.now();
-      // `state: null` retracts. The document types `state` as an optional
-      // string only; the node takes `null`, which is what mero-js sent.
-      const state = (bytes === null ? null : bytesToHex(bytes)) as string | undefined;
+      // `state: null` retracts. The document still types `state` as
+      // `string | undefined` (mero-js builds with `strict: false`, so it does
+      // not see that `presenceState`'s `null` does not fit).
+      const state = presenceState(bytes) as string | undefined;
       client.apps.presencePublish({ app: id, seq: seq.current, state }).then(
         () => setError(null),
         (e: unknown) => setError(e instanceof Error ? e : new Error(String(e))),

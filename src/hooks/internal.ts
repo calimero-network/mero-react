@@ -8,7 +8,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { passkeyConfirm } from '@calimero-network/mero-js';
-import type { CalimeroClient, CallOptions as RouteCallOptions, PasskeyProvider } from '@calimero-network/mero-js';
+import type { CalimeroClient, MethodOptions, PasskeyProvider } from '@calimero-network/mero-js';
 import { useMero } from '../context';
 import { describeError, type Failure } from '../errors';
 
@@ -48,7 +48,7 @@ export class NoAppError extends Error {
  * The per-call options of a generated method that answer the node's
  * `412 CONFIRM_REQUIRED` with `passkey`.
  */
-export function confirmWith(passkey: PasskeyProvider): RouteCallOptions {
+export function confirmWith(passkey: PasskeyProvider): MethodOptions {
   return { confirm: passkeyConfirm(passkey) };
 }
 

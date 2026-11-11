@@ -60,8 +60,7 @@ export function useConsent(options?: MutationOptions) {
   const request = useCallback(
     (req: ConsentRequest) =>
       withClient(async (c) => {
-        // The document types this body as a string (`Body::RawJson`); it is the request's JSON.
-        const answer: ConsentStarted = await c.consent.pageCreate({ body: req as unknown as string });
+        const answer: ConsentStarted = await c.consent.pageCreate({ body: req });
         setStarted(answer);
         setResult(null);
         return answer;
