@@ -14,6 +14,8 @@ A 1.0 node runs in an attested TDX cluster. The client verifies the node's attes
 
 > **Upgrading from 10.x?** 11.0 is a rewrite for core 1.0, which removed `/admin-api`, `/jsonrpc`, `/ws`, `/sse`, mero-auth and `/auth/token`. Read [Migrating from 10.x](#migrating-from-10x) below.
 
+> **Before committing, titling a pull request, or releasing**, read [RELEASING.md](RELEASING.md): the PR title is the release commit, and the rules are shared by every Calimero repository that ships releases.
+
 ## Installation
 
 ```bash
