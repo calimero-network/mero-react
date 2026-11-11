@@ -1,3 +1,9 @@
+## [11.1.2](https://github.com/calimero-network/mero-react/compare/mero-react-v11.1.1...mero-react-v11.1.2) (2026-11-11)
+
+### Bug Fixes
+
+* **deps:** move to mero-js 31 (NodeEvent, NodePolicy, RetryOptions) ([#129](https://github.com/calimero-network/mero-react/issues/129)) ([92c8a47](https://github.com/calimero-network/mero-react/commit/92c8a47b8ca375327c8f7cc995289fde67c9a8c8))
+
 ## [11.1.1](https://github.com/calimero-network/mero-react/compare/mero-react-v11.1.0...mero-react-v11.1.1) (2026-11-11)
 
 ## [11.1.0](https://github.com/calimero-network/mero-react/compare/mero-react-v11.0.4...mero-react-v11.1.0) (2026-11-11)
