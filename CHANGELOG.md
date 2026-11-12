@@ -1,3 +1,9 @@
+## [11.1.4](https://github.com/calimero-network/mero-react/compare/mero-react-v11.1.3...mero-react-v11.1.4) (2026-11-12)
+
+### Bug Fixes
+
+* **deps:** move to mero-js 33 ([#135](https://github.com/calimero-network/mero-react/issues/135)) ([83cba08](https://github.com/calimero-network/mero-react/commit/83cba08ca76f84023198345580d08f56ac9c0b05))
+
 ## [11.1.3](https://github.com/calimero-network/mero-react/compare/mero-react-v11.1.2...mero-react-v11.1.3) (2026-11-12)
 
 ### Bug Fixes
