@@ -1,3 +1,9 @@
+## [11.1.3](https://github.com/calimero-network/mero-react/compare/mero-react-v11.1.2...mero-react-v11.1.3) (2026-11-12)
+
+### Bug Fixes
+
+* **release:** only feat, fix and perf cut a release ([#133](https://github.com/calimero-network/mero-react/issues/133)) ([be62790](https://github.com/calimero-network/mero-react/commit/be62790cd01bc404b2d522d823205256e809fe16))
+
 ## [11.1.2](https://github.com/calimero-network/mero-react/compare/mero-react-v11.1.1...mero-react-v11.1.2) (2026-11-11)
 
 ### Bug Fixes
