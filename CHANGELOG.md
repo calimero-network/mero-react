@@ -1,3 +1,9 @@
+## [11.1.5](https://github.com/calimero-network/mero-react/compare/mero-react-v11.1.4...mero-react-v11.1.5) (2026-11-13)
+
+### Bug Fixes
+
+* **docs:** open the README with what Calimero is and what mero-react does ([#137](https://github.com/calimero-network/mero-react/issues/137)) ([ae35fb1](https://github.com/calimero-network/mero-react/commit/ae35fb1dfbcec04a909cb031d7997ab84269480e))
+
 ## [11.1.4](https://github.com/calimero-network/mero-react/compare/mero-react-v11.1.3...mero-react-v11.1.4) (2026-11-12)
 
 ### Bug Fixes
