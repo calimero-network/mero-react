@@ -1,15 +1,16 @@
 # @calimero-network/mero-react
 
-React bindings for **Calimero 1.0**, on the mero-js client (`CalimeroClient`) and its generated method groups (`client.apps`, `client.orgs`, `client.auth`, ...).
+**Your app's whole backend, like Firebase. Except nobody can read your data, not even us.** [Calimero](https://calimero-network.github.io/core/) gives an app auth (passkeys, sessions, scoped API keys), a database (replicated app state), functions (Rust app methods), realtime events and presence, sealed blob storage, hosting for its frontend and typed clients, all running inside attested Intel TDX hardware. Clients verify a node's attestation against Sigstore-signed releases before they send it anything, then talk to it over a sealed Noise channel.
 
-A 1.0 node runs in an attested TDX cluster. The client verifies the node's attestation, seals every request to the node's attested key, and signs people in with **passkeys**. mero-react puts one client in context and builds the hooks on top of it:
+**mero-react** is the React layer over [mero-js](https://github.com/calimero-network/mero-js): a `<MeroProvider>` that holds one mero-js `CalimeroClient` (and its generated method groups `client.apps`, `client.orgs`, `client.auth`, ...), plus hooks and components on top of it:
 
-- passkey sign-in and sign-up;
+- passkey sign-in and sign-up (`ConnectButton`, `LoginModal`);
 - sessions that refresh by themselves;
 - calls, views and live events on an app instance;
 - organizations, teams and invites;
 - the node's consent page for approvals;
 - blobs and presence;
+- passkeys and API keys for the signed-in account;
 - typed errors your UI can switch on.
 
 > **Upgrading from 10.x?** 11.0 is a rewrite for core 1.0, which removed `/admin-api`, `/jsonrpc`, `/ws`, `/sse`, mero-auth and `/auth/token`. Read [Migrating from 10.x](#migrating-from-10x) below.
@@ -22,7 +23,7 @@ A 1.0 node runs in an attested TDX cluster. The client verifies the node's attes
 pnpm add @calimero-network/mero-react
 ```
 
-`@calimero-network/mero-js` (^29.17) comes with it, and every mero-js export is re-exported, so apps need only this import. React 18 or 19 is a peer dependency.
+`@calimero-network/mero-js` (^33) comes with it, and every mero-js export is re-exported, so apps need only this import. React 18 or 19 is a peer dependency.
 
 ## Quick start
 
@@ -345,6 +346,15 @@ core 1.0 is a different node, and mero-js 28 is a different client, so 11.0 is a
 - invitation UI: `InvitationGate`, `InvitationDialog`, `JoinSyncBanner`, `useJoinSync`;
 - local-node discovery: `discoverLocalNodes`;
 - desktop (Tauri): `isDesktopWindow`.
+
+## Related repositories
+
+- [core](https://github.com/calimero-network/core): the node (`merod`), the Rust SDK for apps and `meroctl`; [docs](https://calimero-network.github.io/core/).
+- [mero-tee](https://github.com/calimero-network/mero-tee): the TDX images nodes boot and the key service; its releases publish the measurements clients check attestation against (`minReleaseVersion`).
+- [app-registry](https://github.com/calimero-network/app-registry): where signed app packages are published and clusters install them from.
+- [mero-js](https://github.com/calimero-network/mero-js): the JavaScript/TypeScript client this package wraps and re-exports.
+- [calimero-client-py](https://github.com/calimero-network/calimero-client-py), [swift-sdk](https://github.com/calimero-network/swift-sdk), [kotlin-sdk](https://github.com/calimero-network/kotlin-sdk): the Python, Swift and Android (Kotlin) clients.
+- [apps](https://github.com/calimero-network/apps): example apps.
 
 ## License
 
