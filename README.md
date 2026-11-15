@@ -23,7 +23,7 @@
 pnpm add @calimero-network/mero-react
 ```
 
-`@calimero-network/mero-js` (^33) comes with it, and every mero-js export is re-exported, so apps need only this import. React 18 or 19 is a peer dependency.
+`@calimero-network/mero-js` (^35) comes with it, and every mero-js export is re-exported, so apps need only this import. React 18 or 19 is a peer dependency.
 
 ## Quick start
 
