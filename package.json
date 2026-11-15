@@ -11,6 +11,11 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
+    },
+    "./node-shield": {
+      "types": "./dist/node-shield.d.ts",
+      "import": "./dist/node-shield.js",
+      "require": "./dist/node-shield.cjs"
     }
   },
   "files": [

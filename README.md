@@ -276,6 +276,60 @@ Pass a partial `MeroTheme` (`primary`, `primaryHover`, `primaryText`, `backgroun
 
 The dialog's classes are `mero-dialog-overlay`, `mero-dialog-panel`, `mero-dialog-title`, `mero-dialog-body`, `mero-dialog-field`, `mero-dialog-input`, `mero-dialog-button`, `mero-dialog-primary`, `mero-dialog-secondary` and `mero-dialog-link`. The button's classes are `mero-connect-button`, `mero-dropdown` and `mero-dropdown-item`.
 
+## Node shield
+
+A header chip that shows what this browser verified about the node the client talks to, with a popover of the details and a link to the public verifier.
+It is a separate entry point, so apps that do not use it do not ship it, and it needs no CSS import.
+
+```tsx
+import { NodeShield } from '@calimero-network/mero-react/node-shield';
+
+<header>
+  <h1>My app</h1>
+  <NodeShield />
+</header>;
+```
+
+Inside a `<MeroProvider>` it checks the provider's client; elsewhere pass one with `client={client}`.
+It renders nothing until there is a client.
+
+| State | Chip |
+| --- | --- |
+| The check is running, or the node could not be reached yet | "Checking node…" |
+| A real TEE quote with the `locked-read-only` profile | "Verified node" (green) |
+| A mock quote, or a real one with another profile | "Test server: not sealed" (grey) |
+| The check failed; the popover shows the reason | "Node refused" (red) |
+
+Props, all optional:
+
+- `client`: the mero-js `CalimeroClient` to check; by default the provider's.
+- `cluster`: the label shown as "Cluster"; by default the provider's cluster.
+- `compactBelow`: the window width in px at or below which the chip is the icon alone. It is always the icon alone at 560px or narrower.
+- `appCode`: `() => Promise<AppCodeCheck>`, the app's own check that the node runs its code. It is asked when the popover opens on a real, verified node, and its `match` or `mismatch` is shown as the "App code" row.
+- `colors`: colours for this shield (below).
+
+### Colours
+
+The shield reads these CSS custom properties, with light and dark defaults that follow `prefers-color-scheme`: `--node-shield-verified`, `--node-shield-refused`, `--node-shield-checking`, `--node-shield-neutral` (the grey state), `--node-shield-surface`, `--node-shield-text`, `--node-shield-muted`, `--node-shield-border` and `--node-shield-focus`.
+Set them in CSS, on `:root` or on any ancestor of the shield:
+
+```css
+.app-header {
+  --node-shield-verified: #0f9d58;
+  --node-shield-surface: #10131c;
+  --node-shield-text: #f2f4f8;
+}
+```
+
+Or pass the same keys, without the prefix, as the `colors` prop:
+
+```tsx
+<NodeShield colors={{ verified: '#0f9d58', surface: '#10131c', text: '#f2f4f8' }} />
+```
+
+The popover renders in `document.body` and takes the colours the chip resolved, so both ways reach it.
+Its classes start with `mero-node-shield`.
+
 ## Storage
 
 - `localStorageSessionStore` and `memorySessionStore()`: session stores.
