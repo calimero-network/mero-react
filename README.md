@@ -302,11 +302,22 @@ It renders nothing until there is a client.
 
 Props, all optional:
 
-- `client`: the mero-js `CalimeroClient` to check; by default the provider's.
-- `cluster`: the label shown as "Cluster"; by default the provider's cluster.
+- `client`: the mero-js `CalimeroClient` to check; by default the provider's. `client={null}` shows nothing.
+- `cluster`: the label shown as "Cluster"; by default the provider's cluster. `cluster={null}` leaves the row out.
 - `compactBelow`: the window width in px at or below which the chip is the icon alone. It is always the icon alone at 560px or narrower.
-- `appCode`: `() => Promise<AppCodeCheck>`, the app's own check that the node runs its code. It is asked when the popover opens on a real, verified node, and its `match` or `mismatch` is shown as the "App code" row.
+- `appCode`: `(client, url) => Promise<AppCodeCheck>`, the app's own check that node `url` runs its code. It is asked when the popover opens on a real, verified node, and its `match` or `mismatch` is shown as the "App code" row. A new function checks again, so memoise it (`useCallback`).
 - `colors`: colours for this shield (below).
+
+`AppCodeCheck` is the shape an app's own code check returns:
+
+```ts
+type AppCodeCheck =
+  | { status: 'match'; appHash: string; checkedAt: number; package?: string; version?: string }
+  | { status: 'mismatch'; appHash: string; expected: string }
+  | { status: 'unknown'; reason: string };
+```
+
+`unknown`, or a check that throws, shows no "App code" row.
 
 ### Colours
 

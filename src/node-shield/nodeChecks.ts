@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { CalimeroClient, NodeVerificationState } from '@calimero-network/mero-js';
 import type { AppCodeCheck } from './shieldView';
 
@@ -30,7 +30,8 @@ function peek(client: CalimeroClient | null): NodeVerificationState {
 
 /** The check of the node in use, asked again after a failure to reach it, a failover, and whenever `refresh` is called. */
 export function useNodeVerification(client: CalimeroClient | null): [NodeVerificationState, () => void] {
-  const [state, setState] = useState(() => peek(client));
+  // Kept with its client: a state from the previous client is never shown for the next one.
+  const [held, setHeld] = useState(() => ({ client, state: peek(client) }));
   const [round, setRound] = useState(0);
   const [url, setUrl] = useState(client?.nodeUrl);
   useEffect(() => {
@@ -46,46 +47,42 @@ export function useNodeVerification(client: CalimeroClient | null): [NodeVerific
     const run = async (attempt: number) => {
       const next = await check(client);
       if (!live || !next) return;
-      setState(next);
+      setHeld({ client, state: next });
       if (next.status === 'unreachable') timer = setTimeout(() => void run(attempt + 1), retryDelay(attempt));
     };
-    setState(peek(client));
+    setHeld({ client, state: peek(client) });
     void run(0);
     return () => {
       live = false;
       clearTimeout(timer);
     };
   }, [client, round, url]);
+  const state = held.client === client ? held.state : peek(client);
   // Never describe a node the client has moved on from: compared with the node in use now, not the last poll.
   const inUse = client?.nodeUrl;
   const shown: NodeVerificationState = inUse && state.url !== inUse ? { status: 'checking', url: inUse } : state;
   return [shown, useCallback(() => setRound((n) => n + 1), [])];
 }
 
-/** The app's code check of verified node `url`, asked when `url` is set and shown only while that node is still in use. */
-export function useAppCode(
-  client: CalimeroClient | null,
-  appCode: (() => Promise<AppCodeCheck>) | undefined,
-  url: string | null,
-): AppCodeCheck | null {
-  // Kept in a ref: an inline `appCode` is a new function every render and must not re-run the check.
-  const latest = useRef(appCode);
-  latest.current = appCode;
-  const has = appCode !== undefined;
-  const [result, setResult] = useState<{ client: CalimeroClient; url: string; code: AppCodeCheck } | null>(null);
+/** The app's own check that a node runs its code; memoise it, since a new function checks again. */
+export type AppCodeChecker = (client: CalimeroClient, url: string) => Promise<AppCodeCheck>;
+
+/** `appCode`'s answer for verified node `url`, shown only while the client, node and function are the ones it was asked for. */
+export function useAppCode(client: CalimeroClient | null, appCode: AppCodeChecker | undefined, url: string | null): AppCodeCheck | null {
+  const [result, setResult] = useState<{ client: CalimeroClient; url: string; appCode: AppCodeChecker; code: AppCodeCheck } | null>(null);
   useEffect(() => {
-    if (!client || !has || !url) return;
+    if (!client || !appCode || !url) return;
     let live = true;
     void Promise.resolve()
-      .then(() => latest.current?.())
+      .then(() => appCode(client, url))
       .then(
-        (code) => live && code && client.nodeUrl === url && setResult({ client, url, code }),
+        (code) => live && client.nodeUrl === url && setResult({ client, url, appCode, code }),
         () => undefined,
       );
     return () => {
       live = false;
     };
-  }, [client, has, url]);
-  const current = result?.client === client && result?.url === url && client?.nodeUrl === url;
+  }, [client, appCode, url]);
+  const current = result?.client === client && result?.url === url && result?.appCode === appCode && client?.nodeUrl === url;
   return current ? result.code : null;
 }

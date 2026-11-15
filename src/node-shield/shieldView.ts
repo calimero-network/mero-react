@@ -25,6 +25,8 @@ export interface ShieldRow {
   full?: string;
   mono?: boolean;
   tone?: 'bad';
+  /** The short hash that ends `value`, kept on one line. */
+  hash?: string;
 }
 
 export interface ShieldView {
@@ -87,6 +89,7 @@ function codeRow(code: AppCodeCheck | null): ShieldRow | null {
       value: named ? `${named} · ${shortHash(code.appHash)}` : shortHash(code.appHash),
       full: named ? `${named} · ${code.appHash}` : code.appHash,
       mono: true,
+      hash: shortHash(code.appHash),
     };
   }
   if (code?.status === 'mismatch') {

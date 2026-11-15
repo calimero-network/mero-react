@@ -5,3 +5,4 @@
 export { NodeShield } from './NodeShield';
 export type { NodeShieldColors, NodeShieldProps } from './NodeShield';
 export type { AppCodeCheck } from './shieldView';
+export type { AppCodeChecker } from './nodeChecks';

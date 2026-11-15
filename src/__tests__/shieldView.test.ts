@@ -52,7 +52,7 @@ describe('describeShield', () => {
       { label: 'Cluster', value: 'eu-shared-2' },
       { label: 'Node', value: 'node-3.relay.example.net', full: URL_, mono: true },
       { label: 'Software', value: 'mero-tee v2.3.148 · locked-read-only' },
-      { label: 'App code', value: '7f3a…c91e', full: HASH, mono: true },
+      { label: 'App code', value: '7f3a…c91e', full: HASH, mono: true, hash: '7f3a…c91e' },
       { label: 'Checked', value: '2 minutes ago' },
     ]);
     expect(v.checks).toEqual([
@@ -108,6 +108,7 @@ describe('describeShield', () => {
       value: 'com.calimero.kv-store v1.4.0 · 7f3a…c91e',
       full: `com.calimero.kv-store v1.4.0 · ${HASH}`,
       mono: true,
+      hash: '7f3a…c91e',
     });
     expect(v.checks).toContain('Node runs the code listed for com.calimero.kv-store v1.4.0');
   });

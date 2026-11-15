@@ -1,3 +1,4 @@
+import { useLayoutEffect } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { verifyNodeUrl, type CalimeroClient, type NodeVerificationState } from '@calimero-network/mero-js';
@@ -35,7 +36,16 @@ function fakeClient(first: NodeVerificationState) {
   };
 }
 
+const OTHER = 'https://node-9.relay.example.net';
 const chip = () => screen.getByTestId('node-shield');
+
+/** Records the chip's label as committed, before any effect of that render runs. */
+function LabelProbe({ seen }: { seen: string[] }) {
+  useLayoutEffect(() => {
+    seen.push(document.querySelector('[data-testid="node-shield"]')?.getAttribute('aria-label') ?? '');
+  });
+  return null;
+}
 const open = () => fireEvent.click(chip());
 
 beforeEach(() => {
@@ -93,6 +103,52 @@ describe('NodeShield', () => {
     cleanup();
     render(<NodeShield />);
     expect(screen.queryByTestId('node-shield')).toBeNull();
+  });
+
+  it('shows nothing for client={null}, even inside a MeroProvider with a client', () => {
+    render(
+      <MockMeroProvider client={fakeClient(sealed).client}>
+        <NodeShield client={null} />
+      </MockMeroProvider>,
+    );
+    expect(screen.queryByTestId('node-shield')).toBeNull();
+  });
+
+  it("leaves the cluster out for cluster={null}, even inside a MeroProvider with one", async () => {
+    render(
+      <MockMeroProvider client={fakeClient(sealed).client} cluster="eu-shared-2">
+        <NodeShield cluster={null} />
+      </MockMeroProvider>,
+    );
+    await screen.findByText('Verified node');
+    open();
+    expect((await screen.findByRole('dialog')).textContent).not.toContain('Cluster');
+  });
+
+  it("never shows the previous client's state for a new client on the same node", async () => {
+    const seen: string[] = [];
+    const a = fakeClient(sealed);
+    const b = fakeClient(sealed);
+    b.client.verification = vi.fn(() => undefined) as never;
+    b.verify.mockImplementation(() => new Promise(() => {}));
+    const { rerender } = render(<><NodeShield client={a.client} /><LabelProbe seen={seen} /></>);
+    await screen.findByText('Verified node');
+    seen.length = 0;
+    rerender(<><NodeShield client={b.client} /><LabelProbe seen={seen} /></>);
+    expect(seen[0]).toBe('Checking node…');
+    expect(chip().getAttribute('aria-label')).toBe('Checking node…');
+  });
+
+  it('never describes the node the client failed over from, even before the next poll', async () => {
+    vi.useFakeTimers();
+    const f = fakeClient(sealed);
+    render(<NodeShield client={f.client} />);
+    await act(async () => {});
+    expect(chip().getAttribute('aria-label')).toBe('Verified node');
+    f.failOverTo(OTHER);
+    open();
+    expect(chip().getAttribute('aria-label')).toBe('Checking node…');
+    expect(screen.getByRole('dialog').textContent).toContain('node-9.relay.example.net');
   });
 
   it('shows the refused reason', async () => {
@@ -221,6 +277,59 @@ describe('the app code check', () => {
     expect(appCode).toHaveBeenCalledTimes(1);
   });
 
+  it('is told which client and node it checks', async () => {
+    const { client } = fakeClient(sealed);
+    const appCode = vi.fn(async () => match);
+    render(<NodeShield client={client} appCode={appCode} />);
+    await screen.findByText('Verified node');
+    open();
+    await waitFor(() => expect(appCode).toHaveBeenCalledWith(client, NODE));
+  });
+
+  it('checks again with a new appCode, and hides the old answer until the new one arrives', async () => {
+    const { client } = fakeClient(sealed);
+    const first = vi.fn(async () => match);
+    const { rerender } = render(<NodeShield client={client} appCode={first} />);
+    await screen.findByText('Verified node');
+    open();
+    await waitFor(() => expect(screen.getByRole('dialog').textContent).toContain('App code'));
+    let finish!: () => void;
+    const second = vi.fn(
+      () => new Promise<AppCodeCheck>((resolve) => (finish = () => resolve({ status: 'mismatch', appHash: 'ab'.repeat(32), expected: BUNDLE }))),
+    );
+    rerender(<NodeShield client={client} appCode={second} />);
+    await waitFor(() => expect(second).toHaveBeenCalled());
+    expect(screen.getByRole('dialog').textContent).not.toContain('App code');
+    await act(async () => finish());
+    expect(screen.getByRole('dialog').textContent).toContain("Does not match this app's release");
+  });
+
+  it('hides the code check of the node the client failed over from until the new node answers', async () => {
+    vi.useFakeTimers();
+    const f = fakeClient(sealed);
+    f.verify.mockImplementation(async () => ({ ...sealed, url: f.client.nodeUrl }));
+    let finish: (() => void) | null = null;
+    const appCode = vi.fn((_client: CalimeroClient, url: string) =>
+      url === NODE ? Promise.resolve(match) : new Promise<AppCodeCheck>((resolve) => (finish = () => resolve(match))),
+    );
+    render(<NodeShield client={f.client} appCode={appCode} />);
+    await act(async () => {});
+    open();
+    await act(async () => {});
+    expect(screen.getByRole('dialog').textContent).toContain('App code');
+
+    f.failOverTo(OTHER);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+    });
+    expect(appCode).toHaveBeenCalledWith(f.client, OTHER);
+    expect(screen.getByRole('dialog').textContent).toContain('node-9.relay.example.net');
+    expect(screen.getByRole('dialog').textContent).not.toContain('App code');
+
+    await act(async () => finish!());
+    expect(screen.getByRole('dialog').textContent).toContain('App code');
+  });
+
   it('shows a mismatch as a problem, never as a check', async () => {
     const appCode = async (): Promise<AppCodeCheck> => ({ status: 'mismatch', appHash: 'ab'.repeat(32), expected: BUNDLE });
     render(<NodeShield client={fakeClient(sealed).client} appCode={appCode} />);
@@ -259,6 +368,37 @@ describe('colours', () => {
     open();
     const dialog = await screen.findByRole('dialog');
     expect(dialog.style.getPropertyValue('--node-shield-text')).toBe('rgb(1, 2, 3)');
+  });
+
+  it('carries a colour the chip inherits from an ancestor into the popover', async () => {
+    // jsdom does not inherit custom properties, so the browser's cascade is stood in for here.
+    const real = window.getComputedStyle;
+    vi.spyOn(window, 'getComputedStyle').mockImplementation((el: Element) => {
+      const style = real(el);
+      if (!(el as HTMLElement).classList.contains('mero-node-shield')) return style;
+      return { getPropertyValue: (name: string) => (name === '--node-shield-verified' ? ' rgb(9, 8, 7)' : '') } as CSSStyleDeclaration;
+    });
+    try {
+      render(<NodeShield client={fakeClient(sealed).client} />);
+      await screen.findByText('Verified node');
+      open();
+      const dialog = await screen.findByRole('dialog');
+      expect(dialog.style.getPropertyValue('--node-shield-verified')).toBe('rgb(9, 8, 7)');
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+});
+
+describe('the app code row', () => {
+  it('keeps the short hash in one unbreakable piece', async () => {
+    const named: AppCodeCheck = { ...match, package: 'com.calimero.crm', version: '1.4.0' } as AppCodeCheck;
+    render(<NodeShield client={fakeClient(sealed).client} appCode={async () => named} />);
+    await screen.findByText('Verified node');
+    open();
+    const hash = await screen.findByText('7f3a…c91e');
+    expect(hash.tagName).toBe('SPAN');
+    expect(hash.className).toBe('mero-node-shield-pop__nowrap');
   });
 });
 

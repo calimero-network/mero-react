@@ -2,27 +2,29 @@ import React, { useContext, useEffect, useId, useLayoutEffect, useRef, useState 
 import { createPortal } from 'react-dom';
 import type { CalimeroClient } from '@calimero-network/mero-js';
 import { MeroContext } from '../context/context';
-import { useAppCode, useNodeVerification } from './nodeChecks';
-import { describeShield, shieldDetails, type AppCodeCheck, type ShieldKind, type ShieldView } from './shieldView';
+import { useAppCode, useNodeVerification, type AppCodeChecker } from './nodeChecks';
+import { describeShield, shieldDetails, type ShieldKind, type ShieldView } from './shieldView';
 import './nodeShield.css';
 
 const EDGE_PX = 12; // the popover's distance from the viewport's edge
 const GAP_PX = 8; // and from the chip
 const COPIED_MS = 2_000; // how long "Copied" shows
+// Layout effects warn on the server, where there is no layout to measure.
+const useClientLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
 const COLOR_KEYS = ['verified', 'refused', 'checking', 'neutral', 'surface', 'text', 'muted', 'border', 'focus'] as const;
 
 /** Colours for the shield; each sets the `--node-shield-<key>` CSS custom property of the same name. */
 export type NodeShieldColors = Partial<Record<(typeof COLOR_KEYS)[number], string>>;
 
 export interface NodeShieldProps {
-  /** The client whose node is checked; by default the `MeroProvider`'s. */
+  /** The client whose node is checked; by default the `MeroProvider`'s. `null` shows nothing. */
   client?: CalimeroClient | null;
-  /** The cluster label shown as "Cluster"; by default the `MeroProvider`'s cluster, if it connected to one. */
-  cluster?: string;
+  /** The label shown as "Cluster"; by default the `MeroProvider`'s cluster. `null` leaves the row out. */
+  cluster?: string | null;
   /** Icon only when the window is this many px wide or narrower (always at 560px or narrower). */
   compactBelow?: number;
-  /** The app's own check that the verified node runs its code; asked when the popover opens on a real, verified node. */
-  appCode?: () => Promise<AppCodeCheck>;
+  /** The app's own check that node `url` runs its code, asked when the popover opens on a real, verified node. Memoise it. */
+  appCode?: AppCodeChecker;
   /** Colours, as an alternative to setting the `--node-shield-*` custom properties in CSS. */
   colors?: NodeShieldColors;
 }
@@ -72,7 +74,7 @@ type Placement = { top: number; left: number; maxHeight: number } | null;
 /** Right edges aligned with the chip, below it or above when that is where the room is, inside the viewport. */
 function usePlacement(open: boolean, chip: React.RefObject<HTMLElement>, pop: React.RefObject<HTMLElement>): Placement {
   const [at, setAt] = useState<Placement>(null);
-  useLayoutEffect(() => {
+  useClientLayoutEffect(() => {
     if (!open) return setAt(null);
     const place = () => {
       if (!chip.current || !pop.current) return;
@@ -104,16 +106,17 @@ function usePlacement(open: boolean, chip: React.RefObject<HTMLElement>, pop: Re
 
 /** Whether the window is `width` px wide or narrower; never without a width or a `matchMedia`. */
 function useNarrowerThan(width: number | undefined): boolean {
-  const query = width === undefined || typeof window.matchMedia !== 'function' ? null : `(max-width: ${width}px)`;
-  const [narrow, setNarrow] = useState(() => (query ? window.matchMedia(query).matches : false));
-  useEffect(() => {
+  const [narrow, setNarrow] = useState(false);
+  // Measured after mount, never during render: the server and the first browser render agree.
+  useClientLayoutEffect(() => {
+    const query = width === undefined || typeof window.matchMedia !== 'function' ? null : `(max-width: ${width}px)`;
     if (!query) return setNarrow(false);
     const media = window.matchMedia(query);
     const update = () => setNarrow(media.matches);
     update();
     media.addEventListener('change', update);
     return () => media.removeEventListener('change', update);
-  }, [query]);
+  }, [width]);
   return narrow;
 }
 
@@ -173,7 +176,14 @@ function Popover({ view, id, style, popRef }: PopoverProps) {
           <div key={row.label} className={`mero-node-shield-pop__row${row.tone === 'bad' ? ' mero-node-shield-pop__row--bad' : ''}`}>
             <dt>{row.label}</dt>
             <dd className={row.mono ? 'mero-node-shield-pop__mono' : undefined} title={row.full}>
-              {row.value}
+              {row.hash ? (
+                <>
+                  {row.value.slice(0, -row.hash.length)}
+                  <span className="mero-node-shield-pop__nowrap">{row.hash}</span>
+                </>
+              ) : (
+                row.value
+              )}
             </dd>
           </div>
         ))}
@@ -211,8 +221,8 @@ function Popover({ view, id, style, popRef }: PopoverProps) {
  */
 export function NodeShield({ client: clientProp, cluster: clusterProp, compactBelow, appCode, colors }: NodeShieldProps) {
   const context = useContext(MeroContext);
-  const client = clientProp ?? context?.client ?? null;
-  const cluster = clusterProp ?? context?.cluster ?? null;
+  const client = clientProp !== undefined ? clientProp : (context?.client ?? null);
+  const cluster = clusterProp !== undefined ? clusterProp : (context?.cluster ?? null);
   const [state, refresh] = useNodeVerification(client);
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLSpanElement>(null);
