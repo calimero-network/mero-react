@@ -25,6 +25,8 @@ export interface AcceptInviteDialogProps {
   org?: string;
   appName?: string;
   labels?: AcceptInviteLabels;
+  /** Adds a secondary "Not now" to the already-member state (the person keeps the invite unused and moves on). */
+  onDismiss?: () => void;
   /** Extra inputs above Join (an editable name, say); the app owns their state and reads it in `onJoined`. */
   fields?: ReactNode;
   /** Join waits until this is true (default true): the validity of `fields`. */
@@ -78,7 +80,7 @@ export function AcceptInviteDialog({ client, passkey, ...props }: AcceptInviteDi
   );
 }
 
-function Dialog({ open, onClose, token, org, appName, labels, fields, fieldsValid = true, onJoined, onError, returnTo }: Omit<AcceptInviteDialogProps, 'client' | 'passkey'>) {
+function Dialog({ open, onClose, token, org, appName, labels, fields, fieldsValid = true, onDismiss, onJoined, onError, returnTo }: Omit<AcceptInviteDialogProps, 'client' | 'passkey'>) {
   const noun = labels?.noun ?? 'workspace';
   const text = {
     title: labels?.title ?? `Join ${noun}`,
@@ -106,6 +108,11 @@ function Dialog({ open, onClose, token, org, appName, labels, fields, fieldsVali
         <button type="button" className="mero-cw-btn mero-cw-btn--primary mero-cw-btn--full" onClick={() => onJoined({ org, alreadyMember: true })}>
           Continue
         </button>
+        {onDismiss && (
+          <button type="button" className="mero-cw-btn mero-cw-btn--full mero-cw-btn--spaced" onClick={onDismiss}>
+            Not now
+          </button>
+        )}
       </div>
     );
   } else {

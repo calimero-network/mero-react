@@ -637,6 +637,20 @@ describe('AcceptInviteDialog', () => {
     expect(view.client.orgs.inviteRedeem).not.toHaveBeenCalled();
   });
 
+  it('offers Not now in the already-member state only when onDismiss is given', async () => {
+    const me = { ...UNBOUND, orgs: [{ orgId: 'org-1', name: 'Ada' }] };
+    const onDismiss = vi.fn();
+    const { onJoined } = acceptSetup(me, {}, { org: 'org-1', onDismiss });
+    await screen.findByText("You're already in Ada");
+    fireEvent.click(screen.getByRole('button', { name: 'Not now' }));
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+    expect(onJoined).not.toHaveBeenCalled();
+    cleanup();
+    acceptSetup(me, {}, { org: 'org-1' });
+    await screen.findByText("You're already in Ada");
+    expect(screen.queryByRole('button', { name: 'Not now' })).toBeNull();
+  });
+
   it('shows no fields slot in the already-member state', async () => {
     const me = { ...UNBOUND, orgs: [{ orgId: 'org-1', name: 'Ada' }] };
     acceptSetup(me, {}, { org: 'org-1', fields: <input aria-label="Your name" /> });
