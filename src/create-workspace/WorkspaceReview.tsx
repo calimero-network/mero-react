@@ -5,6 +5,7 @@ import type { CalimeroClient, PackageCapabilities } from "@calimero-network/mero
 import { useCard, useNodeVerification, type ReviewRelease, type UnreleasedApp } from "../node-shield/nodeChecks";
 import { ExternalIcon, Icon, ShieldIcon, Tick, type IconName } from "./shieldIcons";
 import { describeShield, hostOf } from "../node-shield/shieldView";
+import { HostText } from "./HostText";
 import { useCopy } from "./useCopy";
 import {
   abiFileName,
@@ -339,7 +340,7 @@ function ReviewBody({ review, release, cluster, local }: { review: Review; relea
         <dl className="mero-cw-review__kv">
           <div>
             <dt>Cluster</dt>
-            <dd>{cluster}</dd>
+            <dd>{cluster && <HostText text={cluster} />}</dd>
           </div>
           {nodes && (
             <div>
@@ -370,7 +371,7 @@ function ReviewBody({ review, release, cluster, local }: { review: Review; relea
           {state.status === "verified" && (
             <div>
               <dt>Node</dt>
-              <dd className="mero-cw-review__mono">{hostOf(state.url)}</dd>
+              <dd className="mero-cw-review__mono"><HostText text={hostOf(state.url)} /></dd>
             </div>
           )}
         </dl>

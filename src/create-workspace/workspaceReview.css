@@ -52,6 +52,7 @@
 .mero-cw-review__sub { display: block; margin-top: 2px; }
 .mero-cw-review__mono { font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; overflow-wrap: anywhere; }
 .mero-cw-review__icon { flex: none; }
+.mero-cw-review__nobreak { white-space: nowrap; }
 
 .mero-cw-review__sec { padding: 14px 0; border-top: 1px solid var(--_line); }
 .mero-cw-review__h { display: flex; align-items: center; gap: 7px; margin: 0 0 10px; font-size: 13px; font-weight: 700; letter-spacing: 0.02em; }

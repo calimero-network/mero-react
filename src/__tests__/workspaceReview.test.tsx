@@ -310,6 +310,29 @@ describe("where it runs", () => {
     expect(within(where).getByRole("link", { name: /Verify/ }).getAttribute("href")).toBe(verifyNodeUrl(NODE, "2.3.148"));
   });
 
+  it("breaks a long node host only after its dots, keeping the text whole", async () => {
+    const host = "eu-shared-1-n1.relay.cloud.calimero.network";
+    const url = `https://${host}`;
+    connect({ ...sealed, url });
+    review();
+    await ready();
+    const dd = within(section("Where it runs")).getByText("Node").nextElementSibling as HTMLElement;
+    expect(dd.textContent).toBe(host);
+    expect(dd.querySelectorAll("wbr")).toHaveLength(4);
+    const first = dd.firstElementChild as HTMLElement;
+    expect(first.textContent).toBe("eu-shared-1-n1");
+    expect(first.className).toBe("mero-cw-review__nobreak");
+  });
+
+  it("leaves a label with spaces to wrap at them", async () => {
+    connect(sealed, async () => card(), undefined, undefined, "Calimero Cloud eu-shared-2");
+    review();
+    await ready();
+    const dd = within(section("Where it runs")).getByText("Cluster").nextElementSibling as HTMLElement;
+    expect(dd.querySelector(".mero-cw-review__nobreak")).toBeNull();
+    expect(dd.querySelector("wbr")).toBeNull();
+  });
+
   it("keeps the nodes line for a cluster whose name happens to mention nodes", async () => {
     connect(sealed, async () => card(), undefined, undefined, "Cluster of 3 nodes");
     review();
