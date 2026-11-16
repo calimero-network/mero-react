@@ -437,6 +437,8 @@ export interface WorkspaceReviewProps {
   release: ReviewRelease;
   /** The workspace is being created: both buttons wait. */
   creating?: boolean;
+  /** Create waits for something else (the app is still finding out how to ask the node). */
+  disabled?: boolean;
   onBack: () => void;
   onCreate: () => void;
 }
@@ -447,7 +449,7 @@ export interface WorkspaceReviewProps {
  * card and the node's own check. Read by the person before "Create workspace",
  * which stays disabled while the node has refused its check.
  */
-export function WorkspaceReview({ client, cluster, local, release, creating = false, onBack, onCreate }: WorkspaceReviewProps) {
+export function WorkspaceReview({ client, cluster, local, release, creating = false, disabled = false, onBack, onCreate }: WorkspaceReviewProps) {
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => heading.current?.focus(), []);
   const review = useReview(client, release);
@@ -464,7 +466,7 @@ export function WorkspaceReview({ client, cluster, local, release, creating = fa
         <button type="button" className="mero-cw-review__btn" disabled={creating} onClick={onBack}>
           Back
         </button>
-        <button type="button" className="mero-cw-review__btn mero-cw-review__btn--primary" disabled={creating || refused} onClick={onCreate}>
+        <button type="button" className="mero-cw-review__btn mero-cw-review__btn--primary" disabled={creating || disabled || refused} onClick={onCreate}>
           {creating ? "Creating…" : "Create workspace"}
         </button>
       </div>
