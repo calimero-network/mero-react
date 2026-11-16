@@ -76,15 +76,16 @@ function setup(me: unknown = { accountId: 'a', app: 'app-1' }, overrides: Record
     const started = await client.consent.pageCreate({ body: req });
     const options = (typeof how === 'function' ? { navigate: how } : (how ?? {})) as Record<string, (...a: unknown[]) => unknown>;
     if (options.confirm && !(await options.confirm(started))) return started;
-    options.navigate?.((started as { url: string }).url);
+    (options.navigate ?? ((url: unknown) => navigated.push(url as string)))((started as { url: string }).url);
     return started;
   });
+  const navigated: string[] = [];
   const onCreated = vi.fn<(w: CreatedWorkspace) => void>();
   const onClose = vi.fn();
   const view = render(<CreateWorkspaceDialog open release={RELEASE} returnTo={RETURN_TO} onCreated={onCreated} onClose={onClose} />, {
     wrapper: wrapper(client),
   });
-  return { client, onCreated, onClose, ...view };
+  return { client: Object.assign(client, { navigated }), onCreated, onClose, ...view };
 }
 
 async function toReview(name = 'My Team', self = 'Ronit') {
@@ -301,36 +302,50 @@ describe('a session bound to the app: approve in a window', () => {
 });
 
 describe('a session bound to the app: full-page fallback', () => {
-  it('redirects, keeping the names, when the window is blocked', async () => {
-    const { client } = setup();
+  const blocked = async () => {
+    const view = setup();
     open.mockReturnValue(null);
     await toReview();
     await readyToCreate();
     fireEvent.click(createButton());
-    await waitFor(() => expect(client.openConsentPage).toHaveBeenCalledTimes(1));
+    await screen.findByText('ABC-123');
+    return view;
+  };
+
+  it('shows the code in the dialog, keeping the names, when the window is blocked', async () => {
+    const { client } = await blocked();
+    expect(screen.getByRole('heading', { name: 'Approve with your passkey' })).toBeTruthy();
+    expect(screen.getByText('Your node will open its own page to ask for your passkey. Check that it shows this code.')).toBeTruthy();
     expect(JSON.parse(sessionStorage.getItem(INTENT_KEY)!)).toEqual({ name: 'My Team', selfName: 'Ronit' });
-    expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('ABC-123'));
+    expect(client.navigated).toEqual([]);
+    expect(window.confirm).not.toHaveBeenCalled();
+  });
+
+  it('goes to the node when Continue to your node is pressed', async () => {
+    const { client } = await blocked();
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to your node' }));
+    await waitFor(() => expect(client.navigated).toEqual([`${NODE}/consent/req-1`]));
+    expect(sessionStorage.getItem(INTENT_KEY)).not.toBeNull();
+  });
+
+  it('forgets the names and returns to the review on Cancel', async () => {
+    const { client } = await blocked();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    await screen.findByRole('heading', { name: 'Review before creating' });
+    expect(sessionStorage.getItem(INTENT_KEY)).toBeNull();
+    expect(client.navigated).toEqual([]);
+    expect(screen.queryByRole('alert')).toBeNull();
+    await waitFor(() => expect(createButton().disabled).toBe(false));
   });
 
   it('redirects without trying a window on a narrow screen', async () => {
     Object.defineProperty(window, 'innerWidth', { value: 400, configurable: true });
-    const { client } = setup();
-    await toReview();
-    await readyToCreate();
-    fireEvent.click(createButton());
-    await waitFor(() => expect(client.openConsentPage).toHaveBeenCalledTimes(1));
-    expect(open).not.toHaveBeenCalled();
-  });
-
-  it('forgets the names and stays on the review when the person does not go', async () => {
-    (window.confirm as ReturnType<typeof vi.fn>).mockReturnValue(false);
     setup();
-    open.mockReturnValue(null);
     await toReview();
     await readyToCreate();
     fireEvent.click(createButton());
-    await waitFor(() => expect(sessionStorage.getItem(INTENT_KEY)).toBeNull());
-    await waitFor(() => expect(createButton().disabled).toBe(false));
+    await screen.findByText('ABC-123');
+    expect(open).not.toHaveBeenCalled();
   });
 
   it('shows the node error and forgets the names when the request is refused', async () => {

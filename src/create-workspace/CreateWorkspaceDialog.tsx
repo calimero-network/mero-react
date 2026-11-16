@@ -58,7 +58,8 @@ export function CreateWorkspaceDialog({ open, onClose, release, onCreated, retur
   if (!open) return null;
 
   const trimmed = { name: name.trim(), self: selfName.trim() };
-  const approving = flow.phase === 'approving';
+  const redirecting = flow.phase === 'redirect';
+  const approving = flow.phase === 'approving' || redirecting;
   return (
     <div className="mero-cw mero-cw-overlay" onKeyDown={(e) => e.key === 'Escape' && !approving && onClose()}>
       <div className="mero-cw-card" role="dialog" aria-modal="true" aria-label={text.title}>
@@ -68,22 +69,41 @@ export function CreateWorkspaceDialog({ open, onClose, release, onCreated, retur
         {approving ? (
           <div className="mero-cw-approve">
             <h2 className="mero-cw-title">Approve with your passkey</h2>
-            <p className="mero-cw-sub">A window from your node opened. Check it shows this code, then approve there.</p>
+            <p className="mero-cw-sub">
+              {redirecting
+                ? 'Your node will open its own page to ask for your passkey. Check that it shows this code.'
+                : 'A window from your node opened. Check it shows this code, then approve there.'}
+            </p>
             <div className="mero-cw-code" aria-live="polite">
               {flow.code ?? '...'}
             </div>
-            <div className="mero-cw-wait" role="status">
-              <span className="mero-cw-dot" aria-hidden="true" />
-              Waiting for your approval...
-            </div>
-            <div className="mero-cw-row">
-              <button type="button" className="mero-cw-btn" onClick={flow.cancel}>
-                Cancel
-              </button>
-              <button type="button" className="mero-cw-link" onClick={flow.reopen}>
-                Open the window again
-              </button>
-            </div>
+            {redirecting ? (
+              <>
+                <button type="button" className="mero-cw-btn mero-cw-btn--primary mero-cw-btn--full" onClick={flow.proceed}>
+                  Continue to your node
+                </button>
+                <div className="mero-cw-row">
+                  <button type="button" className="mero-cw-btn" onClick={flow.cancel}>
+                    Cancel
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="mero-cw-wait" role="status">
+                  <span className="mero-cw-dot" aria-hidden="true" />
+                  Waiting for your approval...
+                </div>
+                <div className="mero-cw-row">
+                  <button type="button" className="mero-cw-btn" onClick={flow.cancel}>
+                    Cancel
+                  </button>
+                  <button type="button" className="mero-cw-link" onClick={flow.reopen}>
+                    Open the window again
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         ) : step === 'names' ? (
           <form

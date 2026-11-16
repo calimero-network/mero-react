@@ -12,7 +12,7 @@ export interface CreatedWorkspace {
   selfName: string;
 }
 
-export type CreatePhase = 'idle' | 'approving' | 'creating';
+export type CreatePhase = 'idle' | 'approving' | 'redirect' | 'creating';
 
 const INTENT_KEY = 'mero-react:create-workspace-intent';
 const POPUP_FEATURES = 'popup,width=480,height=720';
@@ -87,6 +87,7 @@ export function useCreateWorkspace({ returnTo, onCreated }: UseCreateWorkspaceOp
   const popup = useRef<{ win: Window; url: string | null } | null>(null);
   const stop = useRef<(() => void) | null>(null);
   const busy = useRef(false);
+  const decision = useRef<((go: boolean) => void) | null>(null);
 
   useEffect(() => {
     if (!client) return;
@@ -148,8 +149,14 @@ export function useCreateWorkspace({ returnTo, onCreated }: UseCreateWorkspaceOp
     let went = false;
     try {
       await consent.open(createOrgConsent(name, returnTo), {
-        confirm: (started) =>
-          (went = window.confirm(`Your Calimero node will ask you to approve this with your passkey on its own page.\n\nCheck that the page shows the code ${started.code ?? ''}.`)),
+        // The page opens once the person has seen the code and chosen to go.
+        confirm: async () => {
+          setPhase('redirect');
+          went = await new Promise<boolean>((resolve) => (decision.current = resolve));
+          decision.current = null;
+          if (went) setPhase('creating');
+          return went;
+        },
       });
     } catch (e) {
       forgetIntent();
@@ -186,7 +193,11 @@ export function useCreateWorkspace({ returnTo, onCreated }: UseCreateWorkspaceOp
     })();
   };
 
-  const cancel = useCallback(() => stop.current?.(), []);
+  const cancel = useCallback(() => {
+    stop.current?.();
+    decision.current?.(false);
+  }, []);
+  const proceed = useCallback(() => decision.current?.(true), []);
   const reopen = useCallback(() => {
     const p = popup.current;
     if (!p || p.win.closed) return;
@@ -194,7 +205,7 @@ export function useCreateWorkspace({ returnTo, onCreated }: UseCreateWorkspaceOp
     p.win.focus();
   }, []);
 
-  return { create, cancel, reopen, phase, error, code: consent.code, ready: bound !== null };
+  return { create, cancel, reopen, proceed, phase, error, code: consent.code, ready: bound !== null };
 }
 
 /**
