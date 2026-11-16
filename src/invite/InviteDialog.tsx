@@ -16,12 +16,17 @@ const REFUSALS: Record<string, { text: string; fallback: boolean }> = {
 
 /** The dialog's wording, so each app keeps its own. */
 export interface InviteLabels {
+  /** What people are invited to (`table`, `game`): the fixed sentences use it. Default `workspace`. */
+  noun?: string;
+  /** An extra line on the share step, e.g. what the invite gives. */
+  note?: string;
   title?: string;
   subtitle?: string;
   next?: string;
 }
 
-const DEFAULT_LABELS: Required<InviteLabels> = {
+const DEFAULT_LABELS: Required<Omit<InviteLabels, 'note'>> = {
+  noun: 'workspace',
   title: 'Invite people',
   subtitle: 'Choose what the people you invite can do.',
   next: 'Create invite',
@@ -38,6 +43,8 @@ export interface InviteDialogProps {
   role?: InviteRole;
   appName?: string;
   labels?: InviteLabels;
+  /** Who is inviting, named on the share step ("Ada invites you to ..."). */
+  inviterName?: string;
   /** Called once the invite exists, from the dialog or from a full-page approval. */
   onInvited?: (invite: CreatedInvite) => void;
   /** The page the link opens. Default: this page. */
@@ -88,7 +95,7 @@ export function InviteDialog({ client, passkey, ...props }: InviteDialogProps) {
   );
 }
 
-function Dialog({ open, onClose, org, teams, role = 'member', appName, labels, onInvited, linkBase, returnTo }: Omit<InviteDialogProps, 'client' | 'passkey'>) {
+function Dialog({ open, onClose, org, teams, role = 'member', appName, inviterName, labels, onInvited, linkBase, returnTo }: Omit<InviteDialogProps, 'client' | 'passkey'>) {
   const text = { ...DEFAULT_LABELS, ...labels };
   const facts = useOrgFacts(org);
   const [mode, setMode] = useState<'default' | 'custom'>('default');
@@ -126,10 +133,12 @@ function Dialog({ open, onClose, org, teams, role = 'member', appName, labels, o
       <div>
         <h2 className="mero-cw-title">Invite link ready</h2>
         <p className="mero-cw-sub">
+          {inviterName ? `${inviterName} invites you${appName ? ` to ${appName}` : ''}. ` : ''}
           Anyone with this link can join as a {role}
           {appName ? ` in ${appName}` : ''}.{' '}
-          {perms ? (perms.length ? `They can: ${perms.join(', ')}.` : 'They get basic access only.') : "They get the workspace's member defaults."}
+          {perms ? (perms.length ? `They can: ${perms.join(', ')}.` : 'They get basic access only.') : `They get the ${text.noun}'s member defaults.`}
         </p>
+        {labels?.note && <p className="mero-cw-sub">{labels.note}</p>}
         <div className="mero-cw-field">
           <label htmlFor={ids[0]}>Invite link</label>
           <input id={ids[0]} readOnly value={shared.link} onFocus={(e) => e.currentTarget.select()} />
@@ -148,7 +157,7 @@ function Dialog({ open, onClose, org, teams, role = 'member', appName, labels, o
       </div>
     );
   } else {
-    const defaultWords = !readable ? "the workspace's member defaults" : describeCapabilities(facts.defaults).join(', ') || 'basic access only';
+    const defaultWords = !readable ? `the ${text.noun}'s member defaults` : describeCapabilities(facts.defaults).join(', ') || 'basic access only';
     body = (
       <div>
         <h2 className="mero-cw-title">{text.title}</h2>
@@ -181,14 +190,14 @@ function Dialog({ open, onClose, org, teams, role = 'member', appName, labels, o
             )}
           </p>
         )}
-        {facts === 'unreadable' && <p className="mero-cw-sub">We could not read this workspace's permissions, so only a default invite is available.</p>}
+        {facts === 'unreadable' && <p className="mero-cw-sub">We could not read this {text.noun}'s permissions, so only a default invite is available.</p>}
         <fieldset className="mero-cw-choices">
           <legend className="mero-cw-visually-hidden">Permissions</legend>
           <label className="mero-cw-choice">
             <input type="radio" name={ids[1]} checked={mode === 'default'} onChange={() => setMode('default')} />
             <span>
               <b>Default</b>
-              <span className="mero-cw-sub">{`They get the workspace's member defaults: ${defaultWords}.`}</span>
+              <span className="mero-cw-sub">{`They get the ${text.noun}'s member defaults: ${defaultWords}.`}</span>
             </span>
           </label>
           <label className="mero-cw-choice">

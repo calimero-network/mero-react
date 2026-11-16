@@ -191,6 +191,63 @@ describe('an unbound session creates the invite itself', () => {
   });
 });
 
+describe('share step details', () => {
+  it('names the inviter and adds the note', async () => {
+    setup({ props: { inviterName: 'Ada', labels: { note: 'This invite gives Mero Chat only.' } } });
+    await ready();
+    fireEvent.click(create());
+    await screen.findByLabelText('Invite link');
+    expect(screen.getByText(/Ada invites you to Mero Chat/)).toBeTruthy();
+    expect(screen.getByText('This invite gives Mero Chat only.')).toBeTruthy();
+  });
+
+  it('shows neither without them', async () => {
+    setup();
+    await ready();
+    fireEvent.click(create());
+    await screen.findByLabelText('Invite link');
+    expect(screen.queryByText(/invites you/)).toBeNull();
+  });
+
+  it('words the permissions and share steps with the noun', async () => {
+    setup({ props: { labels: { noun: 'table' } } });
+    expect(await screen.findByText("They get the table's member defaults: Join open teams.")).toBeTruthy();
+    await ready();
+    fireEvent.click(create());
+    await screen.findByLabelText('Invite link');
+    expect(screen.getByText(/They get the table's member defaults\./)).toBeTruthy();
+    expect(screen.queryByText(/workspace/i)).toBeNull();
+  });
+
+  it('keeps the default wording without a noun', async () => {
+    setup();
+    expect(await screen.findByText("They get the workspace's member defaults: Join open teams.")).toBeTruthy();
+  });
+});
+
+describe('the link base survives a full-page approval', () => {
+  const back = () => window.history.replaceState({}, '', '/?request_id=req-1&result=approved');
+  afterEach(() => window.history.replaceState({}, '', '/'));
+
+  it('keeps linkBase in the intent for the trip', async () => {
+    setup({ me: BOUND, props: { linkBase: 'https://app.test/o/org-1' } });
+    open.mockReturnValue(null);
+    await ready();
+    fireEvent.click(create());
+    await screen.findByText('ABC-123');
+    expect(JSON.parse(sessionStorage.getItem(INTENT_KEY)!).linkBase).toBe('https://app.test/o/org-1');
+  });
+
+  it('builds the shared link from the kept base, not this page', async () => {
+    sessionStorage.setItem(INTENT_KEY, JSON.stringify({ role: 'member', linkBase: 'https://app.test/o/org-1' }));
+    back();
+    setup({ props: { open: false }, overrides: { resumeConsent: vi.fn(async () => approved) } });
+    const field = (await screen.findByLabelText('Invite link')) as HTMLInputElement;
+    expect(field.value.startsWith('https://app.test/o/org-1')).toBe(true);
+    expect(field.value).toContain('tok-9');
+  });
+});
+
 describe('refusals the node names by code', () => {
   const refuse = (code: string) => Object.assign(new Error(`403 ${code}: node words`), { code });
 
@@ -401,6 +458,57 @@ describe('AcceptInviteDialog', () => {
     await screen.findByText('ABC-123');
     await act(async () => decide({ ...accepted, outcome: undefined }));
     expect((await screen.findByRole('alert')).textContent).toContain('no workspace');
+  });
+
+  it('does not spend the invite when the account is already in the named org', async () => {
+    const me = { ...UNBOUND, orgs: [{ orgId: 'org-1', name: "Ada's game" }] };
+    const { client, onJoined } = acceptSetup(me, {}, { org: 'org-1' });
+    expect(await screen.findByText("You're already in Ada's game")).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Join' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(onJoined).toHaveBeenCalledWith({ org: 'org-1' });
+    expect(client.orgs.inviteRedeem).not.toHaveBeenCalled();
+    expect(client.consent.pageCreate).not.toHaveBeenCalled();
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it('offers Join once it knows the account is not in the org', async () => {
+    const me = { ...UNBOUND, orgs: [{ orgId: 'other', name: 'Other' }] };
+    const { client, onJoined } = acceptSetup(me, {}, { org: 'org-1' });
+    await waitFor(() => expect(join().disabled).toBe(false));
+    fireEvent.click(join());
+    await waitFor(() => expect(onJoined).toHaveBeenCalledWith({ org: 'org-1' }));
+    expect(client.orgs.inviteRedeem).toHaveBeenCalled();
+  });
+
+  it('keeps Join waiting while membership is being read, and asks normally when it cannot be read', async () => {
+    const answers: Array<(v: unknown) => void> = [];
+    const client = fakeClient({}, { auth: { me: vi.fn(() => new Promise((resolve) => answers.push(resolve))) }, orgs: { inviteRedeem: vi.fn(async () => ({ org: 'org-1' })) } });
+    render(<AcceptInviteDialog open token="t" org="org-1" onJoined={vi.fn()} onClose={vi.fn()} />, { wrapper: wrapper(client) });
+    expect(join().disabled).toBe(true);
+    await act(async () => answers.forEach((a) => a({ accountId: 'a' })));
+    await waitFor(() => expect(join().disabled).toBe(false));
+    cleanup();
+    const broken = fakeClient({}, { auth: { me: vi.fn(async () => Promise.reject(new Error('x'))) } });
+    render(<AcceptInviteDialog open token="t" org="org-1" onJoined={vi.fn()} onClose={vi.fn()} />, { wrapper: wrapper(broken) });
+    await waitFor(() => expect(join().disabled).toBe(false));
+  });
+
+  it('takes its wording from labels, defaults unchanged', async () => {
+    acceptSetup(UNBOUND, {}, { labels: { title: "Join Ada's game", body: 'Ada is waiting.', join: 'Play' } });
+    expect(screen.getByRole('heading', { name: "Join Ada's game" })).toBeTruthy();
+    expect(screen.getByText('Ada is waiting.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Play' })).toBeTruthy();
+    cleanup();
+    acceptSetup();
+    expect(screen.getByRole('heading', { name: 'Join workspace' })).toBeTruthy();
+    expect(screen.getByText('You were invited to a workspace in Mero Chat. Join it with your account.')).toBeTruthy();
+  });
+
+  it('words the dialog with the noun', async () => {
+    acceptSetup(UNBOUND, {}, { labels: { noun: 'arena' } });
+    expect(screen.getByRole('heading', { name: 'Join arena' })).toBeTruthy();
+    expect(screen.getByText('You were invited to an arena in Mero Chat. Join it with your account.')).toBeTruthy();
   });
 
   it('finishes after a full-page return while closed', async () => {

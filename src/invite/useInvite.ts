@@ -19,11 +19,13 @@ export interface CreatedInvite {
 const INVITE_KEY = 'mero-react:invite-intent';
 const ACCEPT_KEY = 'mero-react:accept-invite-intent';
 const NO_TOKEN = 'Your node approved the request but made no invite. Nothing was changed.';
-const NO_ORG = 'Your node approved the request but named no workspace. Nothing was changed.';
+const noOrg = (noun: string) => `Your node approved the request but named no ${noun}. Nothing was changed.`;
 
 interface InviteIntent {
   role: InviteRole;
   capabilities?: number;
+  /** Kept over a full-page trip so the shared link still opens the page the app chose. */
+  linkBase?: string;
 }
 
 const isInviteIntent = (v: unknown): v is InviteIntent => !!v && typeof (v as InviteIntent).role === 'string';
@@ -52,7 +54,7 @@ export function useInviteCreate({ returnTo, linkBase, onCreated }: { returnTo: s
   const create = ({ org, role, teams, capabilities }: InviteRequest) =>
     start({
       request: createInviteConsent({ org, role, ...(teams?.length ? { teams } : {}), ...(capabilities === undefined ? {} : { capabilities }) }, returnTo),
-      intent: { role, ...(capabilities === undefined ? {} : { capabilities }) },
+      intent: { role, ...(capabilities === undefined ? {} : { capabilities }), ...(linkBase ? { linkBase } : {}) },
       direct: async () => {
         if (!client) throw new Error('Not connected to a node.');
         const answer = await client.orgs.inviteCreate(
@@ -74,14 +76,14 @@ export function useInviteResume({ linkBase, onCreated }: { linkBase?: string; on
     onApproved: (intent, result) => {
       const token = tokenOf(result);
       if (!token) return NO_TOKEN;
-      onCreated({ token, link: inviteLink(token, linkBase), ...(intent.capabilities === undefined ? {} : { capabilities: intent.capabilities }) });
+      onCreated({ token, link: inviteLink(token, intent.linkBase ?? linkBase), ...(intent.capabilities === undefined ? {} : { capabilities: intent.capabilities }) });
       return undefined;
     },
   });
 }
 
 /** Joins with an invite token: through the node's consent page for a session bound to the app, else directly. */
-export function useInviteAccept({ returnTo, onJoined }: { returnTo: string; onJoined: (joined: { org: string }) => void }) {
+export function useInviteAccept({ returnTo, noun, onJoined }: { returnTo: string; noun: string; onJoined: (joined: { org: string }) => void }) {
   const ctx = useMero();
   const { start, ...flow } = useNodeConsent<Record<string, never>>({ storageKey: ACCEPT_KEY });
   const accept = (token: string) =>
@@ -94,7 +96,7 @@ export function useInviteAccept({ returnTo, onJoined }: { returnTo: string; onJo
       },
       done: (outcome) => {
         const org = 'direct' in outcome ? outcome.direct : orgOf(outcome.consent);
-        if (!org) return NO_ORG;
+        if (!org) return noOrg(noun);
         onJoined({ org });
         return undefined;
       },
@@ -102,13 +104,13 @@ export function useInviteAccept({ returnTo, onJoined }: { returnTo: string; onJo
   return { accept, ...flow };
 }
 
-export function useAcceptResume({ onJoined }: { onJoined: (joined: { org: string }) => void }) {
+export function useAcceptResume({ noun, onJoined }: { noun: string; onJoined: (joined: { org: string }) => void }) {
   return useConsentResume<Record<string, never>>({
     storageKey: ACCEPT_KEY,
     valid: isObject,
     onApproved: (_intent, result) => {
       const org = orgOf(result);
-      if (!org) return NO_ORG;
+      if (!org) return noOrg(noun);
       onJoined({ org });
       return undefined;
     },
