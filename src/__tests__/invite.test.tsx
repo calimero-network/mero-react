@@ -622,6 +622,28 @@ describe('AcceptInviteDialog', () => {
     expect(onError).not.toHaveBeenCalled();
   });
 
+  it('renders fields above Join, and Join waits while they are invalid', async () => {
+    const view = acceptSetup(UNBOUND, {}, { fields: <input aria-label="Your name" />, fieldsValid: false });
+    const input = screen.getByLabelText('Your name');
+    expect(input.compareDocumentPosition(join()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await waitFor(() => expect(view.client.auth.me).toHaveBeenCalled());
+    await act(async () => undefined);
+    expect(join().disabled).toBe(true);
+    cleanup();
+    const ok = acceptSetup(UNBOUND, {}, { fields: <input aria-label="Your name" />, fieldsValid: true });
+    await waitFor(() => expect(join().disabled).toBe(false));
+    fireEvent.click(join());
+    await waitFor(() => expect(ok.onJoined).toHaveBeenCalled());
+    expect(view.client.orgs.inviteRedeem).not.toHaveBeenCalled();
+  });
+
+  it('shows no fields slot in the already-member state', async () => {
+    const me = { ...UNBOUND, orgs: [{ orgId: 'org-1', name: 'Ada' }] };
+    acceptSetup(me, {}, { org: 'org-1', fields: <input aria-label="Your name" /> });
+    await screen.findByText("You're already in Ada");
+    expect(screen.queryByLabelText('Your name')).toBeNull();
+  });
+
   it('finishes after a full-page return while closed', async () => {
     sessionStorage.setItem(ACCEPT_KEY, JSON.stringify({}));
     window.history.replaceState({}, '', '/?request_id=req-1&result=approved');

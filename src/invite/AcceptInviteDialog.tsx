@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import type { CalimeroClient, PasskeyProvider } from '@calimero-network/mero-js';
 import { useMero } from '../context';
 import { ApprovalCard, DialogShell, WithClient } from '../consent-flow/DialogShell';
@@ -25,6 +25,10 @@ export interface AcceptInviteDialogProps {
   org?: string;
   appName?: string;
   labels?: AcceptInviteLabels;
+  /** Extra inputs above Join (an editable name, say); the app owns their state and reads it in `onJoined`. */
+  fields?: ReactNode;
+  /** Join waits until this is true (default true): the validity of `fields`. */
+  fieldsValid?: boolean;
   /** Called when the node refuses the join or the request, with the error itself (to clear a spent stored token, say). A declined approval is not an error. */
   onError?: (error: unknown) => void;
   /** Called once the person has joined (`alreadyMember: false`), or, with `org`, chose to continue as a member (`alreadyMember: true`; nothing was redeemed), from the dialog or from a full-page approval. */
@@ -74,7 +78,7 @@ export function AcceptInviteDialog({ client, passkey, ...props }: AcceptInviteDi
   );
 }
 
-function Dialog({ open, onClose, token, org, appName, labels, onJoined, onError, returnTo }: Omit<AcceptInviteDialogProps, 'client' | 'passkey'>) {
+function Dialog({ open, onClose, token, org, appName, labels, fields, fieldsValid = true, onJoined, onError, returnTo }: Omit<AcceptInviteDialogProps, 'client' | 'passkey'>) {
   const noun = labels?.noun ?? 'workspace';
   const text = {
     title: labels?.title ?? `Join ${noun}`,
@@ -109,6 +113,7 @@ function Dialog({ open, onClose, token, org, appName, labels, onJoined, onError,
       <div>
         <h2 className="mero-cw-title">{text.title}</h2>
         <p className="mero-cw-sub">{text.body}</p>
+        {fields}
         {[notice, flow.error].filter(Boolean).map((message) => (
           <p key={message} className="mero-cw-error" role="alert">
             {message}
@@ -125,7 +130,7 @@ function Dialog({ open, onClose, token, org, appName, labels, onJoined, onError,
         <button
           type="button"
           className="mero-cw-btn mero-cw-btn--primary mero-cw-btn--full"
-          disabled={!flow.ready || flow.phase !== 'idle' || member === 'checking'}
+          disabled={!flow.ready || flow.phase !== 'idle' || member === 'checking' || !fieldsValid}
           onClick={() => flow.accept(token)}
         >
           {flow.phase === 'creating' ? 'Joining…' : text.join}
