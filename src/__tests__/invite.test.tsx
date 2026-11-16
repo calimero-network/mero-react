@@ -65,7 +65,7 @@ function setup(opts: { me?: unknown; org?: unknown | Error; props?: Partial<Invi
 const create = () => screen.getByRole('button', { name: 'Create invite' }) as HTMLButtonElement;
 const ready = () => waitFor(() => expect(create().disabled).toBe(false));
 const body = (client: ReturnType<typeof fakeClient>) =>
-  (client.orgs.inviteCreate.mock.calls[0] as unknown[])[0] as { org: string; role: string; teams?: string[]; capabilities?: number };
+  (client.orgs.inviteCreate.mock.calls[0] as unknown[])[0] as { org: string; role: string; teams?: string[]; capabilities?: number; uses?: number; ttlSecs?: number; allApps?: boolean };
 const subject = (client: ReturnType<typeof fakeClient>) =>
   ((client.consent.pageCreate.mock.calls[0] as unknown[])[0] as { body: { kind: string; subject: { org: string; role: string; teams?: string[]; capabilities?: number }; returnTo: string } }).body;
 const custom = () => fireEvent.click(screen.getByRole('radio', { name: /Custom/ }));
@@ -245,6 +245,95 @@ describe('the link base survives a full-page approval', () => {
     const field = (await screen.findByLabelText('Invite link')) as HTMLInputElement;
     expect(field.value.startsWith('https://app.test/o/org-1')).toBe(true);
     expect(field.value).toContain('tok-9');
+  });
+});
+
+describe('invite terms', () => {
+  it('passes uses, ttlSecs and allApps to the plain route', async () => {
+    const { client } = setup({ props: { uses: 5, ttlSecs: 3600, allApps: true } });
+    await ready();
+    fireEvent.click(create());
+    await screen.findByLabelText('Invite link');
+    expect(body(client)).toMatchObject({ uses: 5, ttlSecs: 3600, allApps: true });
+  });
+
+  it('passes them in the consent subject', async () => {
+    const { client } = setup({ me: BOUND, props: { uses: 1, ttlSecs: 60, allApps: true } });
+    await ready();
+    fireEvent.click(create());
+    await screen.findByText('ABC-123');
+    expect(subject(client).subject).toMatchObject({ uses: 1, ttlSecs: 60, allApps: true });
+  });
+
+  it('leaves them out when not given', async () => {
+    const { client } = setup();
+    await ready();
+    fireEvent.click(create());
+    await screen.findByLabelText('Invite link');
+    for (const key of ['uses', 'ttlSecs', 'allApps']) expect(key in body(client)).toBe(false);
+  });
+
+  it('offers an expiry choice that sets ttlSecs', async () => {
+    const { client } = setup({ props: { expiryOptions: [3600, 86400, 604800] } });
+    await ready();
+    const select = screen.getByLabelText('Expires after') as HTMLSelectElement;
+    expect([...select.options].map((o) => o.text)).toEqual(['1 hour', '1 day', '7 days']);
+    expect(select.value).toBe('3600');
+    fireEvent.change(select, { target: { value: '604800' } });
+    fireEvent.click(create());
+    await screen.findByLabelText('Invite link');
+    expect(body(client).ttlSecs).toBe(604800);
+  });
+
+  it('starts the expiry choice at ttlSecs when it is one of the options', async () => {
+    setup({ props: { expiryOptions: [3600, 86400], ttlSecs: 86400 } });
+    expect((screen.getByLabelText('Expires after') as HTMLSelectElement).value).toBe('86400');
+  });
+
+  it('shows no expiry choice without options', () => {
+    setup();
+    expect(screen.queryByLabelText('Expires after')).toBeNull();
+  });
+});
+
+describe('permissions: false', () => {
+  it('skips the picker and sends a default invite', async () => {
+    const { client } = setup({ props: { permissions: false } });
+    await ready();
+    expect(screen.queryByRole('radio')).toBeNull();
+    fireEvent.click(create());
+    await screen.findByLabelText('Invite link');
+    expect('capabilities' in body(client)).toBe(false);
+  });
+});
+
+describe('reading the org', () => {
+  it('does not read it while closed or with no org', async () => {
+    const closed = setup({ props: { open: false } });
+    await act(async () => undefined);
+    expect(closed.client.orgs.get).not.toHaveBeenCalled();
+    cleanup();
+    const empty = setup({ props: { org: '' } });
+    await act(async () => undefined);
+    expect(empty.client.orgs.get).not.toHaveBeenCalled();
+  });
+
+  it('reads it once opened', async () => {
+    const { client, rerender } = setup({ props: { open: false } });
+    await act(async () => undefined);
+    expect(client.orgs.get).not.toHaveBeenCalled();
+    rerender(<InviteDialog open org="org-1" onInvited={vi.fn()} onClose={vi.fn()} />);
+    await waitFor(() => expect(client.orgs.get).toHaveBeenCalledTimes(1));
+  });
+});
+
+describe('share step slot', () => {
+  it('renders shareExtra with the link under it', async () => {
+    setup({ props: { shareExtra: (link: string) => <div data-testid="qr">{link}</div> } });
+    await ready();
+    fireEvent.click(create());
+    const field = (await screen.findByLabelText('Invite link')) as HTMLInputElement;
+    expect(screen.getByTestId('qr').textContent).toBe(field.value);
   });
 });
 
@@ -509,6 +598,28 @@ describe('AcceptInviteDialog', () => {
     acceptSetup(UNBOUND, {}, { labels: { noun: 'arena' } });
     expect(screen.getByRole('heading', { name: 'Join arena' })).toBeTruthy();
     expect(screen.getByText('You were invited to an arena in Mero Chat. Join it with your account.')).toBeTruthy();
+  });
+
+  it('reports a refusal to onError, with the error itself', async () => {
+    const onError = vi.fn();
+    const { client } = acceptSetup(UNBOUND, {}, { onError });
+    const refusal = Object.assign(new Error('400 REJECTED: this invite has expired'), { code: 'REJECTED' });
+    client.orgs.inviteRedeem.mockRejectedValue(refusal);
+    await waitFor(() => expect(join().disabled).toBe(false));
+    fireEvent.click(join());
+    await screen.findByRole('alert');
+    expect(onError).toHaveBeenCalledWith(refusal);
+  });
+
+  it('does not call onError for a declined approval', async () => {
+    const onError = vi.fn();
+    acceptSetup(BOUND, {}, { onError });
+    await waitFor(() => expect(join().disabled).toBe(false));
+    fireEvent.click(join());
+    await screen.findByText('ABC-123');
+    await act(async () => decide({ ...accepted, status: 'declined' }));
+    await screen.findByRole('alert');
+    expect(onError).not.toHaveBeenCalled();
   });
 
   it('finishes after a full-page return while closed', async () => {

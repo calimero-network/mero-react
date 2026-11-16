@@ -25,6 +25,8 @@ export interface AcceptInviteDialogProps {
   org?: string;
   appName?: string;
   labels?: AcceptInviteLabels;
+  /** Called when the node refuses the join or the request, with the error itself (to clear a spent stored token, say). A declined approval is not an error. */
+  onError?: (error: unknown) => void;
   /** Called once the person has joined (or, with `org`, chose to continue as a member), from the dialog or from a full-page approval. */
   onJoined: (joined: { org: string }) => void;
   /** Where the node's consent page sends the person back. Default: this origin's root, where the app mounts `ConsentPopupReturn`. */
@@ -72,14 +74,14 @@ export function AcceptInviteDialog({ client, passkey, ...props }: AcceptInviteDi
   );
 }
 
-function Dialog({ open, onClose, token, org, appName, labels, onJoined, returnTo }: Omit<AcceptInviteDialogProps, 'client' | 'passkey'>) {
+function Dialog({ open, onClose, token, org, appName, labels, onJoined, onError, returnTo }: Omit<AcceptInviteDialogProps, 'client' | 'passkey'>) {
   const noun = labels?.noun ?? 'workspace';
   const text = {
     title: labels?.title ?? `Join ${noun}`,
     body: labels?.body ?? `You were invited to ${article(noun)} ${noun}${appName ? ` in ${appName}` : ''}. Join it with your account.`,
     join: labels?.join ?? 'Join',
   };
-  const flow = useInviteAccept({ returnTo: returnTo ?? `${typeof window === 'undefined' ? '' : window.location.origin}/`, noun, onJoined });
+  const flow = useInviteAccept({ returnTo: returnTo ?? `${typeof window === 'undefined' ? '' : window.location.origin}/`, noun, onJoined, onError });
   const resume = useAcceptResume({ noun, onJoined });
   const member = useMembership(org, open);
   const [dismissed, setDismissed] = useState<string | null>(null);

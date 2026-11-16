@@ -38,6 +38,12 @@ export interface InviteRequest {
   org: string;
   role: InviteRole;
   teams?: string[];
+  /** How many people may use the link. */
+  uses?: number;
+  /** How long the link lives, in seconds. */
+  ttlSecs?: number;
+  /** Every app of the org, not just the named teams. */
+  allApps?: boolean;
   /** Only for a custom invite; left out for the workspace's member defaults. */
   capabilities?: number;
 }
@@ -51,20 +57,25 @@ export function useInviteCreate({ returnTo, linkBase, onCreated }: { returnTo: s
     onCreated({ token, link: inviteLink(token, linkBase), ...(capabilities === undefined ? {} : { capabilities }) });
     return undefined;
   };
-  const create = ({ org, role, teams, capabilities }: InviteRequest) =>
-    start({
-      request: createInviteConsent({ org, role, ...(teams?.length ? { teams } : {}), ...(capabilities === undefined ? {} : { capabilities }) }, returnTo),
+  const create = ({ org, role, teams, uses, ttlSecs, allApps, capabilities }: InviteRequest) => {
+    const terms = {
+      ...(teams?.length ? { teams } : {}),
+      ...(uses === undefined ? {} : { uses }),
+      ...(ttlSecs === undefined ? {} : { ttlSecs }),
+      ...(allApps === undefined ? {} : { allApps }),
+      ...(capabilities === undefined ? {} : { capabilities }),
+    };
+    return start({
+      request: createInviteConsent({ org, role, ...terms }, returnTo),
       intent: { role, ...(capabilities === undefined ? {} : { capabilities }), ...(linkBase ? { linkBase } : {}) },
       direct: async () => {
         if (!client) throw new Error('Not connected to a node.');
-        const answer = await client.orgs.inviteCreate(
-          { org, role, ...(teams?.length ? { teams } : {}), ...(capabilities === undefined ? {} : { capabilities }) },
-          confirmWith(passkey),
-        );
+        const answer = await client.orgs.inviteCreate({ org, role, ...terms }, confirmWith(passkey));
         return answer.token;
       },
       done: (outcome) => finish('direct' in outcome ? outcome.direct : tokenOf(outcome.consent), capabilities),
     });
+  };
   return { create, ...flow };
 }
 
@@ -83,9 +94,9 @@ export function useInviteResume({ linkBase, onCreated }: { linkBase?: string; on
 }
 
 /** Joins with an invite token: through the node's consent page for a session bound to the app, else directly. */
-export function useInviteAccept({ returnTo, noun, onJoined }: { returnTo: string; noun: string; onJoined: (joined: { org: string }) => void }) {
+export function useInviteAccept({ returnTo, noun, onJoined, onError }: { returnTo: string; noun: string; onJoined: (joined: { org: string }) => void; onError?: (error: unknown) => void }) {
   const ctx = useMero();
-  const { start, ...flow } = useNodeConsent<Record<string, never>>({ storageKey: ACCEPT_KEY });
+  const { start, ...flow } = useNodeConsent<Record<string, never>>({ storageKey: ACCEPT_KEY, onError });
   const accept = (token: string) =>
     start({
       request: acceptInviteConsent(token, returnTo),
