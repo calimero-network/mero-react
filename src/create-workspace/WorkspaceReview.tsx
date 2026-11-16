@@ -2,7 +2,7 @@ import "./workspaceReview.css";
 import { useEffect, useId, useRef, useState } from "react";
 import type { CalimeroClient, PackageCapabilities } from "@calimero-network/mero-js";
 
-import { useCard, useNodeVerification, type ReviewRelease } from "../node-shield/nodeChecks";
+import { useCard, useNodeVerification, type ReviewRelease, type UnreleasedApp } from "../node-shield/nodeChecks";
 import { ExternalIcon, Icon, ShieldIcon, Tick, type IconName } from "./shieldIcons";
 import { describeShield, hostOf } from "../node-shield/shieldView";
 import { useCopy } from "./useCopy";
@@ -212,7 +212,7 @@ function Section({ title, kind, children }: { title: string; kind?: React.Compon
 }
 
 /** What a review is built from: the node and its check, and the release's card. */
-function useReview(client: CalimeroClient | null, release: ReviewRelease) {
+function useReview(client: CalimeroClient | null, release: ReviewRelease | UnreleasedApp) {
   const [state] = useNodeVerification(client);
   const [loaded, retry] = useCard(client, release, state);
   return { client, state, loaded, retry };
@@ -239,7 +239,7 @@ function Diverged({ divergence }: { divergence: "release" | "code" }) {
 }
 
 /** The four sections. */
-function ReviewBody({ review, release, cluster, local }: { review: Review; release: ReviewRelease; cluster?: string; local?: boolean }) {
+function ReviewBody({ review, release, cluster, local }: { review: Review; release: ReviewRelease | UnreleasedApp; cluster?: string; local?: boolean }) {
   const { client, state, loaded, retry } = review;
   const view = describeShield(state, { code: null });
   const card = loaded.status === "ready" ? loaded.card : null;
@@ -250,7 +250,10 @@ function ReviewBody({ review, release, cluster, local }: { review: Review; relea
   const risks = card ? exceptions(card, sealed) : [];
   const statements = dataStatements(view.kind, "creator");
   const nodes = client && !local ? `${client.nodes.length} ${client.nodes.length === 1 ? "node" : "nodes"}` : "";
-  const unknown = !card
+  const unreleased = loaded.status === 'none';
+  const unknown = unreleased
+    ? "This build has no signed release, so what it can do and what leaves the sealed hardware is not known."
+    : !card
     ? "What leaves the sealed hardware is not known until the app's details load."
     : !card.abi
       ? "This app publishes no action list, so what it makes visible to anyone is not known."
@@ -274,7 +277,7 @@ function ReviewBody({ review, release, cluster, local }: { review: Review; relea
         <dl className="mero-cw-review__kv">
           <div>
             <dt>App</dt>
-            <dd>{`${card?.name ?? release.package} v${release.version}`}</dd>
+            <dd>{unreleased ? `${release.package} (unreleased build)` : `${card?.name ?? release.package} v${release.version}`}</dd>
           </div>
           {card && (
             <div>
@@ -306,6 +309,7 @@ function ReviewBody({ review, release, cluster, local }: { review: Review; relea
           </p>
         )}
         {loaded.status === "error" && <p className="mero-cw-review__muted">Not available until the review loads.</p>}
+        {unreleased && <p className="mero-cw-review__muted">This app has no published release yet, so there is no signed review to show.</p>}
         {loaded.status === "refused" && <p className="mero-cw-review__muted">Not available: this node did not pass its check.</p>}
         {card && (
           <>
@@ -434,7 +438,7 @@ export interface WorkspaceReviewProps {
   /** A local development node: its label already says how many nodes there are. */
   local?: boolean;
   /** The package release the workspace will run. */
-  release: ReviewRelease;
+  release: ReviewRelease | UnreleasedApp;
   /** The workspace is being created: both buttons wait. */
   creating?: boolean;
   /** Create waits for something else (the app is still finding out how to ask the node). */

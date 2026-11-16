@@ -1,7 +1,9 @@
+import type React from 'react';
 import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NodeVerificationState } from '@calimero-network/mero-js';
 import {
+  clusterName,
   ConsentPopupReturn,
   CONSENT_RETURN_MESSAGE,
   CreateWorkspaceDialog,
@@ -166,7 +168,7 @@ describe('a session bound to the app: approve in a window', () => {
     expect(body.body).toMatchObject({ kind: 'createOrg', returnTo: RETURN_TO });
     expect(JSON.stringify(body.body)).toContain('My Team');
     await act(async () => decide(approved));
-    await waitFor(() => expect(onCreated).toHaveBeenCalledWith({ orgId: 'org-9', selfName: 'Ronit' }));
+    await waitFor(() => expect(onCreated).toHaveBeenCalledWith({ orgId: 'org-9', name: 'My Team', selfName: 'Ronit' }));
     expect(client.orgs.create).not.toHaveBeenCalled();
     expect(popup!.close).toHaveBeenCalled();
   });
@@ -183,7 +185,7 @@ describe('a session bound to the app: approve in a window', () => {
         new MessageEvent('message', { data: { type: CONSENT_RETURN_MESSAGE, requestId: 'req-1', result: 'approved' }, origin: window.location.origin, source: popup as unknown as Window }),
       );
     });
-    await waitFor(() => expect(onCreated).toHaveBeenCalledWith({ orgId: 'org-9', selfName: 'Ronit' }));
+    await waitFor(() => expect(onCreated).toHaveBeenCalledWith({ orgId: 'org-9', name: 'My Team', selfName: 'Ronit' }));
     expect(client.consent.pageResult).toHaveBeenCalledWith({ request: 'req-1' });
   });
 
@@ -237,7 +239,7 @@ describe('a session bound to the app: approve in a window', () => {
     fireEvent.click(createButton());
     await screen.findByText('ABC-123');
     popup!.closed = true;
-    await waitFor(() => expect(onCreated).toHaveBeenCalledWith({ orgId: 'org-9', selfName: 'Ronit' }), { timeout: 3000 });
+    await waitFor(() => expect(onCreated).toHaveBeenCalledWith({ orgId: 'org-9', name: 'My Team', selfName: 'Ronit' }), { timeout: 3000 });
   });
 
   it('says the request expired when the node never decided', async () => {
@@ -366,7 +368,7 @@ describe('a session not bound to an app', () => {
     await toReview();
     await readyToCreate();
     fireEvent.click(createButton());
-    await waitFor(() => expect(onCreated).toHaveBeenCalledWith({ orgId: 'org-1', selfName: 'Ronit' }));
+    await waitFor(() => expect(onCreated).toHaveBeenCalledWith({ orgId: 'org-1', name: 'My Team', selfName: 'Ronit' }));
     expect(client.orgs.create).toHaveBeenCalledWith({ name: 'My Team' });
     expect(open).not.toHaveBeenCalled();
     expect(client.consent.pageCreate).not.toHaveBeenCalled();
@@ -416,7 +418,7 @@ describe('resuming after the full-page return', () => {
     const client = fakeClient({ resumeConsent: vi.fn(async () => approved) });
     const onCreated = vi.fn();
     const { result } = renderHook(() => useCreateWorkspaceResume({ onCreated }), { wrapper: wrapper(client) });
-    await waitFor(() => expect(onCreated).toHaveBeenCalledWith({ orgId: 'org-9', selfName: 'Ronit' }));
+    await waitFor(() => expect(onCreated).toHaveBeenCalledWith({ orgId: 'org-9', name: 'My Team', selfName: 'Ronit' }));
     expect(sessionStorage.getItem(INTENT_KEY)).toBeNull();
     expect(result.current.message).toBeNull();
   });
@@ -524,5 +526,104 @@ describe('ConsentPopupReturn', () => {
     );
     expect(screen.getByText('the app')).toBeTruthy();
     expect(postMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe('the dialog as a whole', () => {
+  const R = RELEASE;
+  const plain = (props: Partial<React.ComponentProps<typeof CreateWorkspaceDialog>> = {}, client = fakeClient({ verification: () => verified, verify: async () => verified, packageCapabilities: vi.fn(async () => card), nodes: [NODE] })) =>
+    render(<CreateWorkspaceDialog open release={R} onCreated={vi.fn()} onClose={vi.fn()} {...props} />, { wrapper: wrapper(client) });
+
+  it('renders in a portal on document.body', () => {
+    const { container } = plain();
+    expect(container.querySelector('[role="dialog"]')).toBeNull();
+    expect(document.body.querySelector(':scope > .mero-cw-overlay [role="dialog"]')).toBeTruthy();
+  });
+
+  it('closes with a labelled icon button, not a letter', () => {
+    const onClose = vi.fn();
+    plain({ onClose });
+    const close = screen.getByRole('button', { name: 'Close' });
+    expect(close.textContent).toBe('');
+    expect(close.querySelector('svg')).toBeTruthy();
+    fireEvent.click(close);
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('prefills your name from defaultSelfName', () => {
+    plain({ defaultSelfName: 'Ada' });
+    expect((screen.getByLabelText('Your name') as HTMLInputElement).value).toBe('Ada');
+  });
+
+  it('works on a client of its own, without a provider around it', async () => {
+    const client = fakeClient({ verification: () => verified, verify: async () => verified, packageCapabilities: vi.fn(async () => card), nodes: [NODE] });
+    render(<CreateWorkspaceDialog open client={client} release={R} onCreated={vi.fn()} onClose={vi.fn()} />);
+    await toReview('A', 'B');
+    expect(screen.getByText('Mero Chat v1.0.0')).toBeTruthy();
+  });
+
+  it('says the newest release is being read while release is null', () => {
+    plain({ release: null });
+    expect(screen.getByRole('status').textContent).toContain('Checking the newest release');
+    expect(screen.queryByLabelText('Workspace name')).toBeNull();
+  });
+
+  it('reviews an unreleased build without asking for a card or showing a load error', async () => {
+    const client = fakeClient({ verification: () => verified, verify: async () => verified, packageCapabilities: vi.fn(async () => card), nodes: [NODE] });
+    plain({ release: { package: 'network.calimero.chat' } }, client);
+    await toReview();
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByText(/no published release/i)).toBeTruthy();
+    expect((client as unknown as { packageCapabilities: ReturnType<typeof vi.fn> }).packageCapabilities).not.toHaveBeenCalled();
+  });
+
+  it('names the real cluster from the node, a given label winning', async () => {
+    const host = 'https://eu-shared-1-n1.relay.cloud.calimero.network';
+    const state = { ...verified, url: host };
+    const mk = () => fakeClient({ nodeUrl: host, verification: () => state, verify: async () => state, packageCapabilities: vi.fn(async () => card), nodes: [host] });
+    plain({}, mk());
+    await toReview();
+    expect(screen.getByText('eu-shared-1')).toBeTruthy();
+    cleanup();
+    plain({ cluster: 'Acme cluster' }, mk());
+    await toReview();
+    expect(screen.getByText('Acme cluster')).toBeTruthy();
+  });
+});
+
+describe('clusterName', () => {
+  it.each([
+    ['https://eu-shared-1-n1.relay.cloud.calimero.network', 'eu-shared-1'],
+    ['https://eu-shared-1-n12.relay.cloud.calimero.network/', 'eu-shared-1'],
+    ['https://node.example.com', 'node.example.com'],
+    ['http://127.0.0.1:2528', 'merod local'],
+    ['http://localhost:2528', 'merod local'],
+    ['not a url', 'not a url'],
+  ])('%s -> %s', (url, name) => expect(clusterName(url)).toBe(name));
+});
+
+describe('the built-in full-page resume', () => {
+  const keep = () => sessionStorage.setItem(INTENT_KEY, JSON.stringify({ name: 'My Team', selfName: 'Ronit' }));
+  const back = (result: string) => window.history.replaceState({}, '', `/?request_id=req-1&result=${result}`);
+  afterEach(() => window.history.replaceState({}, '', '/'));
+
+  it('finishes while the dialog is closed', async () => {
+    keep();
+    back('approved');
+    const client = fakeClient({ resumeConsent: vi.fn(async () => approved) });
+    const onCreated = vi.fn();
+    render(<CreateWorkspaceDialog open={false} release={RELEASE} onCreated={onCreated} onClose={vi.fn()} />, { wrapper: wrapper(client) });
+    await waitFor(() => expect(onCreated).toHaveBeenCalledWith({ orgId: 'org-9', name: 'My Team', selfName: 'Ronit' }));
+  });
+
+  it('shows a dismissible notice when the approval created nothing', async () => {
+    keep();
+    back('declined');
+    const client = fakeClient({ resumeConsent: vi.fn(async () => declined) });
+    render(<CreateWorkspaceDialog open={false} release={RELEASE} onCreated={vi.fn()} onClose={vi.fn()} />, { wrapper: wrapper(client) });
+    const notice = await screen.findByRole('alert');
+    expect(notice.textContent).toContain('declined');
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 });

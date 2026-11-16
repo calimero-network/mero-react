@@ -35,6 +35,7 @@ export {
   CONSENT_RETURN_MESSAGE,
   useCreateWorkspace,
   useCreateWorkspaceResume,
+  clusterName,
 } from './create-workspace';
 export type {
   CreateWorkspaceDialogProps,
@@ -44,6 +45,7 @@ export type {
   CreatePhase,
   UseCreateWorkspaceOptions,
   ReviewRelease,
+  UnreleasedApp,
 } from './create-workspace';
 
 // Theme

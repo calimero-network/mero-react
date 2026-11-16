@@ -1,22 +1,26 @@
 /* Tokens (--cw-*) are defined in workspaceReview.css. */
-.mero-cw-overlay { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 16px; background: rgba(15, 17, 23, 0.45); }
+.mero-cw-overlay { position: fixed; inset: 0; z-index: var(--cw-z, 2147483000); display: grid; place-items: center; padding: 16px; background: rgba(15, 17, 23, 0.45); }
 .mero-cw-card {
   position: relative;
   box-sizing: border-box;
   width: 100%;
   max-width: 420px;
   max-height: calc(100dvh - 32px);
-  overflow-y: auto;
-  padding: 20px 22px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   border-radius: 18px;
   background: var(--_surface);
   color: var(--_ink);
   box-shadow: 0 10px 30px rgba(15, 17, 23, 0.18);
-  --cw-review-inset: 0px;
 }
+.mero-cw-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 20px 22px 0; }
+.mero-cw-body > :last-child { margin-bottom: 20px; }
+.mero-cw-body .mero-cw-review__buttons { margin-bottom: 0; padding-bottom: 18px; }
 .mero-cw-card *, .mero-cw-card *::before, .mero-cw-card *::after { box-sizing: border-box; }
-.mero-cw-x { position: absolute; top: 12px; right: 14px; border: 0; background: none; color: var(--_muted); font: inherit; font-size: 18px; line-height: 1; cursor: pointer; }
-.mero-cw-title { margin: 0 0 4px; font-size: 17px; font-weight: 700; }
+.mero-cw-x { position: absolute; top: 12px; right: 14px; z-index: 2; display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--_muted); cursor: pointer; }
+.mero-cw-x:hover { background: var(--_code-bg); color: var(--_ink); }
+.mero-cw-title { margin: 0 0 4px; padding-right: 28px; font-size: 17px; font-weight: 700; }
 .mero-cw-sub { margin: 0 0 14px; color: var(--_muted); font-size: 12.5px; line-height: 1.45; }
 .mero-cw-field { margin: 0 0 12px; }
 .mero-cw-field label { display: block; margin: 0 0 5px; font-size: 12px; font-weight: 600; }
@@ -38,3 +42,4 @@
 }
 @keyframes mero-cw-pulse { 50% { opacity: 0.25; } }
 .mero-cw-error { margin: 0 0 12px; padding: 10px 12px; border-radius: 10px; background: var(--_bad-bg); color: var(--_bad-ink); font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.mero-cw-notice { position: fixed; right: 16px; bottom: 16px; z-index: var(--cw-z, 2147483000); max-width: 360px; padding: 10px 14px; border-radius: 10px; background: var(--_surface); color: var(--_ink); font-size: 13px; line-height: 1.4; box-shadow: 0 0 0 1px var(--_line), 0 12px 28px -12px rgba(14, 18, 34, 0.4); }

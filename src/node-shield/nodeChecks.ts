@@ -95,8 +95,17 @@ export interface ReviewRelease {
   service?: string;
 }
 
+/** An app with no published release (a dev bundle, a package with no version): there is no signed card to read. */
+export interface UnreleasedApp {
+  package: string;
+  version?: undefined;
+  service?: undefined;
+}
+
 export type CardState =
   | { status: 'loading' }
+  /** The app has no release, so there is nothing to ask for. */
+  | { status: 'none' }
   | { status: 'ready'; card: PackageCapabilities }
   | { status: 'error'; message: string }
   /** The node did not pass its own check, so it is not asked and not retried. */
@@ -111,11 +120,15 @@ export function cardError(e: unknown): string {
 }
 
 /** The release's capability card from the node, asked only once the node's own check verified it, and again on `retry`. */
-export function useCard(client: CalimeroClient | null, release: ReviewRelease, node: NodeVerificationState): [CardState, () => void] {
+export function useCard(client: CalimeroClient | null, release: ReviewRelease | UnreleasedApp, node: NodeVerificationState): [CardState, () => void] {
   const [state, setState] = useState<CardState>({ status: 'loading' });
   const [round, setRound] = useState(0);
   const gate = node.status === 'verified' ? 'verified' : node.status === 'refused' ? 'refused' : 'waiting';
   useEffect(() => {
+    if (!release.version) {
+      setState({ status: 'none' });
+      return;
+    }
     if (!client) {
       setState({ status: 'error', message: 'Not connected to a node.' });
       return;
@@ -126,9 +139,8 @@ export function useCard(client: CalimeroClient | null, release: ReviewRelease, n
     }
     let live = true;
     setState({ status: 'loading' });
-    const request = release.service
-      ? client.packageCapabilities(release.package, release.version, { service: release.service })
-      : client.packageCapabilities(release.package, release.version);
+    const { package: pkg, version, service } = release;
+    const request = service ? client.packageCapabilities(pkg, version, { service }) : client.packageCapabilities(pkg, version);
     request.then(
       (card) => live && setState({ status: 'ready', card }),
       (e: unknown) => live && setState({ status: 'error', message: cardError(e) }),

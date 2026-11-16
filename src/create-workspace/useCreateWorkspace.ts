@@ -9,6 +9,8 @@ import { CONSENT_RETURN_MESSAGE } from './ConsentPopupReturn';
 /** What the app is told once the workspace exists. */
 export interface CreatedWorkspace {
   orgId: string;
+  /** The workspace's name, as the person typed it. */
+  name: string;
   selfName: string;
 }
 
@@ -136,7 +138,7 @@ export function useCreateWorkspace({ returnTo, onCreated }: UseCreateWorkspaceOp
       }
       const made = created(result);
       if ('error' in made) setError(made.error);
-      else onCreated({ orgId: made.orgId, selfName });
+      else onCreated({ orgId: made.orgId, name, selfName });
     } finally {
       clearInterval(timer);
       window.removeEventListener('message', onMessage);
@@ -179,7 +181,7 @@ export function useCreateWorkspace({ returnTo, onCreated }: UseCreateWorkspaceOp
       try {
         if (!bound) {
           const orgId = await orgs.create(name);
-          if (orgId) onCreated({ orgId, selfName });
+          if (orgId) onCreated({ orgId, name, selfName });
         } else if (win) await approveInPopup(win, name, selfName);
         else await redirect(name, selfName);
       } catch (e) {
@@ -231,7 +233,7 @@ export function useCreateWorkspaceResume({ onCreated }: Pick<UseCreateWorkspaceO
         if (!result) return;
         const made = created(result);
         if ('error' in made) setMessage(made.error);
-        else latest.current({ orgId: made.orgId, selfName: intent.selfName });
+        else latest.current({ orgId: made.orgId, name: intent.name, selfName: intent.selfName });
       } catch (e) {
         setMessage(messageOf(e));
       } finally {
