@@ -304,14 +304,13 @@ describe("what it can do", () => {
 });
 
 describe("where it runs", () => {
-  it("names the cluster, the nodes and the release, and links the public verifier", async () => {
+  it("names the cluster once and the release, and links the public verifier", async () => {
     connect(sealed);
     review();
     await ready();
     expect(within(section("Where it runs")).getByText("Calimero Cloud eu-shared-2")).toBeTruthy();
     const where = section("Technical details");
-    expect(within(where).getByText("Calimero Cloud eu-shared-2")).toBeTruthy();
-    expect(within(where).getByText("3 nodes")).toBeTruthy();
+    expect(within(where).queryByText("Calimero Cloud eu-shared-2")).toBeNull();
     expect(within(where).getByText("mero-tee v2.3.148")).toBeTruthy();
     expect(within(where).getByRole("link", { name: /Verify/ }).getAttribute("href")).toBe(verifyNodeUrl(NODE, "2.3.148"));
   });
@@ -334,16 +333,9 @@ describe("where it runs", () => {
     connect(sealed, async () => card(), undefined, undefined, "Calimero Cloud eu-shared-2");
     review();
     await ready();
-    const dd = within(section("Technical details")).getByText("Cluster").nextElementSibling as HTMLElement;
+    const dd = within(section("Where it runs")).getByText("Calimero Cloud eu-shared-2") as HTMLElement;
     expect(dd.querySelector(".mero-cw-review__nobreak")).toBeNull();
     expect(dd.querySelector("wbr")).toBeNull();
-  });
-
-  it("keeps the nodes line for a cluster whose name happens to mention nodes", async () => {
-    connect(sealed, async () => card(), undefined, undefined, "Cluster of 3 nodes");
-    review();
-    await ready();
-    expect(within(section("Technical details")).getByText("Nodes")).toBeTruthy();
   });
 
   it("shows a local target once, as its label already says how many nodes there are", async () => {
@@ -364,7 +356,7 @@ describe("where it runs", () => {
     const where = section("Technical details");
     expect(within(where).queryByRole("link")).toBeNull();
     expect(within(where).queryByText(/mero-tee v/)).toBeNull();
-    expect(within(where).getByText("Test server: not sealed")).toBeTruthy();
+    expect(within(section("Your data")).getByText("Test server: not sealed")).toBeTruthy();
   });
 });
 

@@ -244,7 +244,7 @@ const STATUS: Record<ShieldKind, string> = { verified: "Verified", checking: "Ch
 const IN_EXCEPTIONS = new Set<SummaryLine["id"]>(["public", "publicCalls", "outside"]);
 
 /** The visible review: the app, where it runs, what happens to the data and what the app can do. Everything else waits under Technical details. */
-function ReviewBody({ review, release, cluster, local, noun }: { review: Review; release: ReviewRelease | UnreleasedApp; cluster?: string; local?: boolean; noun: string }) {
+function ReviewBody({ review, release, cluster, noun }: { review: Review; release: ReviewRelease | UnreleasedApp; cluster?: string; noun: string }) {
   const { client, state, loaded, retry } = review;
   const view = describeShield(state, { code: null });
   const card = loaded.status === "ready" ? loaded.card : null;
@@ -254,7 +254,6 @@ function ReviewBody({ review, release, cluster, local, noun }: { review: Review;
   const risks = card ? exceptions(card, sealed) : [];
   const summary = card ? summarize(card, sealed).filter((line) => !(risks.length > 0 && IN_EXCEPTIONS.has(line.id))) : [];
   const statements = dataStatements(view.kind, "creator", noun);
-  const nodes = client && !local ? `${client.nodes.length} ${client.nodes.length === 1 ? "node" : "nodes"}` : "";
   const unreleased = loaded.status === 'none';
   const unknown = unreleased
     ? "This build has no signed release, so what it can do and what leaves the sealed hardware is not known."
@@ -389,16 +388,6 @@ function ReviewBody({ review, release, cluster, local, noun }: { review: Review;
                 </dd>
               </div>
             )}
-            <div>
-              <dt>Cluster</dt>
-              <dd>{cluster && <HostText text={cluster} />}</dd>
-            </div>
-            {nodes && (
-              <div>
-                <dt>Nodes</dt>
-                <dd>{nodes}</dd>
-              </div>
-            )}
             {nodeRelease && (
               <div>
                 <dt>Software</dt>
@@ -411,12 +400,6 @@ function ReviewBody({ review, release, cluster, local, noun }: { review: Review;
                     </a>
                   )}
                 </dd>
-              </div>
-            )}
-            {!sealed && (
-              <div>
-                <dt>Status</dt>
-                <dd>{view.title}</dd>
               </div>
             )}
             {state.status === "verified" && (
@@ -474,7 +457,7 @@ export interface WorkspaceReviewProps {
  * card and the node's own check. Read by the person before "Create workspace",
  * which stays disabled while the node has refused its check.
  */
-export function WorkspaceReview({ client, cluster, local, noun = "workspace", release, creating = false, disabled = false, onBack, onCreate }: WorkspaceReviewProps) {
+export function WorkspaceReview({ client, cluster, noun = "workspace", release, creating = false, disabled = false, onBack, onCreate }: WorkspaceReviewProps) {
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => heading.current?.focus(), []);
   const review = useReview(client, release);
@@ -485,7 +468,7 @@ export function WorkspaceReview({ client, cluster, local, noun = "workspace", re
         Review before creating
       </h2>
       <p className="mero-cw-review__lede">{`What this app can do with your ${noun}, and where it runs.`}</p>
-      <ReviewBody review={review} release={release} cluster={cluster} local={local} noun={noun} />
+      <ReviewBody review={review} release={release} cluster={cluster} noun={noun} />
       {refused && <p className="mero-cw-review__muted" role="note">Create is unavailable: this node did not pass its check.</p>}
       <div className="mero-cw-review__buttons">
         <button type="button" className="mero-cw-review__btn" disabled={creating} onClick={onBack}>
