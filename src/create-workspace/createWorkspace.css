@@ -33,6 +33,7 @@
 .mero-cw-btn--primary { border-color: transparent; background: var(--_primary-bg); color: var(--_primary-ink); }
 .mero-cw-btn--primary:hover:not(:disabled) { border-color: transparent; opacity: 0.88; }
 .mero-cw-btn--full { width: 100%; min-height: 48px; margin-top: 4px; }
+.mero-cw-btn--spaced { margin-top: 8px; }
 .mero-cw-btn:focus-visible, .mero-cw-link:focus-visible, .mero-cw-x:focus-visible { outline: 2px solid var(--_focus); outline-offset: 2px; }
 .mero-cw-link { min-height: 44px; padding: 0 4px; border: 0; background: none; color: var(--_focus); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
 .mero-cw-link:hover { text-decoration: underline; }
